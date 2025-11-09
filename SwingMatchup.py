@@ -113,9 +113,26 @@ def extract_clip(cap, start_frame, end_frame, fps):
     os.unlink(tmp.name)
     return data
 
+import time
+
+def show_persisted_message():
+    if "saved_message" not in st.session_state:
+        return
+
+    msg = st.session_state.saved_message
+    st.toast(msg["text"], icon=msg.get("icon", "✅"))
+    st.success(msg["text"])
+
+    # don't pop it immediately — let user see it until next manual action
+    if st.button("Dismiss message"):
+        st.session_state.pop("saved_message", None)
+        st.rerun()
 # ---------- UI ----------
 st.set_page_config(page_title="SwingMatchup", layout="wide")
 st.title("⚾ Swing Matchup")
+
+message_box = st.empty()
+
 import streamlit as st
 
 # --- Simple password gate ---
@@ -371,8 +388,9 @@ elif menu == "Upload Pitch":
             frame_idx += 1
 
         # show smaller preview
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ret, img = cap.read()
         if ret:
-            # smaller preview that won't take up the full screen
             st.image(
                 cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
                 caption=f"Frame {frame_idx}",
@@ -381,31 +399,48 @@ elif menu == "Upload Pitch":
 
 
 
+
         if st.button("Extract 2-second Clip"):
             try:
                 start = max(0, frame_idx - int(2 * fps))
                 clip = extract_clip(cap, start, frame_idx, fps)
+
+                # --- save clip ---
                 cur.execute(
                     "INSERT INTO pitch_clips (team_id,pitcher_id,description,clip_blob,fps) VALUES (?,?,?,?,?)",
                     (team_map[team_name], pitcher_map[pitcher_name], desc, clip, fps)
                 )
                 conn.commit()
-                with st.container():
-                    st.success("✅ Pitch clip saved successfully!")
-                    st.info(f"Team: {team_name} | Pitcher: {pitcher_name} | Time: {datetime.now().strftime('%I:%M:%S %p')}")
 
+                # --- show visible message ---
+                message_box = st.empty()
+                message_box.success(
+                    f"✅ Pitch clip saved successfully!\n\n"
+                    f"Team: {team_name} | Pitcher: {pitcher_name} | "
+                    f"Time: {datetime.now().strftime('%I:%M:%S %p')}"
+                )
+                time.sleep(2)
 
-                # Write the saved clip to a temp file for download
+                # --- optional download of saved clip ---
                 preview_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
                 preview_tmp.write(clip)
                 preview_tmp.close()
                 with open(preview_tmp.name, "rb") as f:
-                    st.download_button("⬇️ Download Newly Created Pitch Clip", f, f"pitch_preview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4", "video/mp4")
+                    st.download_button(
+                        "⬇️ Download Newly Created Pitch Clip",
+                        f,
+                        f"pitch_preview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4",
+                        "video/mp4"
+                    )
                 os.unlink(preview_tmp.name)
 
+                # --- refresh only this section ---
+                rows = cur.execute("SELECT id, description, created_at FROM pitch_clips ORDER BY id DESC").fetchall()
+
             finally:
-                cap.release(); os.unlink(tmp.name)
-            st.rerun()
+                cap.release()
+                os.unlink(tmp.name)
+
 
 # ---------- UPLOAD SWING ----------
 elif menu == "Upload Swing":
@@ -486,20 +521,34 @@ elif menu == "Upload Swing":
                             "INSERT INTO swing_clips (team_id, hitter_id, description, clip_blob, fps, decision_frame) VALUES (?,?,?,?,?,?)",
                             (team_map[team_name], hitter_map[hitter_name], desc, clip, fps, decision_frame)
                         )
-
                         conn.commit()
-                        with st.container():
-                            st.success("✅ Swing clip saved successfully!")
-                            st.info(f"Team: {team_name} | Hitter: {hitter_name} | Time: {datetime.now().strftime('%I:%M:%S %p')}")
 
+                        # --- show visible message ---
+                        message_box = st.empty()
+                        message_box.success(
+                            f"✅ Swing clip saved successfully!\n\n"
+                            f"Team: {team_name} | Hitter: {hitter_name} | "
+                            f"Time: {datetime.now().strftime('%I:%M:%S %p')}"
+                        )
+                        time.sleep(2)
 
-                        # Write the saved clip to a temp file for download
+                        # --- optional download of saved clip ---
                         preview_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
                         preview_tmp.write(clip)
                         preview_tmp.close()
                         with open(preview_tmp.name, "rb") as f:
-                            st.download_button("⬇️ Download Newly Created Swing Clip", f, f"swing_preview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4", "video/mp4")
+                            st.download_button(
+                                "⬇️ Download Newly Created Swing Clip",
+                                f,
+                                f"swing_preview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4",
+                                "video/mp4"
+                            )
                         os.unlink(preview_tmp.name)
+
+                        # --- refresh only this section ---
+                        rows = cur.execute(
+                            "SELECT id, description, created_at FROM swing_clips ORDER BY id DESC"
+                        ).fetchall()
 
                     finally:
                         cap.release()
@@ -507,9 +556,6 @@ elif menu == "Upload Swing":
                         st.session_state.pop("swing_start", None)
                         st.session_state.pop("swing_contact", None)
                         st.session_state.pop("swing_decision", None)
-                    import time
-                    time.sleep(2)
-                    st.rerun()
 
             else:
                 st.error("Start must be before Contact")
@@ -679,15 +725,29 @@ elif menu == "Create Matchup":
             (p_id, s_id, matchup_name, matchup_bytes)
         )
         conn.commit()
-        st.success(f"✅ Matchup created: {matchup_name}")
+        # show message for a few seconds
+        message_box = st.empty()
+        message_box.success(
+            f"✅ Matchup saved successfully!\n\n"
+            f"**File:** {matchup_name}.mp4\n\n"
+            f"**Pitcher:** {pitcher_name} ({team_name_p})\n"
+            f"**Hitter:** {hitter_name} ({team_name_s})\n"
+            f"**Time:** {datetime.now().strftime('%I:%M:%S %p')}"
+        )
+        time.sleep(2)
 
+        # clean up temp files
         for fpath in (ptmp.name, stmp.name, out_tmp.name):
             try:
                 os.unlink(fpath)
-            except:
+            except Exception:
                 pass
 
-        st.rerun()
+        # refresh just this section (manual reload of matchups)
+        rows = cur.execute("""
+            SELECT id, description, created_at, pitch_clip_id, swing_clip_id
+            FROM matchups ORDER BY id DESC
+        """).fetchall()
 
 # ---------- LIBRARY ----------
 elif menu == "Library":
