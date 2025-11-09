@@ -133,8 +133,81 @@ if not st.session_state.authenticated:
     st.stop()
 
 
-# --- Clean Plain-Text Sidebar Menu ---
+# ---------- FLAT, TEXT-ONLY SIDEBAR MENU (NO BORDERS, NO BOXES, NO BACKGROUND) ----------
+st.markdown("""
+    <style>
+    /* Overwrite all Streamlit button styles in sidebar */
+    div[data-testid="stSidebar"] button {
+        all: unset !important;
+        display: block !important;
+        width: 100% !important;
+        padding: 6px 4px !important;
+        margin: 2px 0 !important;
+        font-size: 16px !important;
+        color: #e0e0e0 !important;
+        cursor: pointer !important;
+        border: none !important;
+        background: none !important;
+        box-shadow: none !important;
+    }
+    div[data-testid="stSidebar"] button:hover {
+        color: #f8c10c !important;
+        background: none !important;
+    }
+    div[data-testid="stSidebar"] button.active {
+        color: #f8c10c !important;
+        font-weight: 600 !important;
+    }
+    div[data-testid="stSidebar"] .block-container {
+        padding-top: 0 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 st.sidebar.markdown("### Menu")
+
+st.markdown("""
+<style>
+/* Sidebar buttons: same width, centered text, underlined labels */
+section[data-testid="stSidebar"] div[data-testid="stButton"] button {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 10px 0 !important;
+    margin: 4px 0 !important;
+    box-sizing: border-box !important;
+    font-size: 16px !important;
+    font-family: monospace !important;  /* equal-width characters */
+    color: #444 !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+/* Force uniform label width and underline */
+section[data-testid="stSidebar"] div[data-testid="stButton"] button span {
+    display: inline-block !important;
+    width: 16ch !important;             /* adjust this until longest text fits */
+    text-decoration: underline !important;
+    text-underline-offset: 4px !important;
+    text-align: center !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+}
+
+/* Hover effect */
+section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover span {
+    color: #f8c10c !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+
+
 
 options = [
     "Library",
@@ -146,21 +219,27 @@ options = [
     "Teams"
 ]
 
-# Draw visible text links
-for opt in options:
-    if opt == st.session_state.get("menu", "Library"):
-        st.sidebar.markdown(f"**{opt}**")  # bold current page
-    else:
-        st.sidebar.markdown(f"[{opt}](?menu={opt.replace(' ', '%20')})", unsafe_allow_html=True)
-
-# --- Handle selection manually ---
-query_params = st.query_params  # ✅ FIXED — no parentheses
-if "menu" in query_params:
-    chosen = query_params["menu"][0].replace("%20", " ")
-    if chosen in options:
-        st.session_state["menu"] = chosen
-
 menu = st.session_state.get("menu", "Library")
+
+for opt in options:
+    clicked = st.sidebar.button(opt, key=f"menu_{opt}")
+    if clicked:
+        st.session_state["menu"] = opt
+        menu = opt
+
+# Highlight current selection
+st.markdown(f"""
+    <script>
+    const btns = window.parent.document.querySelectorAll('section[data-testid="stSidebar"] button');
+    btns.forEach(btn => {{
+        if (btn.innerText.trim() === "{menu}") {{
+            btn.classList.add('active');
+        }} else {{
+            btn.classList.remove('active');
+        }}
+    }});
+    </script>
+""", unsafe_allow_html=True)
 
 
 
