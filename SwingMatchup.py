@@ -112,7 +112,13 @@ def extract_clip(cap, start_frame, end_frame, fps):
 
 # ---------- UI ----------
 st.set_page_config(page_title="SwingMatchup", layout="wide")
-st.title("⚾ Baseball / Softball Swing-Pitch Matchup")
+st.title("⚾ Swing Matchup")
+import streamlit as st
+
+# --- Simple password gate ---
+password = st.text_input("Enter password", type="password")
+if password != st.secrets.get("app_password", "changeme"):
+    st.stop()
 
 menu = st.sidebar.selectbox("Menu", [
     "Create Matchup", "Library", "Upload Pitch", "Upload Swing", "Pitchers", "Hitters", "Teams"
@@ -567,7 +573,7 @@ elif menu == "Create Matchup":
 # ---------- LIBRARY ----------
 elif menu == "Library":
     st.header("Library")
-    tabs = st.tabs([""Matchups", Pitch Clips", "Swing Clips"])
+    tabs = st.tabs(["Matchups", Pitch Clips", "Swing Clips"])
 
     # Pitch
     with tabs[0]:
