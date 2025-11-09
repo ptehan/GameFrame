@@ -5,3 +5,4 @@ sqlite3
 cv2
 tempfile
 os
+base64
