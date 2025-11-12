@@ -129,7 +129,7 @@ def show_persisted_message():
         st.rerun()
 # ---------- UI ----------
 st.set_page_config(page_title="SwingMatchup", layout="wide")
-st.title("⚾ Swing Matchup")
+st.title("⚾ Pitch Timer Pro")
 
 message_box = st.empty()
 
@@ -639,7 +639,7 @@ elif menu == "Create Matchup":
             f"PITCHER: {pitcher_name} ({team_name_p})\n"
             f"HITTER: {hitter_name} ({team_name_s})\n"
             f"Swing Duration: {swing_duration}s\n"
-            f"Date: {ts}"
+            f"Date: {datetime.now().strftime('%b %d, %Y')}"
         )
 
         out_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
@@ -650,7 +650,7 @@ elif menu == "Create Matchup":
         y0 = 220
         for i, line in enumerate(matchup_title.split("\n")):
             y = y0 + i * 80
-            cv2.putText(black, line, (120, y), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (255, 255, 255), 3, cv2.LINE_AA)
+            cv2.putText(black, line, (120, y), cv2.FONT_HERSHEY_COMPLEX, 1.4, (255, 255, 255), 3, cv2.LINE_AA)
         for _ in range(int(fps * 5)):  # 5 seconds
             writer.write(black)
 
@@ -659,16 +659,29 @@ elif menu == "Create Matchup":
             ret_p, fp = cap_p.read()
             if not ret_p:
                 break
-            fp = cv2.resize(fp, (640, 720))
-
+            def letterbox(frame, target_size=(640, 720)):
+                """Resize while keeping aspect ratio, add black bars."""
+                if frame is None:
+                    return np.zeros((target_size[1], target_size[0], 3), dtype=np.uint8)
+                h, w = frame.shape[:2]
+                tw, th = target_size
+                scale = min(tw / w, th / h)
+                nw, nh = int(w * scale), int(h * scale)
+                resized = cv2.resize(frame, (nw, nh))
+                # center with black bars
+                result = np.zeros((th, tw, 3), dtype=np.uint8)
+                x_off, y_off = (tw - nw) // 2, (th - nh) // 2
+                result[y_off:y_off + nh, x_off:x_off + nw] = resized
+                return result
+            
+            fp = letterbox(fp)
+            
             # Swing video frame selection
             if i < pad_frames:
                 cap_s.set(1, 0)
             ret_s, fs = cap_s.read()
-            if not ret_s:
-                fs = np.zeros_like(fp)
-            else:
-                fs = cv2.resize(fs, (640, 720))
+            fs = letterbox(fs if ret_s else None)
+
 
             # Yellow highlight for 3 frames at swing start
             if yellow_start <= i < yellow_end:
@@ -687,14 +700,19 @@ elif menu == "Create Matchup":
                     writer.write(np.hstack((fp, fs)))
 
 
+            # --- During main loop ---
             combo = np.hstack((fp, fs))
+            # ensure combo always exactly 1280x720 with letterboxing
+            if combo.shape[0] != 720 or combo.shape[1] != 1280:
+                combo = cv2.resize(combo, (1280, 720), interpolation=cv2.INTER_AREA)
             writer.write(combo)
-
-            # Pause both videos for ~2 seconds when swing begins
+            
             if i == pad_frames:
                 pause_frames = int(fps * 2)
                 for _ in range(pause_frames):
                     writer.write(combo)
+
+
 
 
         # ---------- FREEZE FINAL FRAME ----------
@@ -705,9 +723,24 @@ elif menu == "Create Matchup":
         ret_s, fs = cap_s.read()
 
         if ret_p and ret_s:
-            fp = cv2.resize(fp, (640, 720))
-            fs = cv2.resize(fs, (640, 720))
-            combo = np.hstack((fp, fs))
+            # ---------- FREEZE FINAL FRAME ----------
+            cap_p.set(cv2.CAP_PROP_POS_FRAMES, frames_p - 1)
+            cap_s.set(cv2.CAP_PROP_POS_FRAMES, frames_s - 1)
+            ret_p, fp = cap_p.read()
+            ret_s, fs = cap_s.read()
+            
+            if ret_p and ret_s:
+                fp = letterbox(fp)
+                fs = letterbox(fs)
+                combo = np.hstack((fp, fs))
+                if combo.shape[0] != 720 or combo.shape[1] != 1280:
+                    combo = cv2.resize(combo, (1280, 720), interpolation=cv2.INTER_AREA)
+                freeze_frames = int(fps * 3)
+                for _ in range(freeze_frames):
+                    writer.write(combo)
+            else:
+                st.warning("⚠️ Could not read last frame for freeze effect.")
+
             freeze_frames = int(fps * 3)  # 3-second hold
             for _ in range(freeze_frames):
                 writer.write(combo)
@@ -725,16 +758,31 @@ elif menu == "Create Matchup":
             (p_id, s_id, matchup_name, matchup_bytes)
         )
         conn.commit()
-        # show message for a few seconds
-        message_box = st.empty()
-        message_box.success(
+
+        # show confirmation and direct link to this matchup
+        matchup_id = cur.lastrowid
+        st.success(
             f"✅ Matchup saved successfully!\n\n"
             f"**File:** {matchup_name}.mp4\n\n"
-            f"**Pitcher:** {pitcher_name} ({team_name_p})\n"
-            f"**Hitter:** {hitter_name} ({team_name_s})\n"
+            f"**Pitcher:** {pitcher_name} ({team_name_p})  \n"
+            f"**Hitter:** {hitter_name} ({team_name_s})  \n"
             f"**Time:** {datetime.now().strftime('%I:%M:%S %p')}"
         )
-        time.sleep(2)
+
+        # direct download only (no blank video)
+        st.download_button(
+            "⬇️ Download Matchup Video",
+            matchup_bytes,
+            file_name=f"{matchup_name}.mp4",
+            mime="video/mp4",
+            key=f"dl_new_matchup_{matchup_id}"
+        )
+
+        # link-style button to jump straight to Library
+        if st.button("➡️ View This Matchup in Library", key=f"go_matchup_{matchup_id}"):
+            st.session_state["menu"] = "Library"
+            st.session_state["highlight_matchup_id"] = matchup_id
+            st.rerun()
 
         # clean up temp files
         for fpath in (ptmp.name, stmp.name, out_tmp.name):
@@ -826,6 +874,36 @@ elif menu == "Library":
                     cap_p.release()
                     os.unlink(ptmp.name)
 
+                    # --- Overlay matchup info text ---
+                    overlay_text = f"{pitch_info[1]} ({pitch_info[0]}) vs {swing_info[1]} ({swing_info[0]})"
+                    duration_text = f"Swing Duration: {round(total_swing_frames / fps_s, 2)}s"
+
+                    def annotate_image(img, main_text, sub_text):
+                        if img is None:
+                            return None
+                        annotated = img.copy()
+                        h, w = annotated.shape[:2]
+
+                        # optional translucent background bar for readability
+                        overlay = annotated.copy()
+                        cv2.rectangle(overlay, (0, h - 80), (w, h), (0, 0, 0), -1)
+                        cv2.addWeighted(overlay, 0.5, annotated, 0.5, 0, annotated)
+
+                        # text lines
+                        y_main = h - 45
+                        y_sub = h - 15
+                        cv2.putText(annotated, main_text, (25, y_main),
+                                    cv2.FONT_HERSHEY_COMPLEX, 1.0, (255, 255, 255), 3, cv2.LINE_AA)
+                        cv2.putText(annotated, sub_text, (25, y_sub),
+                                    cv2.FONT_HERSHEY_COMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+                        return annotated
+
+                    if ret_start:
+                        frame_start = annotate_image(frame_start, overlay_text, duration_text)
+                    if ret_decision:
+                        frame_decision = annotate_image(frame_decision, overlay_text, duration_text)
+
+                    # Encode to JPEG
                     start_bytes = decision_bytes = None
                     if ret_start:
                         _, buf = cv2.imencode(".jpg", frame_start)
