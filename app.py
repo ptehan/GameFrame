@@ -129,7 +129,7 @@ def show_persisted_message():
         st.rerun()
 # ---------- UI ----------
 st.set_page_config(page_title="SwingMatchup", layout="wide")
-st.title("⚾ Pitch Timer Pro")
+st.title("⚾ GameFrame")
 
 message_box = st.empty()
 
