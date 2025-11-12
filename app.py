@@ -5,7 +5,8 @@ import numpy as np
 import tempfile
 import os
 import base64
-
+import imageio_ffmpeg as ffmpeg
+import subprocess
 
 from datetime import datetime
 
@@ -16,7 +17,9 @@ DB_PATH = "app.db"
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cur = conn.cursor()
 
-
+# Reset lingering states to prevent stuck buttons
+if "_stbutton_pressed" in st.session_state:
+    del st.session_state["_stbutton_pressed"]
 
 # ---------- TABLES ----------
 tables = [
@@ -128,8 +131,8 @@ def show_persisted_message():
         st.session_state.pop("saved_message", None)
         st.rerun()
 # ---------- UI ----------
-st.set_page_config(page_title="SwingMatchup", layout="wide")
-st.title("⚾ GameFrame")
+st.set_page_config(page_title="GameFrame", layout="wide")
+#st.title("⚾ GameFrame")
 
 message_box = st.empty()
 
@@ -180,6 +183,68 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+st.sidebar.markdown("""
+    <div style="
+        text-align:center;
+        font-size:22px;
+        font-weight:700;
+        color:#f8c10c;
+        margin-bottom:10px;
+    ">
+        ⚾ GameFrame
+    </div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    <style>
+    /* --- Shrink main headers and spacing --- */
+    h1, h2, h3 {
+        margin-top: 0.4rem !important;
+        margin-bottom: 0.4rem !important;
+        line-height: 1.1 !important;
+    }
+
+    h1 {
+        font-size: 1.6rem !important;
+    }
+    h2 {
+        font-size: 1.3rem !important;
+    }
+    h3 {
+        font-size: 1.1rem !important;
+    }
+
+    /* Remove large Streamlit section gaps */
+    div.block-container {
+        padding-top: 0.5rem !important;
+    }
+
+    /* Tighten up expanders */
+    div[data-testid="stExpander"] > div:first-child {
+        padding-top: 0.25rem !important;
+        padding-bottom: 0.25rem !important;
+    }
+
+    /* Tighten spacing between elements */
+    .stMarkdown, .stText, .stSubheader {
+        margin-top: 0.3rem !important;
+        margin-bottom: 0.3rem !important;
+    }
+
+    /* Slightly smaller subheaders like "Filter Matchups" */
+    .stSubheader {
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+    }
+
+    /* Reduce top padding of the main content area */
+    section.main > div {
+        padding-top: 0.5rem !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 
 st.sidebar.markdown("### Menu")
 
@@ -237,6 +302,13 @@ options = [
 ]
 
 menu = st.session_state.get("menu", "Library")
+
+# --- Redirect handler ---
+if st.session_state.get("go_to_library"):
+    st.session_state["menu"] = "Library"
+    st.session_state.pop("go_to_library", None)
+    st.rerun()
+
 
 for opt in options:
     clicked = st.sidebar.button(opt, key=f"menu_{opt}")
@@ -387,19 +459,6 @@ elif menu == "Upload Pitch":
         if c3.button("⏭️ Next Frame", key="pitch_next") and frame_idx < total - 1:
             frame_idx += 1
 
-        # show smaller preview
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ret, img = cap.read()
-        if ret:
-            st.image(
-                cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
-                caption=f"Frame {frame_idx}",
-                width=320
-            )
-
-
-
-
         if st.button("Extract 2-second Clip"):
             try:
                 start = max(0, frame_idx - int(2 * fps))
@@ -479,19 +538,6 @@ elif menu == "Upload Swing":
             frame_idx -= 1
         if c3.button("⏭️ Next Frame", key="swing_next") and frame_idx < total - 1:
             frame_idx += 1
-
-        # show smaller preview
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ret, img = cap.read()
-        if ret:
-            st.image(
-                cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
-                caption=f"Frame {frame_idx}",
-                width=320
-            )
-
-
-
 
         # --- Tag buttons ---
         c1, c2, c3 = st.columns(3)
@@ -584,6 +630,31 @@ elif menu == "Create Matchup":
             pitch_opt = {f"Pitch {p[0]} — {p[1] or '(no description)'}": p[0] for p in pitch_clips}
             pitch_sel = st.selectbox("Select Pitch Clip", list(pitch_opt.keys()), key="pitch_clip")
 
+            # --- Optional pitch preview (auto-pause) ---
+            if st.button("🎥 Preview Selected Pitch", key="preview_pitch"):
+                pitch_id = pitch_opt[pitch_sel]
+                blob = cur.execute("SELECT clip_blob FROM pitch_clips WHERE id=?", (pitch_id,)).fetchone()[0]
+                b64 = base64.b64encode(blob).decode()
+                st.markdown(
+                    f"""
+                    <div style="display:flex;justify-content:center;align-items:center;margin:10px 0;">
+                        <video
+                            controls
+                            muted
+                            playsinline
+                            preload="metadata"
+                            style="max-height:360px;max-width:100%;border-radius:8px;outline:none;"
+                            onloadedmetadata="this.currentTime = this.duration - 0.1; this.pause();"
+                        >
+                            <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+                        </video>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+
+
     # ---------------- Swing Side ----------------
     st.subheader("💥 Swing Side")
     teams_s = get_all("teams", "name")
@@ -602,6 +673,30 @@ elif menu == "Create Matchup":
             ).fetchall()
             swing_opt = {f"Swing {s[0]} — {s[1] or '(no description)'}": s[0] for s in swing_clips}
             swing_sel = st.selectbox("Select Swing Clip", list(swing_opt.keys()), key="swing_clip")
+            # --- Optional swing preview (auto-pause) ---
+            if st.button("🎥 Preview Selected Swing", key="preview_swing"):
+                swing_id = swing_opt[swing_sel]
+                blob = cur.execute("SELECT clip_blob FROM swing_clips WHERE id=?", (swing_id,)).fetchone()[0]
+                b64 = base64.b64encode(blob).decode()
+                st.markdown(
+                    f"""
+                    <div style="display:flex;justify-content:center;align-items:center;margin:10px 0;">
+                        <video
+                            controls
+                            muted
+                            playsinline
+                            preload="metadata"
+                            style="max-height:360px;max-width:100%;border-radius:8px;outline:none;"
+                            onloadedmetadata="this.currentTime = this.duration - 0.1; this.pause();"
+                        >
+                            <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+                        </video>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+
 
     desc = st.text_input("Extra Description (optional)")
 
@@ -760,42 +855,24 @@ elif menu == "Create Matchup":
         conn.commit()
 
         # show confirmation and direct link to this matchup
+        # --- Auto-open Library and highlight the new matchup ---
+
         matchup_id = cur.lastrowid
-        st.success(
-            f"✅ Matchup saved successfully!\n\n"
-            f"**File:** {matchup_name}.mp4\n\n"
-            f"**Pitcher:** {pitcher_name} ({team_name_p})  \n"
-            f"**Hitter:** {hitter_name} ({team_name_s})  \n"
-            f"**Time:** {datetime.now().strftime('%I:%M:%S %p')}"
-        )
-
-        # direct download only (no blank video)
-        st.download_button(
-            "⬇️ Download Matchup Video",
-            matchup_bytes,
-            file_name=f"{matchup_name}.mp4",
-            mime="video/mp4",
-            key=f"dl_new_matchup_{matchup_id}"
-        )
-
-        # link-style button to jump straight to Library
-        if st.button("➡️ View This Matchup in Library", key=f"go_matchup_{matchup_id}"):
-            st.session_state["menu"] = "Library"
-            st.session_state["highlight_matchup_id"] = matchup_id
-            st.rerun()
-
-        # clean up temp files
+        st.session_state["menu"] = "Library"
+        st.session_state["highlight_matchup_id"] = matchup_id
+        
+        # Clean up temp files
         for fpath in (ptmp.name, stmp.name, out_tmp.name):
             try:
                 os.unlink(fpath)
             except Exception:
                 pass
+        
+        # Use session flag to trigger redirect on next rerun
+        st.session_state["go_to_library"] = True
+        st.success("✅ Matchup created successfully — opening Library...")
 
-        # refresh just this section (manual reload of matchups)
-        rows = cur.execute("""
-            SELECT id, description, created_at, pitch_clip_id, swing_clip_id
-            FROM matchups ORDER BY id DESC
-        """).fetchall()
+
 
 # ---------- LIBRARY ----------
 elif menu == "Library":
@@ -804,17 +881,93 @@ elif menu == "Library":
 
     # ---------- MATCHUPS ----------
     with tabs[0]:
-        rows = cur.execute("""
-            SELECT id, description, created_at, pitch_clip_id, swing_clip_id
-            FROM matchups ORDER BY id DESC
-        """).fetchall()
+        # ---------- FILTER BAR ----------
+        st.subheader("🎯 Filter Matchups")
+
+        # --- Dropdown data ---
+        all_teams = [t[0] for t in cur.execute("SELECT name FROM teams ORDER BY name").fetchall()]
+        all_pitchers = [p[0] for p in cur.execute("SELECT name FROM pitchers ORDER BY name").fetchall()]
+        all_hitters = [h[0] for h in cur.execute("SELECT name FROM hitters ORDER BY name").fetchall()]
+
+        # --- Layout for filters ---
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            f_pitch_team = st.selectbox("Pitcher Team", ["All"] + all_teams, index=0)
+        with col2:
+            f_pitcher = st.selectbox("Pitcher", ["All"] + all_pitchers, index=0)
+        with col3:
+            f_hit_team = st.selectbox("Hitter Team", ["All"] + all_teams, index=0)
+        with col4:
+            f_hitter = st.selectbox("Hitter", ["All"] + all_hitters, index=0)
+        with col5:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Clear Filters"):
+                st.rerun()
+
+        # --- Build query dynamically ---
+        query = """
+            SELECT m.id, m.description, m.created_at, m.pitch_clip_id, m.swing_clip_id
+            FROM matchups m
+            JOIN pitch_clips pc ON m.pitch_clip_id = pc.id
+            JOIN swing_clips sc ON m.swing_clip_id = sc.id
+            JOIN pitchers p ON pc.pitcher_id = p.id
+            JOIN hitters h ON sc.hitter_id = h.id
+            JOIN teams tp ON pc.team_id = tp.id
+            JOIN teams th ON sc.team_id = th.id
+            WHERE 1=1
+        """
+        params = []
+
+        if f_pitch_team != "All":
+            query += " AND tp.name=?"
+            params.append(f_pitch_team)
+        if f_hit_team != "All":
+            query += " AND th.name=?"
+            params.append(f_hit_team)
+        if f_pitcher != "All":
+            query += " AND p.name=?"
+            params.append(f_pitcher)
+        if f_hitter != "All":
+            query += " AND h.name=?"
+            params.append(f_hitter)
+
+        query += " ORDER BY m.id DESC"
+        rows = cur.execute(query, params).fetchall()
+
+        st.markdown("---")
+
         if not rows:
             st.info("No matchups found.")
         else:
             for row in rows:
                 matchup_id, desc, created, pitch_id, swing_id = row
-                with st.expander(f"Matchup {matchup_id}: {desc or '(no description)'} — {created}", expanded=False):
-                    # --- Info ---
+
+                # Build formatted header with date, matchup description, hitter, and pitcher
+                header_date = created.split(" ")[0] if " " in created else created
+                pitch_info = cur.execute("""
+                    SELECT t.name, p.name FROM pitch_clips pc
+                    JOIN pitchers p ON pc.pitcher_id=p.id
+                    JOIN teams t ON pc.team_id=t.id
+                    WHERE pc.id=?
+                """, (pitch_id,)).fetchone()
+                swing_info = cur.execute("""
+                    SELECT t.name, h.name FROM swing_clips sc
+                    JOIN hitters h ON sc.hitter_id=h.id
+                    JOIN teams t ON sc.team_id=t.id
+                    WHERE sc.id=?
+                """, (swing_id,)).fetchone()
+
+                pitch_str = f"{pitch_info[1]} ({pitch_info[0]})" if pitch_info else "Unknown"
+                swing_str = f"{swing_info[1]} ({swing_info[0]})" if swing_info else "Unknown"
+
+                header_title = (                
+                    f"📅 {header_date}  |  {desc or '(no description)'}  \n"
+                    f"Hitter: {swing_str} • Pitcher: {pitch_str}"
+                                )
+
+                with st.expander(header_title, expanded=False):
+
+                    # --- Basic info ---
                     pitch_info = cur.execute("""
                         SELECT t.name, p.name FROM pitch_clips pc
                         JOIN pitchers p ON pc.pitcher_id=p.id
@@ -835,168 +988,394 @@ elif menu == "Library":
                             f"**Hitter:** {swing_info[1]} ({swing_info[0]})"
                         )
                     st.markdown(f"**Description:** {desc or '(none)'}")
+                    # --- Delete button always visible before previews ---
+                    if st.button("🗑️ Delete Matchup", key=f"delete_matchup_{matchup_id}"):
+                        delete_record("matchups", matchup_id)
+                        st.warning(f"Matchup {matchup_id} deleted.")
+                        st.rerun()
 
-                    # --- CONTROL ROW: TRUE ONE-LINE LAYOUT ---
-                    # Fetch blobs
-                    matchup_blob = cur.execute(
-                        "SELECT matchup_blob FROM matchups WHERE id=?", (matchup_id,)
-                    ).fetchone()[0]
-                    pitch_blob, fps_p = cur.execute(
-                        "SELECT clip_blob, fps FROM pitch_clips WHERE id=?", (pitch_id,)
-                    ).fetchone()
-                    swing_blob, fps_s, decision_frame = cur.execute(
-                        "SELECT clip_blob, fps, decision_frame FROM swing_clips WHERE id=?", (swing_id,)
-                    ).fetchone()
+                    # --- Lazy load button ---
+                    st.markdown("---")
+                    st.markdown("⚾ Click to load previews (images + video):")
+                    show_media = st.button(f"Load Preview for Matchup {matchup_id}", key=f"btn_load_{matchup_id}")
 
-                    # Extract frames
-                    ptmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                    ptmp.write(pitch_blob)
-                    ptmp.close()
-                    cap_p = cv2.VideoCapture(ptmp.name)
-                    total_pitch_frames = int(cap_p.get(cv2.CAP_PROP_FRAME_COUNT))
+                    if show_media:
+                        # --- Fetch blobs only when needed ---
+                        matchup_blob = cur.execute(
+                            "SELECT matchup_blob FROM matchups WHERE id=?", (matchup_id,)
+                        ).fetchone()[0]
+                        pitch_blob, fps_p = cur.execute(
+                            "SELECT clip_blob, fps FROM pitch_clips WHERE id=?", (pitch_id,)
+                        ).fetchone()
+                        swing_blob, fps_s, decision_frame = cur.execute(
+                            "SELECT clip_blob, fps, decision_frame FROM swing_clips WHERE id=?", (swing_id,)
+                        ).fetchone()
 
-                    tmp_s = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                    tmp_s.write(swing_blob)
-                    tmp_s.close()
-                    cap_s = cv2.VideoCapture(tmp_s.name)
-                    total_swing_frames = int(cap_s.get(cv2.CAP_PROP_FRAME_COUNT))
-                    cap_s.release()
-                    os.unlink(tmp_s.name)
+                        # Extract frames (start + decision)
+                        ptmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                        ptmp.write(pitch_blob)
+                        ptmp.close()
+                        cap_p = cv2.VideoCapture(ptmp.name)
+                        total_pitch_frames = int(cap_p.get(cv2.CAP_PROP_FRAME_COUNT))
 
-                    pad_frames = max(0, total_pitch_frames - total_swing_frames)
-                    decision_global = pad_frames + int(decision_frame or 0)
+                        tmp_s = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                        tmp_s.write(swing_blob)
+                        tmp_s.close()
+                        cap_s = cv2.VideoCapture(tmp_s.name)
+                        total_swing_frames = int(cap_s.get(cv2.CAP_PROP_FRAME_COUNT))
+                        cap_s.release()
+                        os.unlink(tmp_s.name)
 
-                    # Capture start + decision frames
-                    cap_p.set(cv2.CAP_PROP_POS_FRAMES, pad_frames)
-                    ret_start, frame_start = cap_p.read()
-                    cap_p.set(cv2.CAP_PROP_POS_FRAMES, decision_global)
-                    ret_decision, frame_decision = cap_p.read()
-                    cap_p.release()
-                    os.unlink(ptmp.name)
+                        pad_frames = max(0, total_pitch_frames - total_swing_frames)
+                        decision_global = pad_frames + int(decision_frame or 0)
 
-                    # --- Overlay matchup info text ---
-                    overlay_text = f"{pitch_info[1]} ({pitch_info[0]}) vs {swing_info[1]} ({swing_info[0]})"
-                    duration_text = f"Swing Duration: {round(total_swing_frames / fps_s, 2)}s"
+                        cap_p.set(cv2.CAP_PROP_POS_FRAMES, pad_frames)
+                        ret_start, frame_start = cap_p.read()
+                        cap_p.set(cv2.CAP_PROP_POS_FRAMES, decision_global)
+                        ret_decision, frame_decision = cap_p.read()
+                        cap_p.release()
+                        os.unlink(ptmp.name)
 
-                    def annotate_image(img, main_text, sub_text):
-                        if img is None:
-                            return None
-                        annotated = img.copy()
-                        h, w = annotated.shape[:2]
+                        # Annotate frames
+                        overlay_text = f"{pitch_info[1]} ({pitch_info[0]}) vs {swing_info[1]} ({swing_info[0]})"
+                        duration_text = f"Swing Duration: {round(total_swing_frames / fps_s, 2)}s"
 
-                        # optional translucent background bar for readability
-                        overlay = annotated.copy()
-                        cv2.rectangle(overlay, (0, h - 80), (w, h), (0, 0, 0), -1)
-                        cv2.addWeighted(overlay, 0.5, annotated, 0.5, 0, annotated)
+                        def annotate_image(img, main_text, sub_text):
+                            if img is None:
+                                return None
+                            annotated = img.copy()
+                            h, w = annotated.shape[:2]
+                            overlay = annotated.copy()
+                            cv2.rectangle(overlay, (0, h - 80), (w, h), (0, 0, 0), -1)
+                            cv2.addWeighted(overlay, 0.5, annotated, 0.5, 0, annotated)
+                            cv2.putText(annotated, main_text, (25, h - 45),
+                                        cv2.FONT_HERSHEY_COMPLEX, 1.0, (255, 255, 255), 3, cv2.LINE_AA)
+                            cv2.putText(annotated, sub_text, (25, h - 15),
+                                        cv2.FONT_HERSHEY_COMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+                            return annotated
 
-                        # text lines
-                        y_main = h - 45
-                        y_sub = h - 15
-                        cv2.putText(annotated, main_text, (25, y_main),
-                                    cv2.FONT_HERSHEY_COMPLEX, 1.0, (255, 255, 255), 3, cv2.LINE_AA)
-                        cv2.putText(annotated, sub_text, (25, y_sub),
-                                    cv2.FONT_HERSHEY_COMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
-                        return annotated
+                        if ret_start:
+                            frame_start = annotate_image(frame_start, overlay_text, duration_text)
+                        if ret_decision:
+                            frame_decision = annotate_image(frame_decision, overlay_text, duration_text)
 
-                    if ret_start:
-                        frame_start = annotate_image(frame_start, overlay_text, duration_text)
-                    if ret_decision:
-                        frame_decision = annotate_image(frame_decision, overlay_text, duration_text)
+                        # Encode to JPEG + show previews
+                        start_bytes = decision_bytes = None
+                        if ret_start:
+                            _, buf = cv2.imencode(".jpg", frame_start)
+                            start_bytes = buf.tobytes()
+                        if ret_decision:
+                            _, buf = cv2.imencode(".jpg", frame_decision)
+                            decision_bytes = buf.tobytes()
 
-                    # Encode to JPEG
-                    start_bytes = decision_bytes = None
-                    if ret_start:
-                        _, buf = cv2.imencode(".jpg", frame_start)
-                        start_bytes = buf.tobytes()
-                    if ret_decision:
-                        _, buf = cv2.imencode(".jpg", frame_decision)
-                        decision_bytes = buf.tobytes()
+                        if start_bytes or decision_bytes:
+                            st.markdown("##### 🖼️ Key Frames Preview")
+                            cols = st.columns(2)
+                            if start_bytes:
+                                b64_start = base64.b64encode(start_bytes).decode()
+                                cols[0].markdown(
+                                    f"""
+                                    <div style="text-align:center">
+                                        <p><strong>Start Frame</strong></p>
+                                        <img src="data:image/jpeg;base64,{b64_start}" 
+                                             style="max-width:100%;border-radius:8px;border:1px solid #444;">
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+                            if decision_bytes:
+                                b64_decision = base64.b64encode(decision_bytes).decode()
+                                cols[1].markdown(
+                                    f"""
+                                    <div style="text-align:center">
+                                        <p><strong>Decision Frame</strong></p>
+                                        <img src="data:image/jpeg;base64,{b64_decision}" 
+                                             style="max-width:100%;border-radius:8px;border:1px solid #444;">
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
 
-                    # Build HTML layout
-                    html = """
-                    <style>
-                        .button-bar {
-                            display: flex;
-                            flex-wrap: nowrap;
-                            gap: 0.6rem;
-                            margin-top: 10px;
-                        }
-                        .button-bar form {margin: 0;}
-                        .stDownloadButton>button, .stButton>button {
-                            white-space: nowrap;
-                        }
-                    </style>
-                    <div class="button-bar">
-                    """
-                    st.markdown(html, unsafe_allow_html=True)
+                        # --- Collapsible video ---
+                        with st.expander("🎥 Preview Video", expanded=False):
+                            orig_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                            orig_tmp.write(matchup_blob)
+                            orig_tmp.close()
 
-                    # Four buttons, inline
-                    colA, colB, colC, colD = st.columns([1.3, 1, 1, 0.8])
+                            ffmpeg_path = ffmpeg.get_ffmpeg_exe()
+                            reencoded_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                            reencoded_tmp.close()
 
-                    with colA:
-                        st.download_button(
-                            "⬇️ Download Video",
-                            matchup_blob,
-                            file_name=f"matchup_{matchup_id}.mp4",
-                            mime="video/mp4",
-                            key=f"dl_vid_{matchup_id}"
-                        )
+                            cmd = [
+                                ffmpeg_path,
+                                "-y",
+                                "-i", orig_tmp.name,
+                                "-c:v", "libx264",
+                                "-preset", "veryfast",
+                                "-pix_fmt", "yuv420p",
+                                "-an",
+                                reencoded_tmp.name,
+                            ]
+                            try:
+                                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                with open(reencoded_tmp.name, "rb") as f:
+                                    fixed_bytes = f.read()
+                            except Exception:
+                                st.error("⚠️ Could not transcode matchup video.")
+                                fixed_bytes = matchup_blob
+                            finally:
+                                for fpath in (orig_tmp.name, reencoded_tmp.name):
+                                    try:
+                                        os.unlink(fpath)
+                                    except Exception:
+                                        pass
 
-                    with colB:
-                        if start_bytes:
-                            st.download_button(
-                                "⬇️ Start Frame",
-                                start_bytes,
-                                file_name=f"pitch_start_{matchup_id}.jpg",
-                                mime="image/jpeg",
-                                key=f"dl_start_{matchup_id}"
+                            b64 = base64.b64encode(fixed_bytes).decode()
+                            st.markdown(
+                                f"""
+                                <div style="
+                                    display:flex;
+                                    justify-content:center;
+                                    align-items:center;
+                                    height:60vh;
+                                    overflow:hidden;
+                                    margin-top:10px;
+                                    margin-bottom:10px;
+                                ">
+                                    <video
+                                        controls
+                                        muted
+                                        playsinline
+                                        style="
+                                            max-height:100%;
+                                            max-width:100%;
+                                            object-fit:contain;
+                                            border-radius:12px;
+                                            outline:none;
+                                        "
+                                    >
+                                        <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+                                    </video>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
                             )
-                        else:
-                            st.warning("⚠️")
 
-                    with colC:
-                        if decision_bytes:
-                            st.download_button(
-                                "⬇️ Decision Frame",
-                                decision_bytes,
-                                file_name=f"pitch_decision_{matchup_id}.jpg",
-                                mime="image/jpeg",
-                                key=f"dl_decision_{matchup_id}"
-                            )
-                        else:
-                            st.warning("⚠️")
+                            colA, colB, colC, colD = st.columns([1.3, 1, 1, 0.8])
+                            with colA:
+                                st.download_button(
+                                    "⬇️ Download Matchup Video",
+                                    fixed_bytes,
+                                    file_name=f"matchup_{matchup_id}.mp4",
+                                    mime="video/mp4",
+                                    key=f"dl_vid_{matchup_id}",
+                                )
+                            with colB:
+                                if start_bytes:
+                                    st.download_button(
+                                        "⬇️ Start Frame",
+                                        start_bytes,
+                                        file_name=f"pitch_start_{matchup_id}.jpg",
+                                        mime="image/jpeg",
+                                        key=f"dl_start_{matchup_id}",
+                                    )
+                            with colC:
+                                if decision_bytes:
+                                    st.download_button(
+                                        "⬇️ Decision Frame",
+                                        decision_bytes,
+                                        file_name=f"pitch_decision_{matchup_id}.jpg",
+                                        mime="image/jpeg",
+                                        key=f"dl_decision_{matchup_id}",
+                                    )
 
-                    with colD:
-                        if st.button("🗑️ Delete", key=f"del_matchup_{matchup_id}"):
-                            delete_record("matchups", matchup_id)
-                            st.rerun()
 
     # ---------- PITCH CLIPS ----------
     with tabs[1]:
-        rows = cur.execute("SELECT id, description, created_at FROM pitch_clips ORDER BY id DESC").fetchall()
+        st.subheader("⚾ Pitch Clips Library")
+
+        rows = cur.execute("""
+            SELECT pc.id, pc.description, pc.created_at, t.name, p.name
+            FROM pitch_clips pc
+            JOIN teams t ON pc.team_id = t.id
+            JOIN pitchers p ON pc.pitcher_id = p.id
+            ORDER BY pc.id DESC
+        """).fetchall()
+
         if not rows:
             st.info("No pitch clips found.")
         else:
-            for clip_id, desc, created in rows:
-                with st.expander(f"Pitch {clip_id}: {desc or '(no description)'} — {created}", expanded=False):
-                    blob = cur.execute("SELECT clip_blob FROM pitch_clips WHERE id=?", (clip_id,)).fetchone()[0]
-                    col1, col2 = st.columns([2,1])
-                    col1.download_button("Download Pitch Clip", blob, f"pitch_{clip_id}.mp4", "video/mp4")
-                    if col2.button("Delete", key=f"del_pitch_{clip_id}"):
+            for clip_id, desc, created, team, pitcher in rows:
+                header = f"📅 {created.split(' ')[0]}  |  {team} • {pitcher}  |  {desc or '(no description)'}"
+                with st.expander(header, expanded=False):
+                    st.markdown(f"**Team:** {team}  \n**Pitcher:** {pitcher}")
+                    st.markdown(f"**Description:** {desc or '(none)'}")
+
+                    # Delete button
+                    if st.button("🗑️ Delete Pitch Clip", key=f"del_pitch_{clip_id}"):
                         delete_record("pitch_clips", clip_id)
+                        st.warning(f"Pitch {clip_id} deleted.")
                         st.rerun()
+
+                    st.markdown("---")
+                    st.markdown("🎥 Click below to load preview:")
+
+                    if st.button(f"Load Preview for Pitch {clip_id}", key=f"load_pitch_{clip_id}"):
+                        blob, = cur.execute("SELECT clip_blob FROM pitch_clips WHERE id=?", (clip_id,)).fetchone()
+
+                        # --- Re-encode like Matchup preview ---
+                        orig_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                        orig_tmp.write(blob)
+                        orig_tmp.close()
+
+                        ffmpeg_path = ffmpeg.get_ffmpeg_exe()
+                        fixed_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                        fixed_tmp.close()
+
+                        cmd = [
+                            ffmpeg_path,
+                            "-y",
+                            "-i", orig_tmp.name,
+                            "-c:v", "libx264",
+                            "-preset", "veryfast",
+                            "-pix_fmt", "yuv420p",
+                            "-an",
+                            fixed_tmp.name,
+                        ]
+
+                        try:
+                            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            with open(fixed_tmp.name, "rb") as f:
+                                fixed_bytes = f.read()
+                        except Exception:
+                            st.error("⚠️ Could not transcode pitch clip.")
+                            fixed_bytes = blob
+                        finally:
+                            for fpath in (orig_tmp.name, fixed_tmp.name):
+                                try:
+                                    os.unlink(fpath)
+                                except Exception:
+                                    pass
+
+                        b64 = base64.b64encode(fixed_bytes).decode()
+                        st.markdown(
+                            f"""
+                            <div style="display:flex;justify-content:center;align-items:center;margin:10px 0;">
+                                <video
+                                    controls
+                                    muted
+                                    playsinline
+                                    preload="metadata"
+                                    style="max-height:50vh;max-width:100%;border-radius:8px;outline:none;"
+                                    onloadedmetadata="this.currentTime = this.duration - 0.1; this.pause();"
+                                >
+                                    <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+                                </video>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        st.download_button(
+                            "⬇️ Download Pitch Clip",
+                            fixed_bytes,
+                            file_name=f"pitch_{clip_id}.mp4",
+                            mime="video/mp4",
+                            key=f"dl_pitch_{clip_id}"
+                        )
+
+
 
     # ---------- SWING CLIPS ----------
     with tabs[2]:
-        rows = cur.execute("SELECT id, description, created_at FROM swing_clips ORDER BY id DESC").fetchall()
+        st.subheader("💥 Swing Clips Library")
+
+        rows = cur.execute("""
+            SELECT sc.id, sc.description, sc.created_at, t.name, h.name
+            FROM swing_clips sc
+            JOIN teams t ON sc.team_id = t.id
+            JOIN hitters h ON sc.hitter_id = h.id
+            ORDER BY sc.id DESC
+        """).fetchall()
+
         if not rows:
             st.info("No swing clips found.")
         else:
-            for clip_id, desc, created in rows:
-                with st.expander(f"Swing {clip_id}: {desc or '(no description)'} — {created}", expanded=False):
-                    blob = cur.execute("SELECT clip_blob FROM swing_clips WHERE id=?", (clip_id,)).fetchone()[0]
-                    col1, col2 = st.columns([2,1])
-                    col1.download_button("Download Swing Clip", blob, f"swing_{clip_id}.mp4", "video/mp4")
-                    if col2.button("Delete", key=f"del_swing_{clip_id}"):
+            for clip_id, desc, created, team, hitter in rows:
+                header = f"📅 {created.split(' ')[0]}  |  {team} • {hitter}  |  {desc or '(no description)'}"
+                with st.expander(header, expanded=False):
+                    st.markdown(f"**Team:** {team}  \n**Hitter:** {hitter}")
+                    st.markdown(f"**Description:** {desc or '(none)'}")
+
+                    if st.button("🗑️ Delete Swing Clip", key=f"del_swing_{clip_id}"):
                         delete_record("swing_clips", clip_id)
+                        st.warning(f"Swing {clip_id} deleted.")
                         st.rerun()
+
+                    st.markdown("---")
+                    st.markdown("🎥 Click below to load preview:")
+
+                    if st.button(f"Load Preview for Swing {clip_id}", key=f"load_swing_{clip_id}"):
+                        blob, = cur.execute("SELECT clip_blob FROM swing_clips WHERE id=?", (clip_id,)).fetchone()
+
+                        # --- Re-encode like Matchup preview ---
+                        orig_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                        orig_tmp.write(blob)
+                        orig_tmp.close()
+
+                        ffmpeg_path = ffmpeg.get_ffmpeg_exe()
+                        fixed_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                        fixed_tmp.close()
+
+                        cmd = [
+                            ffmpeg_path,
+                            "-y",
+                            "-i", orig_tmp.name,
+                            "-c:v", "libx264",
+                            "-preset", "veryfast",
+                            "-pix_fmt", "yuv420p",
+                            "-an",
+                            fixed_tmp.name,
+                        ]
+
+                        try:
+                            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            with open(fixed_tmp.name, "rb") as f:
+                                fixed_bytes = f.read()
+                        except Exception:
+                            st.error("⚠️ Could not transcode swing clip.")
+                            fixed_bytes = blob
+                        finally:
+                            for fpath in (orig_tmp.name, fixed_tmp.name):
+                                try:
+                                    os.unlink(fpath)
+                                except Exception:
+                                    pass
+
+                        b64 = base64.b64encode(fixed_bytes).decode()
+                        st.markdown(
+                            f"""
+                            <div style="display:flex;justify-content:center;align-items:center;margin:10px 0;">
+                                <video
+                                    controls
+                                    muted
+                                    playsinline
+                                    preload="metadata"
+                                    style="max-height:50vh;max-width:100%;border-radius:8px;outline:none;"
+                                    onloadedmetadata="this.currentTime = this.duration - 0.1; this.pause();"
+                                >
+                                    <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+                                </video>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        st.download_button(
+                            "⬇️ Download Swing Clip",
+                            fixed_bytes,
+                            file_name=f"swing_{clip_id}.mp4",
+                            mime="video/mp4",
+                            key=f"dl_swing_{clip_id}"
+                        )
+    
