@@ -459,6 +459,19 @@ elif menu == "Upload Pitch":
         if c3.button("⏭️ Next Frame", key="pitch_next") and frame_idx < total - 1:
             frame_idx += 1
 
+        # show smaller preview
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ret, img = cap.read()
+        if ret:
+            st.image(
+                cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
+                caption=f"Frame {frame_idx}",
+                width=320
+            )
+
+
+
+
         if st.button("Extract 2-second Clip"):
             try:
                 start = max(0, frame_idx - int(2 * fps))
@@ -539,6 +552,19 @@ elif menu == "Upload Swing":
         if c3.button("⏭️ Next Frame", key="swing_next") and frame_idx < total - 1:
             frame_idx += 1
 
+        # show smaller preview
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ret, img = cap.read()
+        if ret:
+            st.image(
+                cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
+                caption=f"Frame {frame_idx}",
+                width=320
+            )
+
+
+
+
         # --- Tag buttons ---
         c1, c2, c3 = st.columns(3)
         if c1.button("Set Swing Start"):
@@ -605,7 +631,6 @@ elif menu == "Upload Swing":
 
             else:
                 st.error("Start must be before Contact")
-
 
 # ---------- CREATE MATCHUP ----------
 elif menu == "Create Matchup":
@@ -870,7 +895,7 @@ elif menu == "Create Matchup":
         
         # Use session flag to trigger redirect on next rerun
         st.session_state["go_to_library"] = True
-        st.success("✅ Matchup created successfully — opening Library...")
+        st.success("✅ Matchup created successfully in the Library")
 
 
 
