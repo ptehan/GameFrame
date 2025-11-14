@@ -10,6 +10,53 @@ import subprocess
 
 from datetime import datetime
 
+@st.cache_data
+def get_pitch_blob(pitch_id):
+    return cur.execute("SELECT clip_blob, fps FROM pitch_clips WHERE id=?", (pitch_id,)).fetchone()
+
+@st.cache_data
+def get_swing_blob(swing_id):
+    return cur.execute("SELECT clip_blob, fps, decision_frame FROM swing_clips WHERE id=?", (swing_id,)).fetchone()
+
+@st.cache_data
+def get_matchup_blob(matchup_id):
+    return cur.execute("SELECT matchup_blob FROM matchups WHERE id=?", (matchup_id,)).fetchone()[0]
+
+@st.cache_data
+def generate_thumbnail(mp4_bytes):
+    # write temp MP4
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+    tmp.write(mp4_bytes)
+    tmp.close()
+
+    thumb = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+    thumb.close()
+
+    ffmpeg_path = shutil.which("ffmpeg") or "/usr/bin/ffmpeg"
+
+    cmd = [
+        ffmpeg_path,
+        "-y",
+        "-i", tmp.name,
+        "-frames:v", "1",
+        "-q:v", "4",
+        "-vf", "scale=160:90:force_original_aspect_ratio=decrease",
+        thumb.name
+    ]
+
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    with open(thumb.name, "rb") as f:
+        b = f.read()
+
+    try: os.unlink(tmp.name)
+    except: pass
+    try: os.unlink(thumb.name)
+    except: pass
+
+    return b
+
+
 # ---------- SETUP ----------
 os.makedirs("clips", exist_ok=True)
 
