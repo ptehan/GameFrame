@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Trim Pitch Clip</h2>
+
+<p>FPS: {{ fps }} | Frames: {{ total }}</p>
+
+<div>
+    <img id="frame_preview"
+         src="/frame/pitch?id={{ temp_id }}&frame=0"
+         style="width:320px;border:1px solid #333;">
+</div>
+
+<input type="range"
+       id="frame_slider"
+       min="0"
+       max="{{ total - 1 }}"
+       value="0"
+       style="width:320px;margin-top:10px;">
+
+<div style="margin-top:10px;">
+    <button type="button" id="prev_btn"><< Prev</button>
+    <button type="button" id="next_btn">Next >></button>
+</div>
+
+<div style="margin-top:10px;">
+    <button type="button" id="set_contact_btn">Set Contact</button>
+</div>
+
+<div id="marker_status"
+     style="margin-top:10px;color:yellow;font-weight:bold;"></div>
+
+<form action="/upload/pitch/finalize" method="post" style="margin-top:20px;">
+    <input type="hidden" name="sid" value="{{ sid }}">
+    <input type="hidden" name="temp_id" value="{{ temp_id }}">
+    <input type="hidden" name="team_id" value="{{ team_id }}">
+    <input type="hidden" name="pitcher_id" value="{{ pitcher_id }}">
+    <input type="hidden" name="description" value="{{ description }}">
+    <input type="hidden" name="fps" value="{{ fps }}">
+    <input type="hidden" id="contact_frame" name="contact_frame" value="0">
+
+    <button type="submit">Finalize Pitch</button>
+</form>
+
+<script>
+const slider = document.getElementById("frame_slider");
+const img = document.getElementById("frame_preview");
+const prevBtn = document.getElementById("prev_btn");
+const nextBtn = document.getElementById("next_btn");
+const contactBtn = document.getElementById("set_contact_btn");
+const contactField = document.getElementById("contact_frame");
+const statusDiv = document.getElementById("marker_status");
+
+const MAX_FRAME = {{ total - 1 }};
+
+function updateAll(frame) {
+    frame = Math.max(0, Math.min(frame, MAX_FRAME));
+    slider.value = frame;
+    img.src = `/frame/pitch?id={{ temp_id }}&frame=` + frame;
+}
+
+slider.oninput = () => updateAll(parseInt(slider.value));
+prevBtn.onclick = () => updateAll(parseInt(slider.value) - 1);
+nextBtn.onclick = () => updateAll(parseInt(slider.value) + 1);
+
+contactBtn.onclick = () => {
+    contactField.value = slider.value;
+    statusDiv.innerText = `Contact Frame = ${slider.value}`;
+};
+
+updateAll(0);
+</script>
+
+{% endblock %}

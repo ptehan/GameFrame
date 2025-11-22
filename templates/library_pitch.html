@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Pitch Clips</h2>
+
+<form method="get" action="/library/pitch">
+    <input type="hidden" name="sid" value="{{ sid }}">
+
+    <label>Team:</label>
+    <select name="team_filter">
+        <option value="all">All</option>
+        {% for t in teams %}
+            <option value="{{ t[0] }}" {% if team_filter == t[0]|string %}selected{% endif %}>
+                {{ t[1] }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <label>Pitcher:</label>
+    <select name="pitcher_filter">
+        <option value="all">All</option>
+        {% for p in pitchers %}
+            <option value="{{ p[0] }}" {% if pitcher_filter == p[0]|string %}selected{% endif %}>
+                {{ p[1] }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <button type="submit">Filter</button>
+</form>
+
+<div style="margin-top:20px;">
+
+{% for row in clips %}
+    <div class="library-item" style="display:flex; gap:20px; align-items:center; margin-bottom:25px;">
+
+        <!-- THUMBNAIL -->
+        <img class="thumb"
+             src="/thumbnail/pitch?id={{ row[0] }}"
+             style="width:120px; height:auto; border:1px solid #333;">
+
+        <!-- META -->
+        <div style="flex:1;">
+            <b>
+                {% if row[3] %}
+                    {{ row[3] }}
+                {% else %}
+                    Pitch {{ row[0] }}
+                {% endif %}
+            </b><br>
+            FPS: {{ row[4] }}<br>
+            Created: {{ row[5] }}
+        </div>
+
+        <!-- PLAY BUTTON -->
+        <a href="/play/pitch?id={{ row[0] }}&sid={{ sid }}">
+            <button>Play</button>
+        </a>
+
+        <!-- DELETE BUTTON -->
+        <form method="post"
+              action="/library/pitch/delete"
+              style="display:inline;">
+            <input type="hidden" name="id" value="{{ row[0] }}">
+            <input type="hidden" name="sid" value="{{ sid }}">
+            <button type="submit"
+                    onclick="return confirm('Delete this pitch clip?');"
+                    style="padding:6px 12px; background:#d33; color:white;">
+                Delete
+            </button>
+        </form>
+
+    </div>
+{% endfor %}
+
+</div>
+
+{% endblock %}

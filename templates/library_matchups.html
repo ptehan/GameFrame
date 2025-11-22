@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Matchups</h2>
+
+<div class="panel" style="margin-bottom:20px; display:flex; gap:20px; align-items:flex-end;">
+    <div>
+        <label>Search:</label><br>
+        <input id="filter_text" type="text" placeholder="Search description..." style="width:200px;">
+    </div>
+
+    <div>
+        <label>Team:</label><br>
+        <select id="filter_team" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Pitcher:</label><br>
+        <select id="filter_pitcher" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Hitter:</label><br>
+        <select id="filter_hitter" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+</div>
+
+
+<!-- REAL GRID -->
+<div id="matchup_list" class="matchup-grid">
+
+{% for m in matchups %}
+    <div class="library-item matchup-row"
+         data-text="{{ m[3]|lower }}"
+         data-team="{{ m[5]|lower }}"
+         data-pitcher="{{ m[6]|lower }}"
+         data-hitter="{{ m[7]|lower }}">
+
+        <img class="thumb" src="/thumbnail/matchup?id={{ m[0] }}">
+
+        <div class="info">
+            <b>{{ m[3] }}</b><br>
+            Pitcher: {{ m[6] }} ({{ m[5] }})<br>
+            Hitter: {{ m[8] }} ({{ m[7] }})<br>
+            Created: {{ m[4] }}
+        </div>
+
+        <div class="actions">
+            <a href="/play/matchup?id={{ m[0] }}&sid={{ sid }}">
+                <button>Play</button>
+            </a>
+
+            <form action="/matchup/delete" method="post">
+                <input type="hidden" name="id" value="{{ m[0] }}">
+                <input type="hidden" name="sid" value="{{ sid }}">
+                <button type="submit" onclick="return confirm('Delete matchup?');">Delete</button>
+            </form>
+        </div>
+
+    </div>
+{% endfor %}
+
+</div>
+
+
+<script>
+const rows = document.querySelectorAll(".matchup-row");
+const fText = document.getElementById("filter_text");
+const fTeam = document.getElementById("filter_team");
+const fPitcher = document.getElementById("filter_pitcher");
+const fHitter = document.getElementById("filter_hitter");
+
+const teams = new Set();
+const pitchers = new Set();
+const hitters = new Set();
+
+rows.forEach(r => {
+    if (r.dataset.team) teams.add(r.dataset.team);
+    if (r.dataset.pitcher) pitchers.add(r.dataset.pitcher);
+    if (r.dataset.hitter) hitters.add(r.dataset.hitter);
+});
+
+teams.forEach(t => fTeam.innerHTML += `<option value="${t}">${t}</option>`);
+pitchers.forEach(p => fPitcher.innerHTML += `<option value="${p}">${p}</option>`);
+hitters.forEach(h => fHitter.innerHTML += `<option value="${h}">${h}</option>`);
+
+function applyFilters() {
+    const q = fText.value.toLowerCase().trim();
+    const team = fTeam.value;
+    const pitcher = fPitcher.value;
+    const hitter = fHitter.value;
+
+    rows.forEach(r => {
+        let ok = true;
+
+        if (q && !r.dataset.text.includes(q)) ok = false;
+        if (team && r.dataset.team !== team) ok = false;
+        if (pitcher && r.dataset.pitcher !== pitcher) ok = false;
+        if (hitter && r.dataset.hitter !== hitter) ok = false;
+
+        r.style.display = ok ? "flex" : "none";
+    });
+}
+
+[fText, fTeam, fPitcher, fHitter].forEach(el => {
+    el.oninput = applyFilters;
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2 style="margin-bottom:20px;">Create Matchup</h2>
+
+<form method="post" action="/matchup/create" style="display:block; width:100%;">
+    <input type="hidden" name="sid" value="{{ sid }}">
+
+    <!-- ===================================== -->
+    <!--   TWO COLUMNS, STACKED INSIDE EACH   -->
+    <!-- ===================================== -->
+    <div style="display:flex; gap:60px; align-items:flex-start;">
+
+        <!-- LEFT COLUMN: PITCH -->
+        <div style="width:360px;">
+            <h3>Pitch Selection</h3>
+
+            <div style="margin-bottom:20px;">
+                <label>Team:</label><br>
+                <select id="pitch_team" style="width:100%;">
+                    <option value="">Select Team</option>
+                    {% for t in teams %}
+                        <option value="{{ t[0] }}">{{ t[1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label>Pitcher:</label><br>
+                <select id="pitch_pitcher" style="width:100%;"></select>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label>Pitch Clip:</label><br>
+                <select id="pitch_clip" name="pitch_id" required style="width:100%;"></select>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: SWING -->
+        <div style="width:360px;">
+            <h3>Swing Selection</h3>
+
+            <div style="margin-bottom:20px;">
+                <label>Team:</label><br>
+                <select id="swing_team" style="width:100%;">
+                    <option value="">Select Team</option>
+                    {% for t in teams %}
+                        <option value="{{ t[0] }}">{{ t[1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label>Hitter:</label><br>
+                <select id="swing_hitter" style="width:100%;"></select>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label>Swing Clip:</label><br>
+                <select id="swing_clip" name="swing_id" required style="width:100%;"></select>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- DESCRIPTION + BUTTON UNDER BOTH COLUMNS -->
+    <div style="margin-top:30px;">
+        <label>Description:</label><br>
+        <input type="text" name="description" style="width:360px;">
+    </div>
+
+    <div style="margin-top:20px;">
+        <button type="submit">Create Matchup</button>
+    </div>
+
+</form>
+
+<script>
+const pitcherMap = {{ pitcher_map | tojson }};
+const pitchClipMap = {{ pitch_clip_map | tojson }};
+const hitterMap = {{ hitter_map | tojson }};
+const swingClipMap = {{ swing_clip_map | tojson }};
+
+const ptTeam = document.getElementById("pitch_team");
+const ptPitcher = document.getElementById("pitch_pitcher");
+const ptClip = document.getElementById("pitch_clip");
+
+const swTeam = document.getElementById("swing_team");
+const swHitter = document.getElementById("swing_hitter");
+const swClip = document.getElementById("swing_clip");
+
+ptTeam.onchange = () => {
+    ptPitcher.innerHTML = "";
+    ptClip.innerHTML = "";
+    const tid = ptTeam.value;
+    if (!tid || !pitcherMap[tid]) return;
+    pitcherMap[tid].forEach(p =>
+        ptPitcher.innerHTML += `<option value="${p.id}">${p.name}</option>`
+    );
+    ptPitcher.onchange();
+};
+
+ptPitcher.onchange = () => {
+    ptClip.innerHTML = "";
+    const pid = ptPitcher.value;
+    if (!pid || !pitchClipMap[pid]) return;
+    pitchClipMap[pid].forEach(c =>
+        ptClip.innerHTML += `<option value="${c.id}">${c.label}</option>`
+    );
+};
+
+swTeam.onchange = () => {
+    swHitter.innerHTML = "";
+    swClip.innerHTML = "";
+    const tid = swTeam.value;
+    if (!tid || !hitterMap[tid]) return;
+    hitterMap[tid].forEach(h =>
+        swHitter.innerHTML += `<option value="${h.id}">${h.name}</option>`
+    );
+    swHitter.onchange();
+};
+
+swHitter.onchange = () => {
+    swClip.innerHTML = "";
+    const hid = swHitter.value;
+    if (!hid || !swingClipMap[hid]) return;
+    swingClipMap[hid].forEach(c =>
+        swClip.innerHTML += `<option value="${c.id}">${c.label}</option>`
+    );
+};
+</script>
+
+{% endblock %}

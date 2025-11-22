@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 style="margin-bottom: 20px;">Upload Pitch Clip</h2>
+
+<form action="/upload/pitch"
+      method="post"
+      enctype="multipart/form-data"
+      style="display: grid; grid-template-columns: 200px 1fr; gap: 12px; width: 450px;">
+
+    <input type="hidden" name="sid" value="{{ sid }}">
+
+    <!-- TEAM -->
+    <label>Team:</label>
+    <select id="team_select" name="team_id" required>
+        <option value="">Select Team</option>
+        {% for t in teams %}
+            <option value="{{ t[0] }}">{{ t[1] }}</option>
+        {% endfor %}
+    </select>
+
+    <!-- PITCHER -->
+    <label>Pitcher:</label>
+    <select id="pitcher_select" name="pitcher_id" required>
+        <option value="">Select Pitcher</option>
+        {% for p in pitchers %}
+            <option value="{{ p[0] }}" data-team="{{ p[2] }}">{{ p[1] }}</option>
+        {% endfor %}
+    </select>
+
+    <!-- DESCRIPTION -->
+    <label>Description:</label>
+    <input type="text" name="description" placeholder="Optional note...">
+
+    <!-- FILE -->
+    <label>Video File:</label>
+    <input type="file" name="file" accept="video/mp4" required>
+
+    <!-- BUTTON -->
+    <div></div>
+    <button type="submit" style="padding: 10px 20px; width: 150px;">Upload Pitch</button>
+
+</form>
+
+<script>
+// Simple team -> pitcher filter
+const teamSel = document.getElementById("team_select");
+const pitcherSel = document.getElementById("pitcher_select");
+
+// Store all pitcher options
+const allPitchers = Array.from(pitcherSel.options);
+
+teamSel.onchange = () => {
+    const tid = teamSel.value;
+    pitcherSel.innerHTML = '<option value="">Select Pitcher</option>';
+
+    allPitchers.forEach(opt => {
+        if (opt.dataset.team === tid) {
+            pitcherSel.appendChild(opt.cloneNode(true));
+        }
+    });
+};
+</script>
+
+{% endblock %}

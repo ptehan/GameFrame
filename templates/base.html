@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>GameFrame</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+<div id="sidebar">
+
+    <div class="title">GAMEFRAME</div>
+
+    <a class="menu-item" href="/?sid={{ sid }}">Home</a>
+
+    <div class="menu-section">Create Videos</div>
+    <a class="menu-item" href="/upload/pitch?sid={{ sid }}">Upload Pitch Clip</a>
+    <a class="menu-item" href="/upload/swing?sid={{ sid }}">Upload Swing Clip</a>
+    <a class="menu-item" href="/matchup/select?sid={{ sid }}">Create Matchup</a>
+
+    <div class="menu-section">Library</div>
+    <a class="menu-item" href="/library/matchups?sid={{ sid }}">Matchups</a>
+    <a class="menu-item" href="/library/pitch?sid={{ sid }}">Pitch Clips</a>
+    <a class="menu-item" href="/library/swing?sid={{ sid }}">Swing Clips</a>
+
+    <div class="menu-section">Manage</div>
+    <a class="menu-item" href="/teams?sid={{ sid }}">Teams</a>
+    <a class="menu-item" href="/pitchers?sid={{ sid }}">Pitchers</a>
+    <a class="menu-item" href="/hitters?sid={{ sid }}">Hitters</a>
+
+    <div class="menu-section">Auth</div>
+    <a class="menu-item" href="/logout?sid={{ sid }}">Logout</a>
+
+</div>
+
+<div id="main">
+    {% block content %}{% endblock %}
+</div>
+
+</body>
+</html>

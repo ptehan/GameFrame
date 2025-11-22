@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 style="margin-bottom: 20px;">Upload Swing Clip</h2>
+
+<form action="/upload/swing"
+      method="post"
+      enctype="multipart/form-data"
+      style="display: grid; grid-template-columns: 200px 1fr; gap: 12px; width: 450px;">
+
+    <input type="hidden" name="sid" value="{{ sid }}">
+
+    <!-- TEAM -->
+    <label>Team:</label>
+    <select id="team_select" name="team_id" required>
+        <option value="">Select Team</option>
+        {% for t in teams %}
+            <option value="{{ t[0] }}">{{ t[1] }}</option>
+        {% endfor %}
+    </select>
+
+    <!-- HITTER -->
+    <label>Hitter:</label>
+    <select id="hitter_select" name="hitter_id" required>
+        <option value="">Select Hitter</option>
+        {% for h in hitters %}
+            <option value="{{ h[0] }}" data-team="{{ h[2] }}">{{ h[1] }}</option>
+        {% endfor %}
+    </select>
+
+    <!-- DESCRIPTION -->
+    <label>Description:</label>
+    <input type="text" name="description" placeholder="Optional note...">
+
+    <!-- FILE -->
+    <label>Video File:</label>
+    <input type="file" name="file" accept="video/mp4" required>
+
+    <!-- BUTTON -->
+    <div></div>
+    <button type="submit" style="padding: 10px 20px; width: 150px;">
+        Upload Swing
+    </button>
+
+</form>
+
+<script>
+// team -> hitter filtering
+const teamSel = document.getElementById("team_select");
+const hitterSel = document.getElementById("hitter_select");
+
+// store all hitters
+const allHitters = Array.from(hitterSel.options);
+
+teamSel.onchange = () => {
+    const tid = teamSel.value;
+    hitterSel.innerHTML = '<option value="">Select Hitter</option>';
+
+    allHitters.forEach(opt => {
+        if (opt.dataset.team === tid) {
+            hitterSel.appendChild(opt.cloneNode(true));
+        }
+    });
+};
+</script>
+
+{% endblock %}

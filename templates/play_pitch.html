@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Play Pitch Clip</h2>
+
+<div style="max-width:480px;">
+    <video 
+        id="player"
+        controls
+        preload="metadata"
+        style="width:100%; background:#000; border-radius:8px;"
+    >
+        <source src="/stream/pitch?id={{ id }}" type="video/mp4">
+        Your browser does not support video playback.
+    </video>
+</div>
+
+{% endblock %}

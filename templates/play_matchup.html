@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Matchup Viewer</h2>
+
+<video width="960" controls style="display:block; margin-bottom:25px;">
+    <source src="/stream/matchup?id={{ id }}" type="video/mp4">
+</video>
+
+<div style="margin-top:20px;">
+    <a href="/play/matchup/download?id={{ id }}">
+        <button>Download Full Video</button>
+    </a>
+</div>
+
+{% endblock %}
