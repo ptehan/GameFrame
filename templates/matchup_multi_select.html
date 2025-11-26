@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2 style="margin-bottom:25px;">Create Multi-Pitch Matchup</h2>
+
+<form method="post" action="/matchup/multi_create">
+    <input type="hidden" name="sid" value="{{ sid }}">
+
+    <div style="display:flex; gap:60px;">
+
+        <!-- ===========================================================
+             COLUMN 1 — YOUR EXACT ORDER + BLANK ROWS
+             =========================================================== -->
+        <div style="width:350px;">
+
+            <!-- Pitch 1 Team -->
+            <label>Pitch 1 Team:</label>
+            <select id="p1_team" style="width:100%;">
+                <option value="">Select Team</option>
+                {% for t in teams %}
+                    <option value="{{ t[0] }}">{{ t[1] }}</option>
+                {% endfor %}
+            </select>
+
+            <!-- Pitch 1 Pitcher -->
+            <label style="margin-top:12px;">Pitch 1 Pitcher:</label>
+            <select id="p1_pitcher" style="width:100%;"></select>
+
+            <!-- Pitch 1 Pitch -->
+            <label style="margin-top:12px;">Pitch 1 Pitch:</label>
+            <select id="p1_clip" name="pitchA_id" style="width:100%;" required></select>
+
+            <!-- >>> BLANK ROW AFTER PITCH BLOCK <<< -->
+            <div style="height:25px;"></div>
+
+
+            <!-- Swing Team -->
+            <label>Swing Team:</label>
+            <select id="h_team" style="width:100%;">
+                <option value="">Select Team</option>
+                {% for t in teams %}
+                    <option value="{{ t[0] }}">{{ t[1] }}</option>
+                {% endfor %}
+            </select>
+
+            <!-- Swing Hitter -->
+            <label style="margin-top:12px;">Swing Hitter:</label>
+            <select id="h_hitter" style="width:100%;"></select>
+
+            <!-- Swing -->
+            <label style="margin-top:12px;">Swing:</label>
+            <select id="h_clip" name="swing_id" style="width:100%;" required></select>
+
+            <!-- >>> BLANK ROW AFTER SWING BLOCK <<< -->
+            <div style="height:25px;"></div>
+
+
+            <!-- Description -->
+            <label>Matchup description:</label>
+            <input type="text"
+                   name="description"
+                   placeholder="Description"
+                   style="width:100%;">
+
+            <!-- >>> BLANK ROW BEFORE BUTTON <<< -->
+            <div style="height:25px;"></div>
+
+            <!-- Button -->
+            <button type="submit"
+                    style="width:100%;">
+                Create Multi-Pitch Matchup
+            </button>
+
+        </div>
+
+
+        <!-- ===========================================================
+             COLUMN 2 — ONLY PITCH 2
+             =========================================================== -->
+        <div style="width:350px;">
+
+            <!-- Pitch 2 Team -->
+            <label>Pitch 2 Team:</label>
+            <select id="p2_team" style="width:100%;">
+                <option value="">Select Team</option>
+                {% for t in teams %}
+                    <option value="{{ t[0] }}">{{ t[1] }}</option>
+                {% endfor %}
+            </select>
+
+            <!-- Pitch 2 Pitcher -->
+            <label style="margin-top:12px;">Pitch 2 Pitcher:</label>
+            <select id="p2_pitcher" style="width:100%;"></select>
+
+            <!-- Pitch 2 Pitch -->
+            <label style="margin-top:12px;">Pitch 2 Pitch:</label>
+            <select id="p2_clip" name="pitchB_id" style="width:100%;" required></select>
+
+        </div>
+
+    </div>
+
+</form>
+
+
+<!-- ===========================================================
+     JAVASCRIPT (unchanged)
+     =========================================================== -->
+<script>
+const pitcherMap = {{ pitcher_map | tojson }};
+const pitchClipMap = {{ pitch_clip_map | tojson }};
+const hitterMap = {{ hitter_map | tojson }};
+const swingClipMap = {{ swing_clip_map | tojson }};
+
+
+// ----- P1 -----
+const p1Team = document.getElementById("p1_team");
+const p1Pitcher = document.getElementById("p1_pitcher");
+const p1Clip = document.getElementById("p1_clip");
+
+p1Team.onchange = () => {
+    p1Pitcher.innerHTML = "";
+    p1Clip.innerHTML = "";
+    const tid = p1Team.value;
+    if (!tid || !pitcherMap[tid]) return;
+    pitcherMap[tid].forEach(p => {
+        p1Pitcher.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    });
+    p1Pitcher.onchange();
+};
+
+p1Pitcher.onchange = () => {
+    p1Clip.innerHTML = "";
+    const pid = p1Pitcher.value;
+    if (!pid || !pitchClipMap[pid]) return;
+    pitchClipMap[pid].forEach(c => {
+        p1Clip.innerHTML += `<option value="${c.id}">${c.label}</option>`;
+    });
+};
+
+
+// ----- P2 -----
+const p2Team = document.getElementById("p2_team");
+const p2Pitcher = document.getElementById("p2_pitcher");
+const p2Clip = document.getElementById("p2_clip");
+
+p2Team.onchange = () => {
+    p2Pitcher.innerHTML = "";
+    p2Clip.innerHTML = "";
+    const tid = p2Team.value;
+    if (!tid || !pitcherMap[tid]) return;
+    pitcherMap[tid].forEach(p => {
+        p2Pitcher.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    });
+    p2Pitcher.onchange();
+};
+
+p2Pitcher.onchange = () => {
+    p2Clip.innerHTML = "";
+    const pid = p2Pitcher.value;
+    if (!pid || !pitchClipMap[pid]) return;
+    pitchClipMap[pid].forEach(c => {
+        p2Clip.innerHTML += `<option value="${c.id}">${c.label}</option>`;
+    });
+};
+
+
+// ----- HITTER -----
+const hTeam = document.getElementById("h_team");
+const hHitter = document.getElementById("h_hitter");
+const hClip = document.getElementById("h_clip");
+
+hTeam.onchange = () => {
+    hHitter.innerHTML = "";
+    hClip.innerHTML = "";
+    const tid = hTeam.value;
+    if (!tid || !hitterMap[tid]) return;
+    hitterMap[tid].forEach(h => {
+        hHitter.innerHTML += `<option value="${h.id}">${h.name}</option>`;
+    });
+    hHitter.onchange();
+};
+
+hHitter.onchange = () => {
+    hClip.innerHTML = "";
+    const hid = hHitter.value;
+    if (!hid || !swingClipMap[hid]) return;
+    swingClipMap[hid].forEach(c => {
+        hClip.innerHTML += `<option value="${c.id}">${c.label}</option>`;
+    });
+};
+</script>
+
+{% endblock %}

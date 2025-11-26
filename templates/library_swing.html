@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Swing Clips</h2>
+
+<div>
+
+{% for sc in clips %}
+    <div class="library-item" style="margin-bottom:20px; display:flex; gap:20px; align-items:center;">
+
+        <!-- THUMBNAIL -->
+        <img class="thumb"
+             src="/thumbnail/swing?id={{ sc[0] }}"
+             style="width:120px; height:auto; border:1px solid #333;">
+
+        <!-- INFO -->
+        <div style="flex:1;">
+            <b>
+                {% if sc[3] %}
+                    {{ sc[3] }}
+                {% else %}
+                    Swing {{ sc[0] }}
+                {% endif %}
+            </b><br>
+            FPS: {{ sc[4] }}<br>
+            Created: {{ sc[5] }}
+        </div>
+
+        <!-- PLAY -->
+        <a href="/play/swing?id={{ sc[0] }}&sid={{ sid }}">
+            <button style="padding:6px 12px;">Play</button>
+        </a>
+
+        <!-- DELETE -->
+        <form method="post"
+              action="/library/swing/delete"
+              style="display:inline;">
+            <input type="hidden" name="id" value="{{ sc[0] }}">
+            <input type="hidden" name="sid" value="{{ sid }}">
+            <button type="submit"
+                    onclick="return confirm('Delete this swing?');"
+                    style="padding:6px 12px; background:#d33; color:white;">
+                Delete
+            </button>
+        </form>
+
+    </div>
+{% endfor %}
+
+</div>
+
+{% endblock %}

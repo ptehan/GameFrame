@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 style="margin-bottom:20px;">Save From YouTube (5-Second Clip)</h2>
+
+<div style="max-width:500px;">
+    <label>YouTube URL</label>
+    <input id="yt_url" type="text"
+           placeholder="https://www.youtube.com/watch?v=..."
+           style="width:100%; padding:10px; margin-bottom:15px;">
+
+    <label>Start Time (seconds)</label>
+    <input id="yt_start" type="number" min="0" step="0.1" value="0"
+           style="width:120px; padding:10px; margin-bottom:15px;">
+
+    <label>Save As</label>
+    <select id="yt_type"
+            style="width:150px; padding:10px; margin-bottom:15px;">
+        <option value="pitch">Pitch</option>
+        <option value="swing">Swing</option>
+    </select>
+
+    <button id="recordBtn"
+            style="padding:12px 22px; font-size:18px; background:#4af; border:none; cursor:pointer;">
+        Save 5 Seconds
+    </button>
+
+    <div id="status" style="margin-top:20px; color:#aaa;"></div>
+</div>
+
+<script>
+document.getElementById("recordBtn").onclick = () => {
+    const url = document.getElementById("yt_url").value.trim();
+    const start = parseFloat(document.getElementById("yt_start").value);
+    const type = document.getElementById("yt_type").value;
+    const status = document.getElementById("status");
+
+    if (!url) {
+        status.innerText = "Enter a YouTube URL.";
+        return;
+    }
+
+    status.innerText = "Saving clip…";
+
+    // THIS is the correct endpoint — your new python route
+    const endpoint = "/import/youtube/make_clip";
+
+    // Send params to backend which handles routing
+    window.location = `${endpoint}?type=${type}&url=${encodeURIComponent(url)}&start=${start}`;
+
+    setTimeout(() => {
+        status.innerText = "";
+    }, 800);
+};
+</script>
+
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Play Swing Clip</h2>
+
+<video width="320" controls>
+    <source src="/stream/swing?id={{ id }}" type="video/mp4">
+</video>
+
+{% endblock %}

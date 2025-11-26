@@ -1,0 +1,12 @@
+pyinstaller run_local.py `
+    --noconsole `
+    --onefile `
+    --name GameFrame `
+    --add-data "templates;templates" `
+    --add-data "static;static" `
+    --add-data "app.db;." `
+    --add-data "routers;routers" `
+    --add-data "utils;utils" `
+    --add-binary "ffmpeg/ffmpeg.exe;ffmpeg" `
+    --hidden-import "cv2" `
+    --hidden-import "imageio_ffmpeg"

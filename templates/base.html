@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>GameFrame</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        /* collapsed state */
+        .submenu {
+            display: none;
+            margin-left: 0;
+        }
+
+        /* optional nicer UX: pointer cursor */
+        .menu-section {
+            cursor: pointer;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+
+    <div class="title">GAMEFRAME</div>
+
+    <a class="menu-item" href="/?sid={{ sid }}">Home</a>
+
+
+    <!-- CREATE VIDEOS -->
+    <div class="menu-section" data-target="create-videos">Create Videos ▸</div>
+    <div class="submenu" id="create-videos">
+        <a class="menu-item" href="/upload/pitch?sid={{ sid }}">Upload Pitch Clip</a>
+        <a class="menu-item" href="/upload/swing?sid={{ sid }}">Upload Swing Clip</a>
+        <a class="menu-item" href="/matchup/select?sid={{ sid }}">Create Matchup</a>
+        <a class="menu-item" href="/matchup/multi_select?sid={{ sid }}">Create Multi-Pitch Matchup</a>
+        <a class="menu-item" href="/import/youtube">Save YouTube Clip</a>
+    </div>
+
+
+    <!-- LIBRARY -->
+    <div class="menu-section" data-target="library">Library ▸</div>
+    <div class="submenu" id="library">
+    <!--     <a class="menu-item" href="/library/matchups?sid={{ sid }}">Matchups</a>
+        <a class="menu-item" href="/library/multi_matchups?sid={{ sid }}">Multi-Pitch Matchups</a>
+        <a class="menu-item" href="/library/pitch?sid={{ sid }}">Pitch Clips</a>
+        <a class="menu-item" href="/library/swing?sid={{ sid }}">Swing Clips</a>-->
+
+        <a class="menu-item" href="/library?sid={{ sid }}">Library</a>
+    </div>
+
+
+    <!-- DASHBOARD -->
+    <div class="menu-section" data-target="dashboard">Dashboard ▸</div>
+    <div class="submenu" id="dashboard">
+        <a class="menu-item" href="/dashboard/player?sid={{ sid }}">Player Dashboard</a>
+    </div>
+
+
+    <!-- MANAGE -->
+    <div class="menu-section" data-target="manage">Manage ▸</div>
+    <div class="submenu" id="manage">
+        <a class="menu-item" href="/teams?sid={{ sid }}">Teams</a>
+        <a class="menu-item" href="/pitchers?sid={{ sid }}">Pitchers</a>
+        <a class="menu-item" href="/hitters?sid={{ sid }}">Hitters</a>
+    </div>
+
+
+    <!-- AUTH -->
+    <div class="menu-section" data-target="auth">Auth ▸</div>
+    <div class="submenu" id="auth">
+        <a class="menu-item" href="/logout?sid={{ sid }}">Logout</a>
+    </div>
+
+</div>
+
+
+<div id="main">
+    {% block content %}{% endblock %}
+</div>
+
+
+<!-- Collapsible logic -->
+<script>
+document.querySelectorAll(".menu-section").forEach(section => {
+    section.addEventListener("click", () => {
+        const target = section.getAttribute("data-target");
+        const menu = document.getElementById(target);
+
+        if (menu.style.display === "block") {
+            menu.style.display = "none";
+            section.textContent = section.textContent.replace("▾", "▸");
+        } else {
+            menu.style.display = "block";
+            section.textContent = section.textContent.replace("▸", "▾");
+        }
+    });
+});
+</script>
+
+</body>
+</html>

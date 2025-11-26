@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- ========================= -->
+<!-- 1. TEAMS (FIRST)          -->
+<!-- ========================= -->
+{% if view == "teams" %}
+<h1>Teams</h1>
+
+<table>
+    <tr><th>Name</th><th>Description</th><th>Actions</th></tr>
+    {% for t in items %}
+    <tr>
+        <td>{{ t[1] }}</td>
+        <td>{{ t[2] }}</td>
+        <td>
+            <form method="post" action="/teams/delete">
+                <input type="hidden" name="item_id" value="{{ t[0] }}">
+                <button type="submit">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h3>Add Team</h3>
+<form method="post" action="/teams/add">
+    <input type="text" name="name" placeholder="Team name">
+    <input type="text" name="description" placeholder="Description">
+    <button type="submit">Add</button>
+</form>
+{% endif %}
+
+
+
+<!-- ========================= -->
+<!-- 2. HITTERS (SECOND)       -->
+<!-- ========================= -->
+{% if view == "hitters" %}
+<h1>Hitters</h1>
+
+<table>
+    <tr><th>Team</th><th>Name</th><th>Description</th><th>Actions</th></tr>
+    {% for h in items %}
+    <tr>
+        <td>{{ h[3] }}</td>
+        <td>{{ h[1] }}</td>
+        <td>{{ h[2] }}</td>
+        <td>
+            <form method="post" action="/hitters/delete">
+                <input type="hidden" name="item_id" value="{{ h[0] }}">
+                <button type="submit">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h3>Add Hitter</h3>
+<form method="post" action="/hitters/add">
+    <select name="team_id">
+        {% for t in teams %}
+            <option value="{{ t[0] }}">{{ t[1] }}</option>
+        {% endfor %}
+    </select>
+    <input type="text" name="name" placeholder="Hitter name">
+    <input type="text" name="description" placeholder="Description">
+    <button type="submit">Add</button>
+</form>
+{% endif %}
+
+
+
+<!-- ========================= -->
+<!-- 3. PITCHERS (THIRD)       -->
+<!-- ========================= -->
+{% if view == "pitchers" %}
+<h1>Pitchers</h1>
+
+<table>
+    <tr><th>Team</th><th>Name</th><th>Description</th><th>Actions</th></tr>
+    {% for p in items %}
+    <tr>
+        <td>{{ p[3] }}</td>
+        <td>{{ p[1] }}</td>
+        <td>{{ p[2] }}</td>
+        <td>
+            <form method="post" action="/pitchers/delete">
+                <input type="hidden" name="item_id" value="{{ p[0] }}">
+                <button type="submit">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h3>Add Pitcher</h3>
+<form method="post" action="/pitchers/add">
+    <select name="team_id">
+        {% for t in teams %}
+            <option value="{{ t[0] }}">{{ t[1] }}</option>
+        {% endfor %}
+    </select>
+    <input type="text" name="name" placeholder="Pitcher name">
+    <input type="text" name="description" placeholder="Description">
+    <button type="submit">Add</button>
+</form>
+{% endif %}
+
+{% endblock %}

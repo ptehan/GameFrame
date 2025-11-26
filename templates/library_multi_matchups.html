@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Multi-Pitch Matchups</h2>
+
+<div class="panel" style="margin-bottom:20px; display:flex; gap:20px; align-items:flex-end;">
+    <div>
+        <label>Search:</label><br>
+        <input id="filter_text" type="text" placeholder="Search description..." style="width:200px;">
+    </div>
+
+    <div>
+        <label>Team:</label><br>
+        <select id="filter_team" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Pitcher A:</label><br>
+        <select id="filter_pitcherA" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Pitcher B:</label><br>
+        <select id="filter_pitcherB" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Hitter:</label><br>
+        <select id="filter_hitter" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+</div>
+
+<div id="multi_list" class="matchup-grid">
+
+{% for r in matchups %}
+    <div class="library-item matchup-row"
+         data-text="{{ r.description|lower }}"
+         data-team="{{ r.hitter_team|lower }}"
+         data-pitchera="{{ r.pitcherA_name|lower }}"
+         data-pitcherb="{{ r.pitcherB_name|lower }}"
+         data-hitter="{{ r.hitter_name|lower }}">
+
+        <img class="thumb" src="/thumbnail/multi?id={{ r.id }}">
+
+        <div class="info">
+            <b>{{ r.description }}</b><br>
+            Pitcher A: {{ r.pitcherA_name }} ({{ r.pitcherA_team }})<br>
+            Pitcher B: {{ r.pitcherB_name }} ({{ r.pitcherB_team }})<br>
+            Hitter: {{ r.hitter_name }} ({{ r.hitter_team }})<br>
+            Created: {{ r.created_at }}
+        </div>
+
+        <div class="actions">
+            <a href="/play/multi_matchup?id={{ r.id }}&sid={{ sid }}">
+                <button>Play</button>
+            </a>
+
+            <form action="/matchup/multi_delete" method="post">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <input type="hidden" name="sid" value="{{ sid }}">
+                <button type="submit" onclick="return confirm('Delete multi-pitch matchup?');">Delete</button>
+            </form>
+        </div>
+
+    </div>
+{% endfor %}
+
+</div>
+
+<script>
+const rows = document.querySelectorAll(".matchup-row");
+const fText = document.getElementById("filter_text");
+const fTeam = document.getElementById("filter_team");
+const fPitcherA = document.getElementById("filter_pitcherA");
+const fPitcherB = document.getElementById("filter_pitcherB");
+const fHitter = document.getElementById("filter_hitter");
+
+const teams = new Set();
+const pitcherAs = new Set();
+const pitcherBs = new Set();
+const hitters = new Set();
+
+rows.forEach(r => {
+    if (r.dataset.team) teams.add(r.dataset.team);
+    if (r.dataset.pitchera) pitcherAs.add(r.dataset.pitchera);
+    if (r.dataset.pitcherb) pitcherBs.add(r.dataset.pitcherb);
+    if (r.dataset.hitter) hitters.add(r.dataset.hitter);
+});
+
+teams.forEach(t => fTeam.innerHTML += `<option value="${t}">${t}</option>`);
+pitcherAs.forEach(p => fPitcherA.innerHTML += `<option value="${p}">${p}</option>`);
+pitcherBs.forEach(p => fPitcherB.innerHTML += `<option value="${p}">${p}</option>`);
+hitters.forEach(h => fHitter.innerHTML += `<option value="${h}">${h}</option>`);
+
+function applyFilters() {
+    const q = fText.value.toLowerCase().trim();
+    const team = fTeam.value;
+    const pa = fPitcherA.value;
+    const pb = fPitcherB.value;
+    const hitter = fHitter.value;
+
+    rows.forEach(r => {
+        let ok = true;
+
+        if (q && !r.dataset.text.includes(q)) ok = false;
+        if (team && r.dataset.team !== team) ok = false;
+        if (pa && r.dataset.pitchera !== pa) ok = false;
+        if (pb && r.dataset.pitcherb !== pb) ok = false;
+        if (hitter && r.dataset.hitter !== hitter) ok = false;
+
+        r.style.display = ok ? "flex" : "none";
+    });
+}
+
+[fText, fTeam, fPitcherA, fPitcherB, fHitter].forEach(el => {
+    el.oninput = applyFilters;
+});
+</script>
+
+{% endblock %}

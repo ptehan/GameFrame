@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+jinja2
+python-multipart
+opencv-python-headless
+numpy
+pillow
+imageio-ffmpeg
+pytubefix
+moviepy
+yt-dlp
+playwright
