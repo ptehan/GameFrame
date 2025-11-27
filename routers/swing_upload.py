@@ -9,6 +9,7 @@ import tempfile
 import subprocess
 import imageio_ffmpeg as ffmpeg
 from datetime import datetime
+import shutil
 
 router = APIRouter()
 templates = Jinja2Templates("templates")
@@ -144,8 +145,9 @@ def finalize_swing(
     # ------------------------------------------------------------
     # FRAME-PERFECT MP4 EXPORT (H.264 ALL-INTRA)
     # ------------------------------------------------------------
-    temp_raw = "swing_raw.yuv"
-    temp_out = "swing_out.mp4"
+    raw_path = tempfile.NamedTemporaryFile(delete=False, suffix=".yuv").name
+    out_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
+
 
     h, w, _ = frames[0].shape
 
@@ -153,7 +155,7 @@ def finalize_swing(
         for fr in frames:
             f.write(fr.tobytes())
 
-    exe = ffmpeg.get_ffmpeg_exe()
+    exe = shutil.which("ffmpeg") or "ffmpeg"
 
     cmd = [
         exe, "-y",

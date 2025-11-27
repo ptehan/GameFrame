@@ -258,8 +258,9 @@ def matchup_multi_build(
     # ------------------------------------------------------------
     # ENCODE VIDEO
     # ------------------------------------------------------------
-    raw_path = "multi_raw.yuv"
-    out_path = "multi_matchup.mp4"
+    raw_path = tempfile.NamedTemporaryFile(delete=False, suffix=".yuv").name
+    out_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
+
 
     with open(raw_path, "wb") as f:
         for fr in out_frames:
