@@ -3,6 +3,7 @@ import numpy as np
 import imageio_ffmpeg as ffmpeg
 import subprocess
 import os
+import shutil
 
 def encode_raw_frames_to_mp4(frames, fps, out_path):
     """
@@ -24,7 +25,7 @@ def encode_raw_frames_to_mp4(frames, fps, out_path):
         for fr in frames:
             f.write(fr.astype(np.uint8).tobytes())
 
-    exe = ffmpeg.get_ffmpeg_exe()
+    exe = shutil.which("ffmpeg") or "ffmpeg"
 
     cmd = [
         exe,

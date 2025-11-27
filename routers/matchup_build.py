@@ -12,6 +12,9 @@ from datetime import datetime
 import imageio_ffmpeg as ffmpeg
 from utils.db import db
 
+
+import shutil
+
 router = APIRouter()
 templates = Jinja2Templates("templates")
 
@@ -218,8 +221,9 @@ def matchup_build(
     with open(raw_path, "wb") as f:
         for fr in final_frames:
             f.write(fr.astype(np.uint8).tobytes())
+    
+    exe = shutil.which("ffmpeg") or "ffmpeg"
 
-    exe = ffmpeg.get_ffmpeg_exe()
     cmd = [
         exe, "-y",
         "-f", "rawvideo",

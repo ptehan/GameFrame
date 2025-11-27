@@ -15,7 +15,9 @@ router = APIRouter()
 templates = Jinja2Templates("templates")
 
 # Verified ffmpeg path
-FFMPEG = r"C:\ffmpeg\bin\ffmpeg.exe"
+import shutil
+
+FFMPEG = shutil.which("ffmpeg") or "ffmpeg"
 
 
 @router.get("/import/youtube", response_class=HTMLResponse)
