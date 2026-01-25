@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Player Dashboard</h2>
+
+<form method="get" action="/dashboard/player" style="margin-bottom:20px;">
+
+    <label>Team:</label>
+    <select name="tid" onchange="this.form.submit()">
+        <option value="0">Select Team</option>
+        {% for t in teams %}
+            <option value="{{ t[0] }}" {% if t[0]==tid %}selected{% endif %}>
+                {{ t[1] }}
+            </option>
+        {% endfor %}
+    </select>
+
+    {% if hitters %}
+        <label style="margin-left:30px;">Hitter:</label>
+        <select name="hid" onchange="this.form.submit()">
+            <option value="0">Select Hitter</option>
+            {% for h in hitters %}
+                <option value="{{ h[0] }}" {% if h[0]==hid %}selected{% endif %}>
+                    {{ h[1] }}
+                </option>
+            {% endfor %}
+        </select>
+    {% endif %}
+</form>
+
+
+{% if results %}
+
+    <h3>Swings</h3>
+    <table border="1" cellpadding="6" style="border-collapse:collapse; margin-bottom:30px;">
+        <tr>
+            <th>Description</th>
+            <th>Swing Time</th>
+        </tr>
+    
+        {% for r in results %}
+        <tr>
+            <td>{{ r[1] }}</td>
+            <td>{{ "%.3f"|format(r[2]) }}</td>
+        </tr>
+    {% endfor %}
+    </table>
+
+
+    <h3>Summary</h3>
+    <table border="1" cellpadding="6" style="border-collapse:collapse;">
+        <tr><th>Total Swings</th><td>{{ summary.count }}</td></tr>
+        <tr><th>Fastest Swing</th><td>{{ "%.3f"|format(summary.min) }}</td></tr>
+        <tr><th>Slowest Swing</th><td>{{ "%.3f"|format(summary.max) }}</td></tr>
+        <tr><th>Average Swing</th><td>{{ "%.3f"|format(summary.avg) }}</td></tr>
+    </table>
+
+{% endif %}
+
+{% endblock %}

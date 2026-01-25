@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>GameFrame</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        /* collapsed state */
+        .submenu {
+            display: none;
+            margin-left: 0;
+        }
+
+        /* optional nicer UX: pointer cursor */
+        .menu-section {
+            cursor: pointer;
+            user-select: none;
+        }
+    </style>
+
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#000000">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+
+    <script>
+    if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/service-worker.js")
+            .catch(err => console.log("SW fail", err));
+    }
+    </script>
+</head>
+
+<body>
+
+<div id="sidebar">
+
+    <div class="title" style="padding:10px 0; text-align:center;">
+        <img src="/static/logo/GameFrameLogo2.png"
+             alt="GameFrame Logo"
+             style="width:160px; height:auto; display:block; margin:0 auto;">
+    </div>
+
+    <div id="pwa-install" class="menu-item"
+         style="display:none; font-weight:bold; cursor:pointer;">
+        📲 Install GameFrame
+    </div>
+
+    <!-- HOME -->
+    <div class="menu-section">
+        <a class="menu-section" href="/?sid={{ sid }}" style="text-decoration:none;">Home</a>
+    </div>
+
+    <!-- CREATE VIDEOS -->
+    <div class="menu-section" data-target="create-videos">Create Videos ▸</div>
+    <div class="submenu" id="create-videos">
+        <a class="menu-item" href="/upload/pitch?sid={{ sid }}">Upload Pitch Clip</a>
+        <a class="menu-item" href="/upload/swing?sid={{ sid }}">Upload Swing Clip</a>
+        <a class="menu-item" href="/matchup/select?sid={{ sid }}">Create Matchup</a>
+
+
+        <!-- REPLACED YOUTUBE WITH EXTERNAL VIDEO -->
+        <a class="menu-item" href="/external_video">External Video</a>
+    </div>
+
+    <!-- LIBRARY -->
+    <div class="menu-section">
+        <a class="menu-section" href="/library?sid={{ sid }}" style="text-decoration:none;">Library ▸</a>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="menu-section" data-target="dashboard">Dashboard ▸</div>
+    <div class="submenu" id="dashboard">
+        <a class="menu-item" href="/dashboard/player?sid={{ sid }}">Player Dashboard</a>
+    </div>
+
+    <!-- MANAGE -->
+    <div class="menu-section" data-target="manage">Manage ▸</div>
+    <div class="submenu" id="manage">
+        <a class="menu-item" href="/teams?sid={{ sid }}">Teams</a>
+        <a class="menu-item" href="/pitchers?sid={{ sid }}">Pitchers</a>
+        <a class="menu-item" href="/hitters?sid={{ sid }}">Hitters</a>
+    </div>
+
+    <!-- AUTH -->
+    <div class="menu-section" data-target="auth">Auth ▸</div>
+    <div class="submenu" id="auth">
+        <a class="menu-item" href="/logout?sid={{ sid }}">Logout</a>
+    </div>
+
+</div>
+
+<div id="main">
+    {% block content %}{% endblock %}
+</div>
+
+<script>
+document.querySelectorAll(".menu-section").forEach(section => {
+    section.addEventListener("click", () => {
+        const target = section.getAttribute("data-target");
+        const menu = document.getElementById(target);
+
+        if (menu && menu.style.display === "block") {
+            menu.style.display = "none";
+            section.textContent = section.textContent.replace("▾", "▸");
+        } else if (menu) {
+            menu.style.display = "block";
+            section.textContent = section.textContent.replace("▸", "▾");
+        }
+    });
+});
+</script>
+
+<script>
+let deferredPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+
+    const installLink = document.getElementById("pwa-install");
+    installLink.style.display = "block";
+
+    installLink.onclick = async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        installLink.style.display = "none";
+    };
+});
+
+window.addEventListener("appinstalled", () => {
+    document.getElementById("pwa-install").style.display = "none";
+});
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".filter-box").forEach(input => {
+        const tableId = input.dataset.table;
+        if (!tableId) return;
+
+        const table = document.getElementById(tableId);
+        if (!table) return;
+
+        const rows = table.querySelectorAll("tbody tr");
+
+        input.addEventListener("input", () => {
+            const term = input.value.toLowerCase();
+            rows.forEach(row => {
+                row.style.display =
+                    row.textContent.toLowerCase().includes(term)
+                        ? ""
+                        : "none";
+            });
+        });
+    });
+});
+</script>
+
+
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

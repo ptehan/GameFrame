@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- ========================= -->
+<!-- 1. TEAMS (FIRST)          -->
+<!-- ========================= -->
+{% if view == "teams" %}
+<h1>Teams</h1>
+
+
+<h3>Add Team</h3>
+<form method="post" action="/teams/add">
+    <input type="text" name="name" placeholder="Team name">
+    <input type="text" name="description" placeholder="Description">
+    <button type="submit">Add</button>
+</form>
+
+<input
+  type="text"
+  class="filter-box"
+  placeholder="Filter teams"
+  aria-label="Filter teams"
+  data-table="teamsTable"
+  data-cols="0,1"
+/>
+
+
+
+<table id="teamsTable" class="compact">
+  <thead>
+    <tr>
+      <th onclick="sortTable('teamsTable', 0)">Team</th>
+      <th>Description</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in items %}
+    <tr>
+      <td>{{ t[1] }}</td>
+      <td>{{ t[2] }}</td>
+      <td class="actions">
+        <form method="post" action="/teams/delete">
+          <input type="hidden" name="item_id" value="{{ t[0] }}">
+          <button type="submit">✕</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+{% endif %}
+
+
+<!-- ========================= -->
+<!-- 2. HITTERS (SECOND)       -->
+<!-- ========================= -->
+{% if view == "hitters" %}
+<h1>Hitters</h1>
+
+<h3>Add Hitter</h3>
+<form method="post" action="/hitters/add">
+    <select name="team_id">
+        {% for t in teams %}
+            <option value="{{ t[0] }}">{{ t[1] }}</option>
+        {% endfor %}
+    </select>
+    <input type="text" name="name" placeholder="Hitter name">
+    <input type="text" name="description" placeholder="Description">
+    <button type="submit">Add</button>
+</form>
+
+<input
+  type="text"
+  class="filter-box"
+  placeholder="Filter hitters (team, name, description)"
+  aria-label="Filter hitters"
+  data-table="hittersTable"
+  data-cols="0,1,2"
+/>
+
+
+
+<table id="hittersTable" class="compact">
+  <thead>
+    <tr>
+      <th onclick="sortTable('hittersTable', 0)">Team</th>
+      <th onclick="sortTable('hittersTable', 1)">Name</th>
+      <th>Description</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in items %}
+    <tr>
+      <td>{{ h[3] }}</td>
+      <td>{{ h[1] }}</td>
+      <td>{{ h[2] }}</td>
+      <td class="actions">
+        <form method="post" action="/hitters/delete">
+          <input type="hidden" name="item_id" value="{{ h[0] }}">
+          <button type="submit">✕</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+{% endif %}
+
+
+
+<!-- ========================= -->
+<!-- 3. PITCHERS (THIRD)       -->
+<!-- ========================= -->
+{% if view == "pitchers" %}
+<h1>Pitchers</h1>
+
+<h3>Add Pitcher</h3>
+<form method="post" action="/pitchers/add">
+    <select name="team_id">
+        {% for t in teams %}
+            <option value="{{ t[0] }}">{{ t[1] }}</option>
+        {% endfor %}
+    </select>
+    <input type="text" name="name" placeholder="Pitcher name">
+    <input type="text" name="description" placeholder="Description">
+    <button type="submit">Add</button>
+</form>
+
+<input
+  type="text"
+  class="filter-box"
+  placeholder="Filter pitchers (team, name, description)"
+  aria-label="Filter pitchers"
+  data-table="pitchersTable"
+  data-cols="0,1,2"
+/>
+
+
+<table id="pitchersTable" class="compact">
+  <thead>
+    <tr>
+      <th onclick="sortTable('pitchersTable', 0)">Team</th>
+      <th onclick="sortTable('pitchersTable', 1)">Name</th>
+      <th>Description</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in items %}
+    <tr>
+      <td>{{ p[3] }}</td>
+      <td>{{ p[1] }}</td>
+      <td>{{ p[2] }}</td>
+      <td class="actions">
+        <form method="post" action="/pitchers/delete">
+          <input type="hidden" name="item_id" value="{{ p[0] }}">
+          <button type="submit">✕</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+{% endif %}
+
+{% endblock %}

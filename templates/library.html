@@ -1,0 +1,366 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Library</h2>
+
+<!-- FILTER BAR -->
+<div class="panel" style="margin-bottom:20px; display:flex; gap:20px; align-items:flex-end;">
+
+    <div>
+        <label>Type:</label><br>
+        <select id="filter_type" style="width:150px;">
+            <option value="matchup">Matchups</option>
+            <option value="swing">Swing Clips</option>
+            <option value="pitch">Pitch Clips</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Search:</label><br>
+        <input id="filter_text" type="text" placeholder="Search…" style="width:200px;">
+    </div>
+
+    <div>
+        <label>Pitcher Team:</label><br>
+        <select id="filter_pitcher_team" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Hitter Team:</label><br>
+        <select id="filter_hitter_team" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Pitcher:</label><br>
+        <select id="filter_pitcher" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Hitter:</label><br>
+        <select id="filter_hitter" style="width:150px;">
+            <option value="">All</option>
+        </select>
+    </div>
+
+</div>
+
+
+<!-- GRID -->
+<div id="library_grid" class="card-grid"></div>
+
+
+<script>
+const sid = "{{ sid }}";
+
+let rowNodes = [];
+let rawItems = [];
+
+const fType          = document.getElementById("filter_type");
+const fText          = document.getElementById("filter_text");
+const fPitcherTeam   = document.getElementById("filter_pitcher_team");
+const fHitterTeam    = document.getElementById("filter_hitter_team");
+const fPitcher       = document.getElementById("filter_pitcher");
+const fHitter        = document.getElementById("filter_hitter");
+
+
+// ------------------------------------------------------------
+// RESTORE FILTER STATE FROM URL
+// ------------------------------------------------------------
+const url = new URL(window.location.href);
+
+const savedType        = url.searchParams.get("type")   || "matchup";
+const savedSearch      = url.searchParams.get("search") || "";
+const savedPitcherTeam = url.searchParams.get("pteam")  || "";
+const savedHitterTeam  = url.searchParams.get("hteam")  || "";
+const savedPitcher     = url.searchParams.get("pitcher")|| "";
+const savedHitter      = url.searchParams.get("hitter") || "";
+
+
+// APPLY SAVED VALUES TO UI
+fType.value        = savedType;
+fText.value        = savedSearch;
+fPitcherTeam.value = savedPitcherTeam;
+fHitterTeam.value  = savedHitterTeam;
+fPitcher.value     = savedPitcher;
+fHitter.value      = savedHitter;
+
+
+// ------------------------------------------------------------
+// UPDATE URL WITHOUT RELOAD
+// ------------------------------------------------------------
+function updateURL() {
+    const url = new URL(window.location.href);
+
+    url.searchParams.set("type", fType.value);
+    url.searchParams.set("search", fText.value);
+
+    if (fPitcherTeam.value) url.searchParams.set("pteam", fPitcherTeam.value);
+    else url.searchParams.delete("pteam");
+
+    if (fHitterTeam.value) url.searchParams.set("hteam", fHitterTeam.value);
+    else url.searchParams.delete("hteam");
+
+    if (fPitcher.value) url.searchParams.set("pitcher", fPitcher.value);
+    else url.searchParams.delete("pitcher");
+
+    if (fHitter.value) url.searchParams.set("hitter", fHitter.value);
+    else url.searchParams.delete("hitter");
+
+    history.replaceState(null, "", url);
+}
+
+
+// ------------------------------------------------------------
+// LOAD DATA FROM SERVER
+// ------------------------------------------------------------
+async function loadData(type) {
+    const grid = document.getElementById("library_grid");
+    grid.innerHTML = "<div style='opacity:0.6;'>Loading...</div>";
+
+    const res = await fetch(`/library/data?type=${type}&sid=${sid}`);
+    const items = await res.json();
+
+    rawItems = items;
+
+    buildGrid(items);
+    rebuildFilterOptions(items);
+    applyFilters();
+}
+
+
+// ------------------------------------------------------------
+// BUILD GRID
+// ------------------------------------------------------------
+function buildGrid(items) {
+    const grid = document.getElementById("library_grid");
+    let html = "";
+
+    items.forEach(c => {
+
+        let pitcher_team = "";
+        let hitter_team  = "";
+
+        if (c.type === "pitch") {
+            pitcher_team = (c.team_name || "").toLowerCase();
+        }
+        else if (c.type === "swing") {
+            hitter_team = (c.team_name || "").toLowerCase();
+        }
+        else if (c.type === "matchup") {
+            pitcher_team = (c.pitcher_team || "").toLowerCase();
+            hitter_team  = (c.hitter_team  || "").toLowerCase();
+        }
+        else if (c.type === "multi") {
+            pitcher_team = [
+                (c.pitcherA_team || "").toLowerCase(),
+                (c.pitcherB_team || "").toLowerCase()
+            ].join(" ").trim();
+            hitter_team = (c.hitter_team || "").toLowerCase();
+        }
+
+        const pitcher = (c.pitcher_name || "").toLowerCase();
+        const hitter  = (c.hitter_name  || "").toLowerCase();
+        const text    = (c.description  || "").toLowerCase();
+
+        html += `
+        <div class="card-row"
+             data-type="${c.type}"
+             data-text="${text}"
+             data-pitcher-team="${pitcher_team}"
+             data-hitter-team="${hitter_team}"
+             data-pitcher="${pitcher}"
+             data-hitter="${hitter}">
+
+            <div class="library-item">
+
+                <img class="thumb" src="${c.thumbnail}">
+
+                <div class="info">
+                    ${renderInfo(c)}
+                    Created: ${c.created_at}
+                </div>
+
+                <div class="actions">
+                    <a href="${c.play}">
+                        <button>Play</button>
+                    </a>
+
+                    <form method="post" action="${c.delete}"
+                          onsubmit="return attachReturnURL(this);">
+                        <input type="hidden" name="id" value="${c.id}">
+                        <input type="hidden" name="sid" value="${sid}">
+                        <input type="hidden" name="return" value="">
+                        <button type="submit" style="background:#d33; color:white;">Delete</button>
+                    </form>
+                </div>
+
+            </div>
+        </div>`;
+    });
+
+    grid.innerHTML = html;
+    rowNodes = Array.from(document.querySelectorAll(".card-row"));
+}
+
+
+// ------------------------------------------------------------
+// FORMAT INFO
+// ------------------------------------------------------------
+function renderInfo(c) {
+
+    if (c.type === "pitch") {
+        return `<b>${c.pitcher_name}</b> (${c.team_name})<br>${c.description || ""}<br><br>`;
+    }
+
+    if (c.type === "swing") {
+        return `<b>${c.hitter_name}</b> (${c.team_name})<br>${c.description || ""}<br><br>`;
+    }
+
+    if (c.type === "matchup") {
+        return `
+            Pitcher: ${c.pitcher_name} (${c.pitcher_team})<br>
+            Hitter: ${c.hitter_name} (${c.hitter_team})<br>
+            ${c.description || ""}<br><br>
+        `;
+    }
+
+    if (c.type === "multi") {
+        return `
+            Pitcher A: ${c.pitcherA_name} (${c.pitcherA_team})<br>
+            Pitcher B: ${c.pitcherB_name} (${c.pitcherB_team})<br>
+            Hitter: ${c.hitter_name} (${c.hitter_team})<br>
+            ${c.description || ""}<br><br>
+        `;
+    }
+
+    return "";
+}
+
+
+// ------------------------------------------------------------
+// BUILD FILTER OPTIONS
+// ------------------------------------------------------------
+function rebuildFilterOptions(items) {
+
+    const pitcherTeams = new Set();
+    const hitterTeams  = new Set();
+    const pitchers     = new Set();
+    const hitters      = new Set();
+
+    items.forEach(i => {
+
+        if (i.type === "pitch" && i.team_name)
+            pitcherTeams.add(i.team_name.toLowerCase());
+
+        if (i.type === "swing" && i.team_name)
+            hitterTeams.add(i.team_name.toLowerCase());
+
+        if (i.type === "matchup") {
+            if (i.pitcher_team) pitcherTeams.add(i.pitcher_team.toLowerCase());
+            if (i.hitter_team)  hitterTeams.add(i.hitter_team.toLowerCase());
+        }
+
+        if (i.type === "multi") {
+            if (i.pitcherA_team) pitcherTeams.add(i.pitcherA_team.toLowerCase());
+            if (i.pitcherB_team) pitcherTeams.add(i.pitcherB_team.toLowerCase());
+            if (i.hitter_team)   hitterTeams.add(i.hitter_team.toLowerCase());
+        }
+
+        if (i.pitcher_name)
+            pitchers.add(i.pitcher_name.toLowerCase());
+
+        if (i.hitter_name)
+            hitters.add(i.hitter_name.toLowerCase());
+    });
+
+    fPitcherTeam.innerHTML = `<option value="">All</option>`;
+    fHitterTeam.innerHTML  = `<option value="">All</option>`;
+    fPitcher.innerHTML     = `<option value="">All</option>`;
+    fHitter.innerHTML      = `<option value="">All</option>`;
+
+    pitcherTeams.forEach(t => fPitcherTeam.innerHTML += `<option value="${t}">${t}</option>`);
+    hitterTeams.forEach(t => fHitterTeam.innerHTML  += `<option value="${t}">${t}</option>`);
+    pitchers.forEach(p => fPitcher.innerHTML        += `<option value="${p}">${p}</option>`);
+    hitters.forEach(h => fHitter.innerHTML          += `<option value="${h}">${h}</option>`);
+
+    // reapply saved filters (important after rebuild)
+    fPitcherTeam.value = savedPitcherTeam;
+    fHitterTeam.value  = savedHitterTeam;
+    fPitcher.value     = savedPitcher;
+    fHitter.value      = savedHitter;
+}
+
+
+// ------------------------------------------------------------
+// APPLY FILTERS
+// ------------------------------------------------------------
+function applyFilters() {
+    const type          = fType.value;
+    const q             = fText.value.toLowerCase().trim();
+    const pTeam         = fPitcherTeam.value;
+    const hTeam         = fHitterTeam.value;
+    const pitcher       = fPitcher.value;
+    const hitter        = fHitter.value;
+
+    rowNodes.forEach(r => {
+        let ok = true;
+
+        const rt       = r.dataset.type;
+        const text     = r.dataset.text;
+        const rPTeam   = r.dataset.pitcherTeam;
+        const rHTeam   = r.dataset.hitterTeam;
+        const rPitcher = r.dataset.pitcher;
+        const rHitter  = r.dataset.hitter;
+
+        if (type && rt !== type) ok = false;
+        if (q && !text.includes(q)) ok = false;
+
+        if (pTeam && !rPTeam.includes(pTeam)) ok = false;
+        if (hTeam && !rHTeam.includes(hTeam)) ok = false;
+
+        if (pitcher && rPitcher !== pitcher) ok = false;
+        if (hitter  && rHitter  !== hitter) ok = false;
+
+        r.style.display = ok ? "" : "none";
+    });
+}
+
+
+// ------------------------------------------------------------
+// LISTENERS
+// ------------------------------------------------------------
+[fText, fPitcherTeam, fHitterTeam, fPitcher, fHitter].forEach(el => {
+    el.addEventListener("input", () => {
+        applyFilters();
+        updateURL();
+    });
+});
+
+fType.addEventListener("change", () => {
+    updateURL();
+    loadData(fType.value);
+});
+
+
+// ------------------------------------------------------------
+// INITIAL LOAD
+// ------------------------------------------------------------
+loadData(savedType);
+
+
+// ------------------------------------------------------------
+// RETURN URL CAPTURE FOR DELETE FORMS
+// ------------------------------------------------------------
+function attachReturnURL(form) {
+    form.return.value = window.location.pathname + window.location.search;
+    return true;
+}
+</script>
+
+{% endblock %}

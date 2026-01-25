@@ -1,0 +1,315 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<!-- PROGRESS BAR -->
+<div id="progress-container" style="margin-top:15px; width:360px; display:none;">
+    <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
+        <div id="progress-bar" style="height:100%; width:0%; background:#ffdd00;"></div>
+    </div>
+    <div id="progress-label" style="margin-top:6px; font-size:13px; ">
+        Working…
+    </div>
+</div>
+
+<h2>Trim Pitch Clip</h2>
+
+<p id="info">Loading video…</p>
+
+<!-- Preview -->
+<canvas id="preview" width="320" height="320"
+        style="border:1px solid #333; background:black;"></canvas>
+
+<!-- ZOOM CONTROLS -->
+<div style="margin-top:6px;">
+    <button id="zoom_out">Smaller</button>
+    <button id="zoom_reset">Reset  </button>
+    <button id="zoom_in">Larger </button>
+</div>
+
+<br>
+
+<!-- Slider -->
+<input type="range" id="frame_slider" min="0" max="0" value="0"
+       style="width:320px; margin-top:10px;">
+
+<div style="margin-top:10px;">
+    <button id="prev_btn">&laquo; Prev</button>
+    <button id="next_btn">Next &raquo;</button>
+</div>
+
+<div style="margin-top:10px;">
+    <button id="set_contact_btn">Set Contact</button>
+</div>
+
+<div id="marker_status"
+     style="margin-top:10px;font-weight:bold;"></div>
+
+<button id="finalize_btn"
+        style="margin-top:20px;font-size:18px;">
+    Finalize Pitch
+</button>
+
+<div id="upload_status"
+     style="margin-top:10px;font-weight:bold;"></div>
+
+<script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
+
+<script>
+////////////////////////////////////////////////////////////
+// VARS
+////////////////////////////////////////////////////////////
+const TEMP_ID     = "{{ temp_id }}";
+const SID         = "{{ sid }}";
+const TEAM_ID     = "{{ team_id }}";
+const PITCHER_ID  = "{{ pitcher_id }}";
+const DESCRIPTION = "{{ description }}";
+
+let frames = [];
+let fps = 30;
+let contactFrame = 0;
+
+let previewScale = 1.0;
+const BASE_SIZE = 320;
+
+const slider       = document.getElementById("frame_slider");
+const canvas       = document.getElementById("preview");
+const ctx          = canvas.getContext("2d");
+const info         = document.getElementById("info");
+const prevBtn      = document.getElementById("prev_btn");
+const nextBtn      = document.getElementById("next_btn");
+const contactBtn   = document.getElementById("set_contact_btn");
+const markerStatus = document.getElementById("marker_status");
+const uploadStatus = document.getElementById("upload_status");
+
+function showProgress() {
+    document.getElementById("progress-container").style.display = "block";
+}
+
+function hideProgress() {
+    document.getElementById("progress-container").style.display = "none";
+}
+
+function updateProgress(pct, msg = "") {
+    document.getElementById("progress-bar").style.width = pct + "%";
+    if (msg) document.getElementById("progress-label").innerText = msg;
+}
+
+////////////////////////////////////////////////////////////
+// FRAME DECODE — WITH FULL DIAGNOSTICS
+////////////////////////////////////////////////////////////
+async function loadVideo() {
+    info.textContent = "Fetching video…";
+    showProgress();
+    updateProgress(5, "Fetching video…");
+
+    const resp = await fetch(`/raw/pitch?id=${TEMP_ID}`);
+    const buf  = await resp.arrayBuffer();
+
+    updateProgress(20, "Decoding headers…");
+
+    const blob = new Blob([buf], { type: "video/mp4" });
+    const video = document.createElement("video");
+    video.src = URL.createObjectURL(blob);
+    video.muted = true;
+    video.playsInline = true;
+
+    await video.play().catch(() => {});
+    updateProgress(35, "Preparing decoder…");
+
+    const stream = video.captureStream();
+    const tracks = stream.getVideoTracks();
+
+    if (tracks.length === 0) {
+        info.textContent = "Browser cannot decode this MP4.";
+        return;
+    }
+
+    const processor = new MediaStreamTrackProcessor(tracks[0]);
+    const reader    = processor.readable.getReader();
+
+    frames = [];
+    let count = 0;
+    updateProgress(40, "Decoding frames…");
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        count++;
+        const bmp = await createImageBitmap(value);
+        frames.push(bmp);
+        value.close();
+
+        if (count % 20 === 0) {
+            const pct = 40 + Math.floor((count / 5000) * 40);
+            updateProgress(Math.min(pct, 80), `Decoding… ${count} frames`);
+        }
+    }
+
+    updateProgress(90, "Building preview…");
+
+    slider.max = frames.length - 1;
+    drawFrame(0);
+
+    updateProgress(100, "Done!");
+    hideProgress();
+
+    info.textContent = `Frames: ${frames.length}  |  FPS approx: ${fps}`;
+}
+
+////////////////////////////////////////////////////////////
+// DRAW FRAME (SCALE SAFE)
+////////////////////////////////////////////////////////////
+function drawFrame(i) {
+    const f = frames[i];
+    if (!f) return;
+
+    const size = Math.round(BASE_SIZE * previewScale);
+
+    canvas.width  = size;
+    canvas.height = size;
+
+    const scale = Math.min(size / f.width, size / f.height);
+    const w = Math.round(f.width * scale);
+    const h = Math.round(f.height * scale);
+
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.drawImage(
+        f,
+        Math.round((size - w) / 2),
+        Math.round((size - h) / 2),
+        w, h
+    );
+}
+
+////////////////////////////////////////////////////////////
+// SCRUBBING
+////////////////////////////////////////////////////////////
+slider.oninput = () => drawFrame(+slider.value);
+
+prevBtn.onclick = () => {
+    slider.value = Math.max(0, +slider.value - 1);
+    drawFrame(+slider.value);
+};
+
+nextBtn.onclick = () => {
+    slider.value = Math.min(frames.length - 1, +slider.value + 1);
+    drawFrame(+slider.value);
+};
+
+contactBtn.onclick = () => {
+    contactFrame = +slider.value;
+    markerStatus.textContent = `Contact Frame = ${contactFrame}`;
+};
+
+////////////////////////////////////////////////////////////
+// ZOOM CONTROLS
+////////////////////////////////////////////////////////////
+document.getElementById("zoom_in").onclick = () => {
+    previewScale = Math.min(previewScale + 0.25, 3.0);
+    drawFrame(+slider.value);
+};
+
+document.getElementById("zoom_out").onclick = () => {
+    previewScale = Math.max(previewScale - 0.25, 0.5);
+    drawFrame(+slider.value);
+};
+
+document.getElementById("zoom_reset").onclick = () => {
+    previewScale = 1.0;
+    drawFrame(+slider.value);
+};
+
+////////////////////////////////////////////////////////////
+// TRIM & UPLOAD (UNCHANGED)
+////////////////////////////////////////////////////////////
+const { createFFmpeg } = FFmpeg;
+
+async function bitmapToPNG(bitmap) {
+    const off = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = off.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0);
+    const blob = await off.convertToBlob({ type: "image/png" });
+    return new Uint8Array(await blob.arrayBuffer());
+}
+
+async function trimAndUpload() {
+    if (contactFrame <= 0) {
+        alert("Set contact frame first.");
+        return;
+    }
+
+    showProgress();
+    updateProgress(10, "Loading FFmpeg…");
+
+    const ffmpeg = createFFmpeg({
+        corePath: "/static/js/ffmpeg/ffmpeg-core.js",
+        log: true
+    });
+    await ffmpeg.load();
+
+    updateProgress(25, "Preparing frames…");
+
+    const framesBack = Math.floor(2 * fps);
+    const startFrame = Math.max(0, contactFrame - framesBack);
+    const selected = frames.slice(startFrame, contactFrame + 1);
+
+    for (let i = 0; i < selected.length; i++) {
+        ffmpeg.FS("writeFile", `f_${i}.png`,
+            await bitmapToPNG(selected[i]));
+        if (i % 5 === 0) {
+            updateProgress(25 + (i / selected.length) * 30,
+                `Preparing frame ${i}/${selected.length}`);
+        }
+    }
+
+    updateProgress(60, "Encoding MP4…");
+
+    await ffmpeg.run(
+        "-framerate", String(fps),
+        "-i", "f_%d.png",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-preset", "fast",
+        "-crf", "23",
+        "out.mp4"
+    );
+
+    updateProgress(90, "Uploading…");
+
+    const out = ffmpeg.FS("readFile", "out.mp4");
+    const blob = new Blob([out.buffer], { type: "video/mp4" });
+
+    const form = new FormData();
+    form.append("sid", SID);
+    form.append("team_id", TEAM_ID);
+    form.append("pitcher_id", PITCHER_ID);
+    form.append("description", DESCRIPTION);
+    form.append("fps", fps);
+    form.append("contact_frame", contactFrame);
+    form.append("file", blob, "trimmed_pitch.mp4");
+
+    const r = await fetch(`/upload/pitch/finalize`, {
+        method: "POST",
+        body: form
+    });
+
+    if (r.ok) {
+        updateProgress(100, "Saved!");
+        window.location.href = `/library?sid=${SID}&type=pitch`;
+    } else {
+        alert("Upload failed.");
+    }
+}
+
+document.getElementById("finalize_btn").onclick = trimAndUpload;
+
+////////////////////////////////////////////////////////////
+// START
+////////////////////////////////////////////////////////////
+loadVideo();
+</script>
+
+{% endblock %}

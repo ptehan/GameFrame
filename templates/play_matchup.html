@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Play Matchup</h2>
+
+<p id="info" style="margin-bottom:10px; color:#ccc;">Loading…</p>
+
+<!-- VIDEO -->
+<video id="vid" width="640" controls style="background:#000; display:block;"></video>
+
+<!-- CONTROL BAR -->
+<div style="margin-top:15px; display:flex; gap:20px; align-items:center;">
+
+    <!-- DOWNLOAD BUTTON -->
+    <button id="download_btn"
+            style="padding:8px 14px; font-size:15px;">
+        Download Video
+    </button>
+
+    <!-- SPEED CONTROL (ONLY SLOW-MO) -->
+    <label for="speed_select" style="color:#ccc;">Speed:</label>
+    <select id="speed_select"
+            style="padding:6px; font-size:14px;">
+        <option value="1" selected>1x Normal</option>
+        <option value="0.75">0.75x</option>
+        <option value="0.5">0.5x</option>
+        <option value="0.25">0.25x</option>
+    </select>
+
+</div>
+
+
+<script>
+console.log("SCRIPT LOADED");
+
+(async () => {
+    console.log("SCRIPT STARTED");
+
+    const id = {{ id }};   // integer, correct
+    const info = document.getElementById("info");
+    const vid = document.getElementById("vid");
+
+    let blobURL = null;   // used for playback + download
+
+    try {
+        info.textContent = "Fetching matchup…";
+        console.log("FETCHING", `/stream/matchup?id=${id}`);
+
+        const resp = await fetch(`/stream/matchup?id=${id}`);
+        console.log("RESP", resp.status);
+        if (!resp.ok) {
+            info.textContent = "Error loading matchup";
+            return;
+        }
+
+        info.textContent = "Decoding…";
+
+        const buf = await resp.arrayBuffer();
+        const blob = new Blob([buf], { type: "video/mp4" });
+        blobURL = URL.createObjectURL(blob);
+
+        vid.src = blobURL;
+        info.textContent = "Ready.";
+        vid.play();
+
+    } catch (err) {
+        console.error("LOAD ERROR", err);
+        info.textContent = "Failed to load matchup.";
+        return;
+    }
+
+    // -------------------------------------------------------
+    // DOWNLOAD BUTTON
+    // -------------------------------------------------------
+    document.getElementById("download_btn").onclick = () => {
+        if (!blobURL) return;
+
+        const a = document.createElement("a");
+        a.href = blobURL;
+        a.download = `matchup_${id}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    // -------------------------------------------------------
+    // SPEED CONTROL (ONLY SLOW-MO)
+    // -------------------------------------------------------
+    document.getElementById("speed_select").onchange = (e) => {
+        vid.playbackRate = parseFloat(e.target.value);
+    };
+
+})();
+</script>
+
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h2>Using External Videos (X / Instagram)</h2>
+
+<p>
+GameFrame does not download videos directly from social media.
+You bring the video in yourself.
+</p>
+
+<p>
+This is intentional. It keeps uploads fast, avoids broken imports,
+and works well because most real baseball clips already live on
+<strong>X (Twitter)</strong> and <strong>Instagram</strong>.
+</p>
+
+<hr>
+
+<h3>How to do it</h3>
+
+<ol>
+  <li>
+    <strong>Find the clip</strong><br>
+    Open the post on X or Instagram that contains the pitch, swing,
+    bullpen rep, or at-bat.
+  </li>
+
+  <li>
+    <strong>Copy the link</strong><br>
+    Use <em>Share</em> → <em>Copy link</em>.
+  </li>
+
+  <li>
+    <strong>Download the video</strong><br>
+
+    <strong>For X (Twitter):</strong><br>
+    <a href="https://twittervideodownloader.com/download"
+       target="_blank" rel="noopener">
+      https://twittervideodownloader.com/download
+    </a>
+    <br><br>
+
+    <strong>For Instagram:</strong><br>
+    <a href="https://snapinsta.to"
+       target="_blank" rel="noopener">
+      https://snapinsta.to
+    </a>
+    <br><br>
+
+    Paste the post link and download the MP4.
+  </li>
+
+  <li>
+    <strong>Choose the best quality</strong><br>
+    Pick the highest-resolution MP4 available.
+  </li>
+
+  <li>
+    <strong>Upload into GameFrame</strong><br>
+    Upload the MP4 as a Pitch or Swing clip like any other video.
+  </li>
+</ol>
+
+<hr>
+
+<h3>Good to know</h3>
+
+<ul>
+  <li>X and Instagram clips are usually short, which is ideal for analysis.</li>
+  <li>Desktop and Android work best; on iOS, files may land in the Files app.</li>
+  <li>Private or restricted posts cannot be downloaded.</li>
+  <li>If a post has multiple videos, make sure you grab the correct one.</li>
+</ul>
+
+<hr>
+
+<h3>Why GameFrame works this way</h3>
+
+<p>
+Social platforms change constantly.
+By keeping downloading outside the app,
+GameFrame avoids broken imports, codec problems,
+and slow processing.
+</p>
+
+<p>
+You control the video.
+GameFrame stays focused on frame-accurate baseball analysis.
+</p>
+
+{% endblock %}

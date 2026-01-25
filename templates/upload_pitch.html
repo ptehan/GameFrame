@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 style="margin-bottom: 20px;">Upload Pitch Clip</h2>
+
+<form action="/upload/pitch"
+      method="post"
+      enctype="multipart/form-data"
+      style="display: grid; grid-template-columns: 200px 1fr; gap: 12px; width: 450px;">
+
+    <input type="hidden" name="sid" value="{{ sid }}">
+
+    <!-- TEAM -->
+    <label>Team:</label>
+    <select id="team_select" name="team_id" required>
+        <option value="">Select Team</option>
+        {% for t in teams %}
+            <option value="{{ t[0] }}">{{ t[1] }}</option>
+        {% endfor %}
+    </select>
+
+    <!-- PITCHER -->
+    <label>Pitcher:</label>
+    <select id="pitcher_select" name="pitcher_id" required>
+        <option value="">Select Pitcher</option>
+        {% for p in pitchers %}
+            <option value="{{ p[0] }}" data-team="{{ p[2] }}">{{ p[1] }}</option>
+        {% endfor %}
+    </select>
+
+    <!-- DESCRIPTION -->
+    <label>Description:</label>
+    <input type="text" name="description" placeholder="Optional note...">
+
+    <!-- START TIME -->
+    <label>Start Time:</label>
+    <div style="display:flex; gap:6px;">
+        <input type="number" name="start_min" min="0" value="0" style="width:60px;">
+        <span style="align-self:center;">min</span>
+    
+        <input type="number" name="start_sec" min="0" max="59" value="0" style="width:60px;">
+        <span style="align-self:center;">sec</span>
+    </div>
+
+    <!-- FILE -->
+    <label>Video File:</label>
+    <input type="file" id="file_input" name="file" accept="video/mp4" required>
+
+    <!-- BUTTON -->
+    <div></div>
+    <button type="submit" style="padding: 10px 20px; width: 150px;">Upload Pitch</button>
+
+</form>
+
+<script>
+// Simple team -> pitcher filter
+const teamSel = document.getElementById("team_select");
+const pitcherSel = document.getElementById("pitcher_select");
+
+// Store all pitcher options
+const allPitchers = Array.from(pitcherSel.options);
+
+teamSel.onchange = () => {
+    const tid = teamSel.value;
+    pitcherSel.innerHTML = '<option value="">Select Pitcher</option>';
+
+    allPitchers.forEach(opt => {
+        if (opt.dataset.team === tid) {
+            pitcherSel.appendChild(opt.cloneNode(true));
+        }
+    });
+};
+</script>
+
+<!-- ============================================================= -->
+<!-- NEW: Auto-load YouTube temp file into <input type="file"> -->
+<!-- ============================================================= -->
+{% if request.query_params.from_yt %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const tempId = "{{ request.query_params.temp_id }}";
+    if (!tempId) return;
+
+    // Request the temp file from FastAPI
+    fetch(`/import/youtube/tempfile?temp_id=${tempId}`)
+        .then(r => r.blob())
+        .then(blob => {
+            const file = new File([blob], "youtube_clip.mp4", { type: "video/mp4" });
+
+            const dt = new DataTransfer();
+            dt.items.add(file);
+
+            document.getElementById("file_input").files = dt.files;
+        })
+        .catch(err => console.error("YT temp load error:", err));
+});
+</script>
+{% endif %}
+
+{% endblock %}
