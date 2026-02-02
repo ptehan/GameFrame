@@ -42,6 +42,7 @@
     <button id="set_start_btn">Set Start</button>
     <button id="set_decision_btn">Set Decision</button>
     <button id="set_contact_btn">Set Contact</button>
+    <button id="auto_detect_btn">Auto Detect</button>
 </div>
 
 <div id="marker_status"
@@ -56,6 +57,7 @@
      style="margin-top:10px;font-weight:bold;"></div>
 
 <script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
 
 <script>
 ////////////////////////////////////////////////////////////
@@ -81,6 +83,7 @@ const slider  = document.getElementById("frame_slider");
 const canvas  = document.getElementById("preview");
 const ctx     = canvas.getContext("2d");
 const info    = document.getElementById("info");
+const markerStatus = document.getElementById("marker_status");
 
 ////////////////////////////////////////////////////////////
 // PROGRESS
@@ -96,6 +99,327 @@ function hideProgress() {
 function updateProgress(pct, msg = "") {
     document.getElementById("progress-bar").style.width = pct + "%";
     if (msg) document.getElementById("progress-label").innerText = msg;
+}
+
+////////////////////////////////////////////////////////////
+// POSE SETUP (CLIENT-SIDE)
+////////////////////////////////////////////////////////////
+let poseInstance = null;
+let poseInitPromise = null;
+let poseResolver = null;
+
+function ensurePose() {
+    if (poseInstance) return Promise.resolve(poseInstance);
+    if (poseInitPromise) return poseInitPromise;
+    if (typeof Pose === "undefined") {
+        return Promise.resolve(null);
+    }
+
+    poseInitPromise = new Promise((resolve) => {
+        const pose = new Pose({
+            locateFile: (file) =>
+                `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+        });
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            enableSegmentation: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+        });
+        pose.onResults((results) => {
+            if (poseResolver) {
+                poseResolver(results.poseLandmarks || null);
+                poseResolver = null;
+            }
+        });
+        poseInstance = pose;
+        resolve(pose);
+    });
+
+    return poseInitPromise;
+}
+
+function runPoseOnBitmap(bitmap) {
+    return new Promise(async (resolve) => {
+        const pose = await ensurePose();
+        if (!pose) {
+            resolve(null);
+            return;
+        }
+        poseResolver = resolve;
+        const off = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const ctx = off.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0);
+        await pose.send({ image: off });
+    });
+}
+
+////////////////////////////////////////////////////////////
+// FRAME ANALYSIS (REGION-BASED MOTION HEURISTICS)
+////////////////////////////////////////////////////////////
+const ANALYSIS_SIZE = 48;
+let analysisFrames = null;
+
+function bitmapToGrayVector(bitmap) {
+    const off = new OffscreenCanvas(ANALYSIS_SIZE, ANALYSIS_SIZE);
+    const offCtx = off.getContext("2d", { willReadFrequently: true });
+    offCtx.drawImage(bitmap, 0, 0, ANALYSIS_SIZE, ANALYSIS_SIZE);
+    const img = offCtx.getImageData(0, 0, ANALYSIS_SIZE, ANALYSIS_SIZE).data;
+    const gray = new Uint8Array(ANALYSIS_SIZE * ANALYSIS_SIZE);
+    for (let i = 0, j = 0; i < img.length; i += 4, j += 1) {
+        gray[j] = Math.round(
+            img[i] * 0.299 + img[i + 1] * 0.587 + img[i + 2] * 0.114
+        );
+    }
+    return gray;
+}
+
+async function ensureAnalysisFrames() {
+    if (analysisFrames) return analysisFrames;
+    analysisFrames = [];
+    updateProgress(0, "Analyzing frames…");
+    for (let i = 0; i < frames.length; i += 1) {
+        analysisFrames.push(bitmapToGrayVector(frames[i]));
+        if (i % 25 === 0) {
+            updateProgress(
+                Math.min(100, Math.round((i / frames.length) * 100)),
+                `Analyzing… ${i}/${frames.length}`
+            );
+        }
+    }
+    updateProgress(100, "Analysis ready");
+    return analysisFrames;
+}
+
+function regionMotion(prev, curr, x0, y0, x1, y1) {
+    let sum = 0;
+    for (let y = y0; y < y1; y += 1) {
+        let row = y * ANALYSIS_SIZE;
+        for (let x = x0; x < x1; x += 1) {
+            const idx = row + x;
+            sum += Math.abs(curr[idx] - prev[idx]);
+        }
+    }
+    return sum;
+}
+
+function computeMotionScores(grayFrames) {
+    const scores = {
+        global: new Array(grayFrames.length).fill(0),
+        lower: new Array(grayFrames.length).fill(0),
+        upper: new Array(grayFrames.length).fill(0),
+    };
+    const lowerStart = Math.floor(ANALYSIS_SIZE * 0.6);
+    const upperEnd = Math.floor(ANALYSIS_SIZE * 0.45);
+    for (let i = 1; i < grayFrames.length; i += 1) {
+        const prev = grayFrames[i - 1];
+        const curr = grayFrames[i];
+        scores.global[i] = regionMotion(
+            prev,
+            curr,
+            0,
+            0,
+            ANALYSIS_SIZE,
+            ANALYSIS_SIZE
+        );
+        scores.lower[i] = regionMotion(
+            prev,
+            curr,
+            0,
+            lowerStart,
+            ANALYSIS_SIZE,
+            ANALYSIS_SIZE
+        );
+        scores.upper[i] = regionMotion(
+            prev,
+            curr,
+            0,
+            0,
+            ANALYSIS_SIZE,
+            upperEnd
+        );
+    }
+    return scores;
+}
+
+function baselineStats(values, count) {
+    const sampleCount = Math.min(count, values.length - 1);
+    if (sampleCount <= 1) return { mean: 0, std: 0 };
+    let mean = 0;
+    for (let i = 1; i <= sampleCount; i += 1) mean += values[i];
+    mean /= sampleCount;
+    let variance = 0;
+    for (let i = 1; i <= sampleCount; i += 1) {
+        variance += (values[i] - mean) ** 2;
+    }
+    variance /= sampleCount;
+    return { mean, std: Math.sqrt(variance) };
+}
+
+function distance(a, b) {
+    if (!a || !b) return null;
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function computePoseSignals(landmarkFrames) {
+    const signals = {
+        left: { ankle: [], hip: [], wrist: [] },
+        right: { ankle: [], hip: [], wrist: [] },
+        frames: landmarkFrames,
+    };
+    for (let i = 0; i < landmarkFrames.length; i += 1) {
+        const current = landmarkFrames[i];
+        const prev = i > 0 ? landmarkFrames[i - 1] : null;
+        const leftAnkle = current ? current[27] : null;
+        const rightAnkle = current ? current[28] : null;
+        const leftHip = current ? current[23] : null;
+        const rightHip = current ? current[24] : null;
+        const leftWrist = current ? current[15] : null;
+        const rightWrist = current ? current[16] : null;
+        const prevLeftAnkle = prev ? prev[27] : null;
+        const prevRightAnkle = prev ? prev[28] : null;
+        const prevLeftHip = prev ? prev[23] : null;
+        const prevRightHip = prev ? prev[24] : null;
+        const prevLeftWrist = prev ? prev[15] : null;
+        const prevRightWrist = prev ? prev[16] : null;
+
+        signals.left.ankle.push(distance(leftAnkle, prevLeftAnkle));
+        signals.right.ankle.push(distance(rightAnkle, prevRightAnkle));
+        signals.left.hip.push(distance(leftHip, prevLeftHip));
+        signals.right.hip.push(distance(rightHip, prevRightHip));
+        signals.left.wrist.push(distance(leftWrist, prevLeftWrist));
+        signals.right.wrist.push(distance(rightWrist, prevRightWrist));
+    }
+    return signals;
+}
+
+function pickStartFrameFromPose(signals) {
+    const leftSeries = signals.left.ankle.map((v, i) =>
+        Math.max(v || 0, signals.left.hip[i] || 0)
+    );
+    const rightSeries = signals.right.ankle.map((v, i) =>
+        Math.max(v || 0, signals.right.hip[i] || 0)
+    );
+
+    const leftStats = baselineStats(leftSeries, 10);
+    const rightStats = baselineStats(rightSeries, 10);
+    const leftThreshold = leftStats.mean + leftStats.std * 2.5;
+    const rightThreshold = rightStats.mean + rightStats.std * 2.5;
+
+    let leftIdx = null;
+    let rightIdx = null;
+    for (let i = 1; i < leftSeries.length - 1; i += 1) {
+        if (leftSeries[i] > leftThreshold && leftSeries[i + 1] > leftThreshold) {
+            leftIdx = i;
+            break;
+        }
+    }
+    for (let i = 1; i < rightSeries.length - 1; i += 1) {
+        if (rightSeries[i] > rightThreshold && rightSeries[i + 1] > rightThreshold) {
+            rightIdx = i;
+            break;
+        }
+    }
+
+    if (leftIdx === null && rightIdx === null) return { frame: 0, side: "left" };
+    if (rightIdx === null || (leftIdx !== null && leftIdx <= rightIdx)) {
+        return { frame: leftIdx, side: "left" };
+    }
+    return { frame: rightIdx, side: "right" };
+}
+
+function pickDecisionFrameFromPose(signals, startIdx, side) {
+    const series = side === "right" ? signals.right.wrist : signals.left.wrist;
+    const stats = baselineStats(series.map((v) => v || 0), 10);
+    const threshold = stats.mean + stats.std * 2.0;
+    for (let i = startIdx + 1; i < series.length - 1; i += 1) {
+        const value = series[i] || 0;
+        const nextValue = series[i + 1] || 0;
+        if (value > threshold && nextValue > threshold) {
+            return i;
+        }
+    }
+    return Math.max(startIdx + 1, startIdx + 5);
+}
+
+function pickContactFrameFromPose(signals, decisionIdx, side) {
+    const frames = signals.frames || [];
+    const start = Math.min(frames.length - 1, decisionIdx + 5);
+    const end = Math.min(frames.length - 1, decisionIdx + 7);
+    if (start >= frames.length || !frames[start]) {
+        return Math.max(0, decisionIdx + 5);
+    }
+
+    let bestIdx = start;
+    let bestDiff = Infinity;
+    for (let i = start; i <= end; i += 1) {
+        const frame = frames[i];
+        if (!frame) continue;
+        const leftShoulder = frame[11];
+        const rightShoulder = frame[12];
+        const leftWrist = frame[15];
+        const rightWrist = frame[16];
+        const leadShoulder = side === "right" ? rightShoulder : leftShoulder;
+        const leadWrist = side === "right" ? rightWrist : leftWrist;
+        if (!leftShoulder || !rightShoulder || !leadShoulder || !leadWrist) {
+            continue;
+        }
+        const shoulderAngle = Math.atan2(
+            rightShoulder.y - leftShoulder.y,
+            rightShoulder.x - leftShoulder.x
+        );
+        const batAngle = Math.atan2(
+            leadWrist.y - leadShoulder.y,
+            leadWrist.x - leadShoulder.x
+        );
+        const diff = Math.abs(shoulderAngle - batAngle);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIdx = i;
+        }
+    }
+
+    return bestIdx;
+}
+
+function pickStartFrame(scores) {
+    const { mean, std } = baselineStats(scores.lower, 12);
+    const threshold = mean + std * 2.8;
+    for (let i = 1; i < scores.lower.length - 2; i += 1) {
+        if (
+            scores.lower[i] > threshold &&
+            scores.lower[i + 1] > threshold
+        ) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+function pickContactFrame(scores, startIdx) {
+    let maxIdx = startIdx;
+    let maxScore = -Infinity;
+    for (let i = startIdx; i < scores.global.length; i += 1) {
+        if (scores.global[i] > maxScore) {
+            maxScore = scores.global[i];
+            maxIdx = i;
+        }
+    }
+    return maxIdx;
+}
+
+function pickDecisionFrame(scores, startIdx, contactIdx) {
+    const { mean, std } = baselineStats(scores.upper, 12);
+    const threshold = mean + std * 2.5;
+    for (let i = startIdx + 1; i < contactIdx; i += 1) {
+        if (scores.upper[i] > threshold && scores.upper[i + 1] > threshold) {
+            return i;
+        }
+    }
+    return Math.max(startIdx + 1, contactIdx - 6);
 }
 
 ////////////////////////////////////////////////////////////
@@ -224,20 +548,66 @@ document.getElementById("zoom_reset").onclick = () => {
 ////////////////////////////////////////////////////////////
 document.getElementById("set_start_btn").onclick = () => {
     startFrame = +slider.value;
-    document.getElementById("marker_status").textContent =
-        `Start = ${startFrame}`;
+    markerStatus.textContent = `Start = ${startFrame}`;
 };
 
 document.getElementById("set_decision_btn").onclick = () => {
     decisionFrame = +slider.value;
-    document.getElementById("marker_status").textContent =
-        `Decision = ${decisionFrame}`;
+    markerStatus.textContent = `Decision = ${decisionFrame}`;
 };
 
 document.getElementById("set_contact_btn").onclick = () => {
     contactFrame = +slider.value;
-    document.getElementById("marker_status").textContent =
-        `Contact = ${contactFrame}`;
+    markerStatus.textContent = `Contact = ${contactFrame}`;
+};
+
+document.getElementById("auto_detect_btn").onclick = async () => {
+    if (!frames.length) return;
+    showProgress();
+    updateProgress(5, "Analyzing motion…");
+    let usedPose = false;
+    const pose = await ensurePose();
+    if (pose) {
+        const landmarks = [];
+        for (let i = 0; i < frames.length; i += 1) {
+            updateProgress(
+                Math.min(80, 5 + Math.round((i / frames.length) * 70)),
+                `Running pose… ${i + 1}/${frames.length}`
+            );
+            const lm = await runPoseOnBitmap(frames[i]);
+            landmarks.push(lm);
+        }
+        const validCount = landmarks.filter(Boolean).length;
+        if (validCount > Math.max(10, Math.round(frames.length * 0.4))) {
+            const signals = computePoseSignals(landmarks);
+            const startResult = pickStartFrameFromPose(signals);
+            startFrame = startResult.frame;
+            decisionFrame = pickDecisionFrameFromPose(
+                signals,
+                startFrame,
+                startResult.side
+            );
+            contactFrame = pickContactFrameFromPose(
+                signals,
+                decisionFrame,
+                startResult.side
+            );
+            usedPose = true;
+        }
+    }
+    if (!usedPose) {
+        updateProgress(60, "Falling back to motion heuristics…");
+        const grayFrames = await ensureAnalysisFrames();
+        const scores = computeMotionScores(grayFrames);
+        startFrame = pickStartFrame(scores);
+        contactFrame = pickContactFrame(scores, startFrame);
+        decisionFrame = pickDecisionFrame(scores, startFrame, contactFrame);
+    }
+    slider.value = contactFrame;
+    drawFrame(contactFrame);
+    markerStatus.textContent =
+        `Auto: Start=${startFrame} | Decision=${decisionFrame} | Contact=${contactFrame}`;
+    hideProgress();
 };
 
 ////////////////////////////////////////////////////////////
