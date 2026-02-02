@@ -308,17 +308,21 @@ function pickStartFrameFromPose(signals) {
     const rightStats = baselineStats(rightSeries, 10);
     const leftThreshold = leftStats.mean + leftStats.std * 1.5;
     const rightThreshold = rightStats.mean + rightStats.std * 1.5;
+    const leftThreshold = leftStats.mean + leftStats.std * 2.5;
+    const rightThreshold = rightStats.mean + rightStats.std * 2.5;
 
     let leftIdx = null;
     let rightIdx = null;
     for (let i = 1; i < leftSeries.length - 1; i += 1) {
         if (leftSeries[i] > leftThreshold) {
+        if (leftSeries[i] > leftThreshold && leftSeries[i + 1] > leftThreshold) {
             leftIdx = i;
             break;
         }
     }
     for (let i = 1; i < rightSeries.length - 1; i += 1) {
         if (rightSeries[i] > rightThreshold) {
+        if (rightSeries[i] > rightThreshold && rightSeries[i + 1] > rightThreshold) {
             rightIdx = i;
             break;
         }
@@ -386,6 +390,30 @@ function pickContactFrameFromPose(signals, decisionIdx, side) {
     }
 
     return bestIdx;
+    const stats = baselineStats(series.map((v) => v || 0), 10);
+    const threshold = stats.mean + stats.std * 2.0;
+    for (let i = startIdx + 1; i < series.length - 1; i += 1) {
+        const value = series[i] || 0;
+        const nextValue = series[i + 1] || 0;
+        if (value > threshold && nextValue > threshold) {
+            return i;
+        }
+    }
+    return Math.max(startIdx + 1, startIdx + 5);
+}
+
+function pickContactFrameFromPose(signals, startIdx, side) {
+    const series = side === "right" ? signals.right.wrist : signals.left.wrist;
+    let maxIdx = startIdx;
+    let maxValue = -Infinity;
+    for (let i = startIdx; i < series.length; i += 1) {
+        const value = series[i] || 0;
+        if (value > maxValue) {
+            maxValue = value;
+            maxIdx = i;
+        }
+    }
+    return maxIdx;
 }
 
 function pickStartFrame(scores) {
@@ -593,6 +621,7 @@ document.getElementById("auto_detect_btn").onclick = async () => {
             contactFrame = pickContactFrameFromPose(
                 signals,
                 decisionFrame,
+                startFrame,
                 startResult.side
             );
             usedPose = true;
