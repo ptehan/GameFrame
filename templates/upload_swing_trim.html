@@ -57,6 +57,7 @@
      style="margin-top:10px;font-weight:bold;"></div>
 
 <script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
 
 <script>
 ////////////////////////////////////////////////////////////
@@ -98,6 +99,60 @@ function hideProgress() {
 function updateProgress(pct, msg = "") {
     document.getElementById("progress-bar").style.width = pct + "%";
     if (msg) document.getElementById("progress-label").innerText = msg;
+}
+
+////////////////////////////////////////////////////////////
+// POSE SETUP (CLIENT-SIDE)
+////////////////////////////////////////////////////////////
+let poseInstance = null;
+let poseInitPromise = null;
+let poseResolver = null;
+
+function ensurePose() {
+    if (poseInstance) return Promise.resolve(poseInstance);
+    if (poseInitPromise) return poseInitPromise;
+    if (typeof Pose === "undefined") {
+        return Promise.resolve(null);
+    }
+
+    poseInitPromise = new Promise((resolve) => {
+        const pose = new Pose({
+            locateFile: (file) =>
+                `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+        });
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            enableSegmentation: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+        });
+        pose.onResults((results) => {
+            if (poseResolver) {
+                poseResolver(results.poseLandmarks || null);
+                poseResolver = null;
+            }
+        });
+        poseInstance = pose;
+        resolve(pose);
+    });
+
+    return poseInitPromise;
+}
+
+function runPoseOnBitmap(bitmap) {
+    return new Promise(async (resolve) => {
+        const pose = await ensurePose();
+        if (!pose) {
+            resolve(null);
+            return;
+        }
+        poseResolver = resolve;
+        const off = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const ctx = off.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0);
+        await pose.send({ image: off });
+    });
 }
 
 ////////////////////////////////////////////////////////////
@@ -200,6 +255,107 @@ function baselineStats(values, count) {
     }
     variance /= sampleCount;
     return { mean, std: Math.sqrt(variance) };
+}
+
+function distance(a, b) {
+    if (!a || !b) return null;
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function computePoseSignals(landmarkFrames) {
+    const signals = {
+        left: { ankle: [], hip: [], wrist: [] },
+        right: { ankle: [], hip: [], wrist: [] },
+    };
+    for (let i = 0; i < landmarkFrames.length; i += 1) {
+        const current = landmarkFrames[i];
+        const prev = i > 0 ? landmarkFrames[i - 1] : null;
+        const leftAnkle = current ? current[27] : null;
+        const rightAnkle = current ? current[28] : null;
+        const leftHip = current ? current[23] : null;
+        const rightHip = current ? current[24] : null;
+        const leftWrist = current ? current[15] : null;
+        const rightWrist = current ? current[16] : null;
+        const prevLeftAnkle = prev ? prev[27] : null;
+        const prevRightAnkle = prev ? prev[28] : null;
+        const prevLeftHip = prev ? prev[23] : null;
+        const prevRightHip = prev ? prev[24] : null;
+        const prevLeftWrist = prev ? prev[15] : null;
+        const prevRightWrist = prev ? prev[16] : null;
+
+        signals.left.ankle.push(distance(leftAnkle, prevLeftAnkle));
+        signals.right.ankle.push(distance(rightAnkle, prevRightAnkle));
+        signals.left.hip.push(distance(leftHip, prevLeftHip));
+        signals.right.hip.push(distance(rightHip, prevRightHip));
+        signals.left.wrist.push(distance(leftWrist, prevLeftWrist));
+        signals.right.wrist.push(distance(rightWrist, prevRightWrist));
+    }
+    return signals;
+}
+
+function pickStartFrameFromPose(signals) {
+    const leftSeries = signals.left.ankle.map((v, i) =>
+        Math.max(v || 0, signals.left.hip[i] || 0)
+    );
+    const rightSeries = signals.right.ankle.map((v, i) =>
+        Math.max(v || 0, signals.right.hip[i] || 0)
+    );
+
+    const leftStats = baselineStats(leftSeries, 10);
+    const rightStats = baselineStats(rightSeries, 10);
+    const leftThreshold = leftStats.mean + leftStats.std * 2.5;
+    const rightThreshold = rightStats.mean + rightStats.std * 2.5;
+
+    let leftIdx = null;
+    let rightIdx = null;
+    for (let i = 1; i < leftSeries.length - 1; i += 1) {
+        if (leftSeries[i] > leftThreshold && leftSeries[i + 1] > leftThreshold) {
+            leftIdx = i;
+            break;
+        }
+    }
+    for (let i = 1; i < rightSeries.length - 1; i += 1) {
+        if (rightSeries[i] > rightThreshold && rightSeries[i + 1] > rightThreshold) {
+            rightIdx = i;
+            break;
+        }
+    }
+
+    if (leftIdx === null && rightIdx === null) return { frame: 0, side: "left" };
+    if (rightIdx === null || (leftIdx !== null && leftIdx <= rightIdx)) {
+        return { frame: leftIdx, side: "left" };
+    }
+    return { frame: rightIdx, side: "right" };
+}
+
+function pickDecisionFrameFromPose(signals, startIdx, side) {
+    const series = side === "right" ? signals.right.wrist : signals.left.wrist;
+    const stats = baselineStats(series.map((v) => v || 0), 10);
+    const threshold = stats.mean + stats.std * 2.0;
+    for (let i = startIdx + 1; i < series.length - 1; i += 1) {
+        const value = series[i] || 0;
+        const nextValue = series[i + 1] || 0;
+        if (value > threshold && nextValue > threshold) {
+            return i;
+        }
+    }
+    return Math.max(startIdx + 1, startIdx + 5);
+}
+
+function pickContactFrameFromPose(signals, startIdx, side) {
+    const series = side === "right" ? signals.right.wrist : signals.left.wrist;
+    let maxIdx = startIdx;
+    let maxValue = -Infinity;
+    for (let i = startIdx; i < series.length; i += 1) {
+        const value = series[i] || 0;
+        if (value > maxValue) {
+            maxValue = value;
+            maxIdx = i;
+        }
+    }
+    return maxIdx;
 }
 
 function pickStartFrame(scores) {
@@ -382,13 +538,46 @@ document.getElementById("auto_detect_btn").onclick = async () => {
     if (!frames.length) return;
     showProgress();
     updateProgress(5, "Analyzing motion…");
-    const grayFrames = await ensureAnalysisFrames();
-    const scores = computeMotionScores(grayFrames);
-    startFrame = pickStartFrame(scores);
-    contactFrame = pickContactFrame(scores, startFrame);
-    decisionFrame = pickDecisionFrame(scores, startFrame, contactFrame);
-    slider.value = startFrame;
-    drawFrame(startFrame);
+    let usedPose = false;
+    const pose = await ensurePose();
+    if (pose) {
+        const landmarks = [];
+        for (let i = 0; i < frames.length; i += 1) {
+            updateProgress(
+                Math.min(80, 5 + Math.round((i / frames.length) * 70)),
+                `Running pose… ${i + 1}/${frames.length}`
+            );
+            const lm = await runPoseOnBitmap(frames[i]);
+            landmarks.push(lm);
+        }
+        const validCount = landmarks.filter(Boolean).length;
+        if (validCount > Math.max(10, Math.round(frames.length * 0.4))) {
+            const signals = computePoseSignals(landmarks);
+            const startResult = pickStartFrameFromPose(signals);
+            startFrame = startResult.frame;
+            decisionFrame = pickDecisionFrameFromPose(
+                signals,
+                startFrame,
+                startResult.side
+            );
+            contactFrame = pickContactFrameFromPose(
+                signals,
+                startFrame,
+                startResult.side
+            );
+            usedPose = true;
+        }
+    }
+    if (!usedPose) {
+        updateProgress(60, "Falling back to motion heuristics…");
+        const grayFrames = await ensureAnalysisFrames();
+        const scores = computeMotionScores(grayFrames);
+        startFrame = pickStartFrame(scores);
+        contactFrame = pickContactFrame(scores, startFrame);
+        decisionFrame = pickDecisionFrame(scores, startFrame, contactFrame);
+    }
+    slider.value = contactFrame;
+    drawFrame(contactFrame);
     markerStatus.textContent =
         `Auto: Start=${startFrame} | Decision=${decisionFrame} | Contact=${contactFrame}`;
     hideProgress();
