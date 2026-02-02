@@ -268,6 +268,7 @@ function computePoseSignals(landmarkFrames) {
     const signals = {
         left: { ankle: [], hip: [], wrist: [] },
         right: { ankle: [], hip: [], wrist: [] },
+        frames: landmarkFrames,
     };
     for (let i = 0; i < landmarkFrames.length; i += 1) {
         const current = landmarkFrames[i];
@@ -344,6 +345,44 @@ function pickDecisionFrameFromPose(signals, startIdx, side) {
     return Math.max(startIdx + 1, startIdx + 5);
 }
 
+function pickContactFrameFromPose(signals, decisionIdx, side) {
+    const frames = signals.frames || [];
+    const start = Math.min(frames.length - 1, decisionIdx + 5);
+    const end = Math.min(frames.length - 1, decisionIdx + 7);
+    if (start >= frames.length || !frames[start]) {
+        return Math.max(0, decisionIdx + 5);
+    }
+
+    let bestIdx = start;
+    let bestDiff = Infinity;
+    for (let i = start; i <= end; i += 1) {
+        const frame = frames[i];
+        if (!frame) continue;
+        const leftShoulder = frame[11];
+        const rightShoulder = frame[12];
+        const leftWrist = frame[15];
+        const rightWrist = frame[16];
+        const leadShoulder = side === "right" ? rightShoulder : leftShoulder;
+        const leadWrist = side === "right" ? rightWrist : leftWrist;
+        if (!leftShoulder || !rightShoulder || !leadShoulder || !leadWrist) {
+            continue;
+        }
+        const shoulderAngle = Math.atan2(
+            rightShoulder.y - leftShoulder.y,
+            rightShoulder.x - leftShoulder.x
+        );
+        const batAngle = Math.atan2(
+            leadWrist.y - leadShoulder.y,
+            leadWrist.x - leadShoulder.x
+        );
+        const diff = Math.abs(shoulderAngle - batAngle);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIdx = i;
+        }
+    }
+
+    return bestIdx;
 function pickContactFrameFromPose(signals, startIdx, side) {
     const series = side === "right" ? signals.right.wrist : signals.left.wrist;
     let maxIdx = startIdx;
@@ -562,6 +601,7 @@ document.getElementById("auto_detect_btn").onclick = async () => {
             );
             contactFrame = pickContactFrameFromPose(
                 signals,
+                decisionFrame,
                 startFrame,
                 startResult.side
             );
