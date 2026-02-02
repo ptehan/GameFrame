@@ -268,6 +268,7 @@ function computePoseSignals(landmarkFrames) {
     const signals = {
         left: { ankle: [], hip: [], wrist: [] },
         right: { ankle: [], hip: [], wrist: [] },
+        frames: landmarkFrames,
     };
     for (let i = 0; i < landmarkFrames.length; i += 1) {
         const current = landmarkFrames[i];
@@ -305,18 +306,22 @@ function pickStartFrameFromPose(signals) {
 
     const leftStats = baselineStats(leftSeries, 10);
     const rightStats = baselineStats(rightSeries, 10);
+    const leftThreshold = leftStats.mean + leftStats.std * 1.5;
+    const rightThreshold = rightStats.mean + rightStats.std * 1.5;
     const leftThreshold = leftStats.mean + leftStats.std * 2.5;
     const rightThreshold = rightStats.mean + rightStats.std * 2.5;
 
     let leftIdx = null;
     let rightIdx = null;
     for (let i = 1; i < leftSeries.length - 1; i += 1) {
+        if (leftSeries[i] > leftThreshold) {
         if (leftSeries[i] > leftThreshold && leftSeries[i + 1] > leftThreshold) {
             leftIdx = i;
             break;
         }
     }
     for (let i = 1; i < rightSeries.length - 1; i += 1) {
+        if (rightSeries[i] > rightThreshold) {
         if (rightSeries[i] > rightThreshold && rightSeries[i + 1] > rightThreshold) {
             rightIdx = i;
             break;
@@ -332,6 +337,59 @@ function pickStartFrameFromPose(signals) {
 
 function pickDecisionFrameFromPose(signals, startIdx, side) {
     const series = side === "right" ? signals.right.wrist : signals.left.wrist;
+    const safeSeries = series.map((v) => v || 0);
+    const stats = baselineStats(safeSeries, 10);
+    const speedThreshold = stats.mean + stats.std * 1.5;
+    const accelThreshold = stats.std * 0.75;
+    for (let i = startIdx + 1; i < safeSeries.length - 2; i += 1) {
+        const speed = safeSeries[i];
+        const nextSpeed = safeSeries[i + 1];
+        const accel = nextSpeed - speed;
+        if (speed > speedThreshold && accel > accelThreshold) {
+            return i;
+        }
+    }
+    return Math.max(startIdx + 1, startIdx + 4);
+}
+
+function pickContactFrameFromPose(signals, decisionIdx, side) {
+    const frames = signals.frames || [];
+    const start = Math.min(frames.length - 1, decisionIdx + 5);
+    const end = Math.min(frames.length - 1, decisionIdx + 7);
+    if (start >= frames.length || !frames[start]) {
+        return Math.max(0, decisionIdx + 5);
+    }
+
+    let bestIdx = start;
+    let bestDiff = Infinity;
+    for (let i = start; i <= end; i += 1) {
+        const frame = frames[i];
+        if (!frame) continue;
+        const leftShoulder = frame[11];
+        const rightShoulder = frame[12];
+        const leftWrist = frame[15];
+        const rightWrist = frame[16];
+        const leadShoulder = side === "right" ? rightShoulder : leftShoulder;
+        const leadWrist = side === "right" ? rightWrist : leftWrist;
+        if (!leftShoulder || !rightShoulder || !leadShoulder || !leadWrist) {
+            continue;
+        }
+        const shoulderAngle = Math.atan2(
+            rightShoulder.y - leftShoulder.y,
+            rightShoulder.x - leftShoulder.x
+        );
+        const batAngle = Math.atan2(
+            leadWrist.y - leadShoulder.y,
+            leadWrist.x - leadShoulder.x
+        );
+        const diff = Math.abs(shoulderAngle - batAngle);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIdx = i;
+        }
+    }
+
+    return bestIdx;
     const stats = baselineStats(series.map((v) => v || 0), 10);
     const threshold = stats.mean + stats.std * 2.0;
     for (let i = startIdx + 1; i < series.length - 1; i += 1) {
@@ -562,6 +620,7 @@ document.getElementById("auto_detect_btn").onclick = async () => {
             );
             contactFrame = pickContactFrameFromPose(
                 signals,
+                decisionFrame,
                 startFrame,
                 startResult.side
             );
