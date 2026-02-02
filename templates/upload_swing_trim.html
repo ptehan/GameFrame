@@ -383,6 +383,18 @@ function pickContactFrameFromPose(signals, decisionIdx, side) {
     }
 
     return bestIdx;
+function pickContactFrameFromPose(signals, startIdx, side) {
+    const series = side === "right" ? signals.right.wrist : signals.left.wrist;
+    let maxIdx = startIdx;
+    let maxValue = -Infinity;
+    for (let i = startIdx; i < series.length; i += 1) {
+        const value = series[i] || 0;
+        if (value > maxValue) {
+            maxValue = value;
+            maxIdx = i;
+        }
+    }
+    return maxIdx;
 }
 
 function pickStartFrame(scores) {
@@ -590,6 +602,7 @@ document.getElementById("auto_detect_btn").onclick = async () => {
             contactFrame = pickContactFrameFromPose(
                 signals,
                 decisionFrame,
+                startFrame,
                 startResult.side
             );
             usedPose = true;
