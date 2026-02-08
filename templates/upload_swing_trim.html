@@ -306,22 +306,18 @@ function pickStartFrameFromPose(signals) {
 
     const leftStats = baselineStats(leftSeries, 10);
     const rightStats = baselineStats(rightSeries, 10);
-    const leftThreshold = leftStats.mean + leftStats.std * 1.5;
-    const rightThreshold = rightStats.mean + rightStats.std * 1.5;
     const leftThreshold = leftStats.mean + leftStats.std * 2.5;
     const rightThreshold = rightStats.mean + rightStats.std * 2.5;
 
     let leftIdx = null;
     let rightIdx = null;
     for (let i = 1; i < leftSeries.length - 1; i += 1) {
-        if (leftSeries[i] > leftThreshold) {
         if (leftSeries[i] > leftThreshold && leftSeries[i + 1] > leftThreshold) {
             leftIdx = i;
             break;
         }
     }
     for (let i = 1; i < rightSeries.length - 1; i += 1) {
-        if (rightSeries[i] > rightThreshold) {
         if (rightSeries[i] > rightThreshold && rightSeries[i + 1] > rightThreshold) {
             rightIdx = i;
             break;
@@ -352,62 +348,54 @@ function pickDecisionFrameFromPose(signals, startIdx, side) {
     return Math.max(startIdx + 1, startIdx + 4);
 }
 
-function pickContactFrameFromPose(signals, decisionIdx, side) {
+function pickContactFrameFromPose(signals, decisionIdx, startIdx) {
     const frames = signals.frames || [];
-    const start = Math.min(frames.length - 1, decisionIdx + 5);
-    const end = Math.min(frames.length - 1, decisionIdx + 7);
-    if (start >= frames.length || !frames[start]) {
-        return Math.max(0, decisionIdx + 5);
-    }
+    if (!frames.length) return Math.max(0, decisionIdx + 1);
 
-    let bestIdx = start;
-    let bestDiff = Infinity;
-    for (let i = start; i <= end; i += 1) {
-        const frame = frames[i];
-        if (!frame) continue;
-        const leftShoulder = frame[11];
-        const rightShoulder = frame[12];
-        const leftWrist = frame[15];
-        const rightWrist = frame[16];
-        const leadShoulder = side === "right" ? rightShoulder : leftShoulder;
-        const leadWrist = side === "right" ? rightWrist : leftWrist;
-        if (!leftShoulder || !rightShoulder || !leadShoulder || !leadWrist) {
-            continue;
+    const hipSpan = frames.map((frame) => {
+        if (!frame) return null;
+        const leftHip = frame[23];
+        const rightHip = frame[24];
+        if (!leftHip || !rightHip) return null;
+        return distance(leftHip, rightHip);
+    });
+
+    const hipDelta = hipSpan.map((value, i) => {
+        if (i === 0 || value === null || hipSpan[i - 1] === null) {
+            return null;
         }
-        const shoulderAngle = Math.atan2(
-            rightShoulder.y - leftShoulder.y,
-            rightShoulder.x - leftShoulder.x
-        );
-        const batAngle = Math.atan2(
-            leadWrist.y - leadShoulder.y,
-            leadWrist.x - leadShoulder.x
-        );
-        const diff = Math.abs(shoulderAngle - batAngle);
-        if (diff < bestDiff) {
-            bestDiff = diff;
-            bestIdx = i;
+        return Math.abs(value - hipSpan[i - 1]);
+    });
+
+    const safeDelta = hipDelta.map((v) => v || 0);
+    const stats = baselineStats(safeDelta, 10);
+    const highThreshold = stats.mean + stats.std * 1.2;
+    const lowThreshold = stats.mean + stats.std * 0.3;
+    const searchStart = Math.max(1, decisionIdx + 1, startIdx + 1);
+
+    let peakIdx = null;
+    let peakValue = -Infinity;
+    for (let i = searchStart; i < hipDelta.length; i += 1) {
+        const current = hipDelta[i] || 0;
+        if (current >= highThreshold && current > peakValue) {
+            peakValue = current;
+            peakIdx = i;
         }
     }
-
-    return bestIdx;
-    const stats = baselineStats(series.map((v) => v || 0), 10);
-    const threshold = stats.mean + stats.std * 2.0;
-    for (let i = startIdx + 1; i < series.length - 1; i += 1) {
-        const value = series[i] || 0;
-        const nextValue = series[i + 1] || 0;
-        if (value > threshold && nextValue > threshold) {
-            return i;
+    if (peakIdx !== null) {
+        for (let i = peakIdx + 1; i < hipDelta.length; i += 1) {
+            const current = hipDelta[i] || 0;
+            if (current <= lowThreshold) {
+                return i;
+            }
         }
+        return peakIdx;
     }
-    return Math.max(startIdx + 1, startIdx + 5);
-}
 
-function pickContactFrameFromPose(signals, startIdx, side) {
-    const series = side === "right" ? signals.right.wrist : signals.left.wrist;
-    let maxIdx = startIdx;
+    let maxIdx = searchStart;
     let maxValue = -Infinity;
-    for (let i = startIdx; i < series.length; i += 1) {
-        const value = series[i] || 0;
+    for (let i = searchStart; i < hipDelta.length; i += 1) {
+        const value = hipDelta[i] || 0;
         if (value > maxValue) {
             maxValue = value;
             maxIdx = i;
@@ -621,8 +609,7 @@ document.getElementById("auto_detect_btn").onclick = async () => {
             contactFrame = pickContactFrameFromPose(
                 signals,
                 decisionFrame,
-                startFrame,
-                startResult.side
+                startFrame
             );
             usedPose = true;
         }
