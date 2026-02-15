@@ -35,6 +35,7 @@
 <div style="margin-top:10px;">
     <button id="prev_btn">&laquo; Prev</button>
     <button id="next_btn">Next &raquo;</button>
+    <button id="goto_contact_btn">Go Contact</button>
 </div>
 
 <!-- MARKERS -->
@@ -1299,6 +1300,13 @@ document.getElementById("next_btn").onclick = () => {
     drawFrame(+slider.value);
 };
 
+document.getElementById("goto_contact_btn").onclick = () => {
+    if (!frames.length) return;
+    const target = Math.max(0, Math.min(frames.length - 1, Number.isFinite(contactFrame) ? contactFrame : 0));
+    slider.value = target;
+    drawFrame(target);
+};
+
 ////////////////////////////////////////////////////////////
 // ZOOM CONTROLS
 ////////////////////////////////////////////////////////////
@@ -1572,6 +1580,8 @@ loadVideo();
 </script>
 
 {% endblock %}
+
+
 
 
 
