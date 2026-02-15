@@ -89,6 +89,7 @@ const markerStatus = document.getElementById("marker_status");
 let analysisFrames = null;
 let graphReady = false;
 let contactSeries = null;
+let contactSmoothedSeries = null;
 let decisionSeries = null;
 let startSeries = null;
 let startKneeSeries = null;
@@ -96,6 +97,7 @@ let startHipSeries = null;
 let poseLandmarksFrames = null;
 let manualSeedPoint = null;
 let awaitingManualPick = false;
+let lastBuildSeedPoint = null;
 const GRAPH_W = 1000;
 const GRAPH_H = 220;
 
@@ -860,6 +862,24 @@ async function ensureAnalysisFrames() {
     return analysisFrames;
 }
 
+function smoothSeries(series, radius = 2) {
+    if (!series || !series.length) return [];
+    const out = new Array(series.length).fill(null);
+    for (let i = 0; i < series.length; i += 1) {
+        let sum = 0;
+        let cnt = 0;
+        for (let k = -radius; k <= radius; k += 1) {
+            const j = i + k;
+            if (j < 0 || j >= series.length) continue;
+            const v = series[j];
+            if (!Number.isFinite(v)) continue;
+            sum += v;
+            cnt += 1;
+        }
+        if (cnt >= 2) out[i] = sum / cnt;
+    }
+    return out;
+}
 function ensureGraphCanvas(id, anchorId) {
     let c = document.getElementById(id);
     if (!c) {
@@ -946,6 +966,92 @@ function drawSeriesChart(canvasId, title, series, markerIdx, selectedIdx) {
     g.fillText(title, 8, 16);
 }
 
+function drawContactDualSeriesChart(canvasId, title, rawSeries, smoothSeriesVals, markerIdx, selectedIdx) {
+    const c = document.getElementById(canvasId);
+    if (!c) return;
+    const g = c.getContext("2d");
+    const W = c.width, H = c.height;
+    const padL = 36, padR = 16, padT = 24, padB = 22;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const n = Math.max(frames.length, (rawSeries || []).length, (smoothSeriesVals || []).length, 1);
+    const xScale = plotW / Math.max(1, n - 1);
+
+    const vals = [];
+    for (const v of (rawSeries || [])) if (Number.isFinite(v)) vals.push(v);
+    for (const v of (smoothSeriesVals || [])) if (Number.isFinite(v)) vals.push(v);
+    if (!vals.length) return;
+
+    let minV = Math.min(...vals), maxV = Math.max(...vals);
+    if (minV === maxV) { minV -= 1; maxV += 1; }
+    const yScale = plotH / (maxV - minV);
+
+    g.fillStyle = "#111";
+    g.fillRect(0, 0, W, H);
+    g.strokeStyle = "#444";
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(padL, padT);
+    g.lineTo(padL, H - padB);
+    g.lineTo(W - padR, H - padB);
+    g.stroke();
+
+    const drawLine = (seriesVals, color, width) => {
+        if (!seriesVals || !seriesVals.length) return;
+        g.strokeStyle = color;
+        g.lineWidth = width;
+        g.beginPath();
+        let started = false;
+        for (let i = 0; i < seriesVals.length; i += 1) {
+            const v = seriesVals[i];
+            if (!Number.isFinite(v)) continue;
+            const x = padL + i * xScale;
+            const y = padT + (maxV - v) * yScale;
+            if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
+        }
+        g.stroke();
+    };
+
+    drawLine(rawSeries || [], "#2f97ff", 2);
+    drawLine(smoothSeriesVals || [], "#ff9f2f", 2);
+
+    const drawMarker = (idx, color, width) => {
+        if (!Number.isFinite(idx)) return;
+        const x = padL + idx * xScale;
+        g.strokeStyle = color; g.lineWidth = width; g.beginPath();
+        g.moveTo(x, padT); g.lineTo(x, H - padB); g.stroke();
+    };
+    drawMarker(markerIdx, "#33ff88", 3);
+    drawMarker(selectedIdx, "#ffffff", 1);
+
+    g.fillStyle = "#8f8f8f";
+    g.font = "11px monospace";
+    g.fillText("Hip dist", 4, padT + 4);
+    g.fillText("Frame", W - 54, H - 6);
+    const tickEvery = n > 120 ? 20 : 10;
+    g.textAlign = "center";
+    for (let ti = 0; ti < n; ti += tickEvery) {
+        const tx = padL + ti * xScale;
+        g.strokeStyle = "#333";
+        g.beginPath();
+        g.moveTo(tx, H - padB);
+        g.lineTo(tx, H - padB + 4);
+        g.stroke();
+        g.fillText(String(ti), tx, H - 6);
+    }
+    g.textAlign = "left";
+    g.fillText(maxV.toFixed(3), 2, padT + 2);
+    g.fillText(minV.toFixed(3), 2, H - padB - 2);
+
+    g.fillStyle = "#bbb";
+    g.font = "12px monospace";
+    g.fillText(title, 8, 16);
+
+    g.strokeStyle = "#2f97ff"; g.lineWidth = 2; g.beginPath(); g.moveTo(W - 170, 14); g.lineTo(W - 146, 14); g.stroke();
+    g.fillStyle = "#9fcfff"; g.fillText("raw", W - 142, 18);
+    g.strokeStyle = "#ff9f2f"; g.lineWidth = 2; g.beginPath(); g.moveTo(W - 100, 14); g.lineTo(W - 76, 14); g.stroke();
+    g.fillStyle = "#ffd0a0"; g.fillText("smoothed", W - 72, 18);
+}
 function drawMultiSeriesChart(canvasId, title, seriesSet, markerIdx, selectedIdx) {
     const c = document.getElementById(canvasId);
     if (!c || !seriesSet || !seriesSet.length) return;
@@ -1032,9 +1138,138 @@ function drawMultiSeriesChart(canvasId, title, seriesSet, markerIdx, selectedIdx
     g.fillText(title, 8, 16);
 }
 
+function detectContactFrameFromHipSeries(series, selectedIdx) {
+    if (!series || !series.length) return null;
+    const n = series.length;
+    const anchor = Math.max(0, Math.min(n - 1, Number.isFinite(selectedIdx) ? selectedIdx : 0));
+
+    const smoothed = smoothSeries(series, 2);
+    const vals = smoothed.filter((v) => Number.isFinite(v));
+    if (!vals.length) return anchor;
+
+    const minV = Math.min(...vals);
+    const maxV = Math.max(...vals);
+    const range = Math.max(1e-6, maxV - minV);
+
+    // Derivative on smoothed series for rise-region detection only.
+    const deriv = new Array(n).fill(0);
+    for (let i = 1; i < n; i += 1) {
+        if (Number.isFinite(smoothed[i]) && Number.isFinite(smoothed[i - 1])) {
+            deriv[i] = smoothed[i] - smoothed[i - 1];
+        }
+    }
+
+    const posDer = deriv.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+    const q = (arr, p) => {
+        if (!arr.length) return 0;
+        const idx = Math.max(0, Math.min(arr.length - 1, Math.floor((arr.length - 1) * p)));
+        return arr[idx];
+    };
+
+    const rapidThresh = Math.max(q(posDer, 0.80), range * 0.045);
+    const baselineCut = minV + range * 0.10;
+
+    // 1) First rapid-rise region: >=2 consecutive frames above derivative threshold.
+    let riseStart = -1;
+    let riseEnd = -1;
+    let run = 0;
+    let runStart = -1;
+    for (let i = 1; i < n; i += 1) {
+        const ok = Number.isFinite(smoothed[i]) && smoothed[i] >= baselineCut && deriv[i] >= rapidThresh;
+        if (ok) {
+            if (run === 0) runStart = i - 1;
+            run += 1;
+            if (run >= 2) {
+                riseStart = Math.max(0, runStart);
+                riseEnd = i;
+                break;
+            }
+        } else {
+            run = 0;
+            runStart = -1;
+        }
+    }
+
+    // Fallback rise detection near selected frame.
+    if (riseStart < 0) {
+        const l = Math.max(1, anchor - 10);
+        const r = Math.min(n - 1, anchor + 10);
+        for (let i = l; i <= r; i += 1) {
+            if (deriv[i] >= rapidThresh * 0.85) {
+                riseStart = Math.max(0, i - 1);
+                riseEnd = i;
+                break;
+            }
+        }
+    }
+
+    // 2) From after rise region, pick FIRST valid raw local peak with sustained decay.
+    if (riseStart >= 0) {
+        const searchL = Math.max(2, riseEnd + 1); // never choose inside rapid-rise ramp
+        const searchR = Math.min(n - 4, riseEnd + 26);
+
+        const minRise = range * 0.08;
+        const minNetDrop = range * 0.05;
+
+        for (let i = searchL; i <= searchR; i += 1) {
+            const p0 = series[i - 1], p1 = series[i], p2 = series[i + 1];
+            if (![p0, p1, p2].every(Number.isFinite)) continue;
+            if (!(p1 > p0 && p1 >= p2)) continue; // raw local max/crest
+
+            const riseAmt = p1 - (Number.isFinite(series[riseStart]) ? series[riseStart] : p0);
+            if (riseAmt < minRise) continue;
+
+            // Sustained decay check across next 4 frames.
+            const endJ = Math.min(n - 1, i + 4);
+            let nonPos = 0;
+            let curr = p1;
+            let postMin = p1;
+            for (let j = i + 1; j <= endJ; j += 1) {
+                const v = series[j];
+                if (!Number.isFinite(v)) continue;
+                if (v <= curr) nonPos += 1;
+                curr = v;
+                postMin = Math.min(postMin, v);
+            }
+            const netDrop = p1 - postMin;
+
+            if (nonPos >= 3 && netDrop >= minNetDrop) {
+                return i; // first real crest after rapid change
+            }
+        }
+
+        // Fallback in post-rise window: highest raw value (earliest tie).
+        let bestIdx = searchL;
+        let bestVal = -Infinity;
+        for (let i = searchL; i <= searchR; i += 1) {
+            const v = series[i];
+            if (!Number.isFinite(v)) continue;
+            if (v > bestVal) {
+                bestVal = v;
+                bestIdx = i;
+            }
+        }
+        if (Number.isFinite(bestVal)) return bestIdx;
+    }
+
+    // Final fallback: nearest local max to selected frame.
+    let out = anchor;
+    let bestDist = Infinity;
+    for (let i = 2; i <= n - 3; i += 1) {
+        const a = series[i - 1], b = series[i], c = series[i + 1];
+        if (![a, b, c].every(Number.isFinite)) continue;
+        if (!(b > a && b >= c)) continue;
+        const d = Math.abs(i - anchor);
+        if (d < bestDist) {
+            bestDist = d;
+            out = i;
+        }
+    }
+    return out;
+}
 function updateGraphLine(selectedIdx) {
     if (!graphReady) return;
-    drawSeriesChart("graph-contact", "Contact: Hip Distance | marker=contact | selected=white", contactSeries, contactFrame, selectedIdx);
+    drawContactDualSeriesChart("graph-contact", "Contact: Hip Distance (raw+smoothed) | marker=contact | selected=white", contactSeries, contactSmoothedSeries || smoothSeries(contactSeries || [], 2), contactFrame, selectedIdx);
     drawSeriesChart("graph-decision", "Decision: Hand Speed | marker=decision | selected=white", decisionSeries, decisionFrame, selectedIdx);
     drawMultiSeriesChart(
         "graph-start",
@@ -1145,13 +1380,31 @@ document.getElementById("build_charts_btn").onclick = async () => {
         markerStatus.textContent = "Click Pick Batter, then click the batter, then Build Charts.";
         return;
     }
-    markerStatus.textContent = "Building pose chartsâ€¦";
+
+    const sameSeedAsLastBuild =
+        !!lastBuildSeedPoint &&
+        lastBuildSeedPoint.frame === manualSeedPoint.frame &&
+        Math.hypot(lastBuildSeedPoint.x - manualSeedPoint.x, lastBuildSeedPoint.y - manualSeedPoint.y) <= 0.015;
+
+    if (graphReady && sameSeedAsLastBuild && contactSeries && contactSeries.length) {
+        if (!contactSmoothedSeries || !contactSmoothedSeries.length) {
+            contactSmoothedSeries = smoothSeries(contactSeries, 2);
+        }
+        const selectedNow = +slider.value || 0;
+        const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow);
+        if (Number.isFinite(autoContact)) contactFrame = autoContact;
+        markerStatus.textContent = `Charts reused (auto-contact=${contactFrame})`;
+        updateGraphLine(selectedNow);
+        return;
+    }
+
+    markerStatus.textContent = "Building pose charts...";
     const pose = await ensurePose();
     if (!pose) {
         markerStatus.textContent = "Pose library unavailable.";
         return;
     }
-    markerStatus.textContent = `Building pose charts… tracking locked batter ${manualSeedPoint.frame + 1}/${frames.length}`;
+    markerStatus.textContent = `Building pose charts... tracking locked batter ${manualSeedPoint.frame + 1}/${frames.length}`;
     const landmarks = await trackBatterFromManualSeed(manualSeedPoint);
     if (!landmarks) {
         markerStatus.textContent = "Manual batter lock failed. Re-pick batter on frame 0-5.";
@@ -1161,8 +1414,9 @@ document.getElementById("build_charts_btn").onclick = async () => {
 
     const n = landmarks.length;
     contactSeries = new Array(n).fill(null);
+    contactSmoothedSeries = null;
     decisionSeries = new Array(n).fill(0);
-    startSeries = new Array(n).fill(0); // heel
+    startSeries = new Array(n).fill(0);
     startKneeSeries = new Array(n).fill(0);
     startHipSeries = new Array(n).fill(0);
 
@@ -1205,12 +1459,26 @@ document.getElementById("build_charts_btn").onclick = async () => {
         if (pKnee && cKnee) startKneeSeries[i] = cKnee.x - pKnee.x;   // signed speed (direction)
         if (pHip && cHip) startHipSeries[i] = cHip.x - pHip.x;        // signed speed (direction)
     }
+
+    contactSmoothedSeries = smoothSeries(contactSeries, 2);
+
+    const selectedNow = +slider.value || 0;
+    const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow);
+    if (Number.isFinite(autoContact)) {
+        contactFrame = autoContact;
+    }
+    lastBuildSeedPoint = {
+        frame: manualSeedPoint.frame,
+        x: manualSeedPoint.x,
+        y: manualSeedPoint.y,
+    };
+
     ensureGraphCanvas("graph-contact", "marker_status");
     ensureGraphCanvas("graph-decision", "graph-contact");
     ensureGraphCanvas("graph-start", "graph-decision");
     graphReady = true;
     const subjectMode = manualSeedPoint ? "manual-lock" : "batter-track";
-    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead})`;
+    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, auto-contact=${contactFrame})`;
     updateGraphLine(+slider.value || 0);
 };
 
@@ -1304,3 +1572,7 @@ loadVideo();
 </script>
 
 {% endblock %}
+
+
+
+
