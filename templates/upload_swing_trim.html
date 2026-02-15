@@ -137,7 +137,8 @@ function ensurePose() {
         });
         pose.setOptions({
             modelComplexity: 1,
-            smoothLandmarks: true,
+            staticImageMode: true,
+            smoothLandmarks: false,
             enableSegmentation: false,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5,
@@ -154,6 +155,17 @@ function ensurePose() {
     return poseInitPromise;
 }
 
+async function resetPoseInstance() {
+    if (!poseInstance) return;
+    try {
+        if (typeof poseInstance.close === "function") await poseInstance.close();
+    } catch (e) {
+        console.warn("Pose reset failed", e);
+    }
+    poseInstance = null;
+    poseInitPromise = null;
+    poseResolver = null;
+}
 function runPoseOnBitmap(bitmap) {
     return new Promise(async (resolve) => {
         const pose = await ensurePose();
@@ -1152,7 +1164,6 @@ function detectContactFrameFromHipSeries(series, selectedIdx) {
     const maxV = Math.max(...vals);
     const range = Math.max(1e-6, maxV - minV);
 
-    // Derivative on smoothed series for rise-region detection only.
     const deriv = new Array(n).fill(0);
     for (let i = 1; i < n; i += 1) {
         if (Number.isFinite(smoothed[i]) && Number.isFinite(smoothed[i - 1])) {
@@ -1167,107 +1178,99 @@ function detectContactFrameFromHipSeries(series, selectedIdx) {
         return arr[idx];
     };
 
-    const rapidThresh = Math.max(q(posDer, 0.80), range * 0.045);
-    const baselineCut = minV + range * 0.10;
+    // Ignore early setup jitter.
+    const warmup = Math.max(6, Math.min(14, Math.floor(n * 0.15)));
 
-    // 1) First rapid-rise region: >=2 consecutive frames above derivative threshold.
-    let riseStart = -1;
-    let riseEnd = -1;
-    let run = 0;
-    let runStart = -1;
-    for (let i = 1; i < n; i += 1) {
-        const ok = Number.isFinite(smoothed[i]) && smoothed[i] >= baselineCut && deriv[i] >= rapidThresh;
-        if (ok) {
-            if (run === 0) runStart = i - 1;
-            run += 1;
-            if (run >= 2) {
-                riseStart = Math.max(0, runStart);
-                riseEnd = i;
-                break;
-            }
-        } else {
-            run = 0;
-            runStart = -1;
-        }
-    }
+    const minRiseVel = Math.max(q(posDer, 0.70), range * 0.025);
+    const minRise = range * 0.18;
+    const minDrop = range * 0.06;
+    const minLevel = minV + range * 0.45;
 
-    // Fallback rise detection near selected frame.
-    if (riseStart < 0) {
-        const l = Math.max(1, anchor - 10);
-        const r = Math.min(n - 1, anchor + 10);
-        for (let i = l; i <= r; i += 1) {
-            if (deriv[i] >= rapidThresh * 0.85) {
-                riseStart = Math.max(0, i - 1);
-                riseEnd = i;
-                break;
-            }
-        }
-    }
-
-    // 2) From after rise region, pick FIRST valid raw local peak with sustained decay.
-    if (riseStart >= 0) {
-        const searchL = Math.max(2, riseEnd + 1); // never choose inside rapid-rise ramp
-        const searchR = Math.min(n - 4, riseEnd + 26);
-
-        const minRise = range * 0.08;
-        const minNetDrop = range * 0.05;
-
-        for (let i = searchL; i <= searchR; i += 1) {
-            const p0 = series[i - 1], p1 = series[i], p2 = series[i + 1];
-            if (![p0, p1, p2].every(Number.isFinite)) continue;
-            if (!(p1 > p0 && p1 >= p2)) continue; // raw local max/crest
-
-            const riseAmt = p1 - (Number.isFinite(series[riseStart]) ? series[riseStart] : p0);
-            if (riseAmt < minRise) continue;
-
-            // Sustained decay check across next 4 frames.
-            const endJ = Math.min(n - 1, i + 4);
-            let nonPos = 0;
-            let curr = p1;
-            let postMin = p1;
-            for (let j = i + 1; j <= endJ; j += 1) {
-                const v = series[j];
-                if (!Number.isFinite(v)) continue;
-                if (v <= curr) nonPos += 1;
-                curr = v;
-                postMin = Math.min(postMin, v);
-            }
-            const netDrop = p1 - postMin;
-
-            if (nonPos >= 3 && netDrop >= minNetDrop) {
-                return i; // first real crest after rapid change
-            }
-        }
-
-        // Fallback in post-rise window: highest raw value (earliest tie).
-        let bestIdx = searchL;
-        let bestVal = -Infinity;
-        for (let i = searchL; i <= searchR; i += 1) {
+    const snapForwardRawPeak = (baseIdx, maxAhead = 2) => {
+        const b = Math.max(0, Math.min(n - 1, baseIdx));
+        const e = Math.max(b, Math.min(n - 1, b + maxAhead));
+        let out = b;
+        let outVal = Number.isFinite(series[b]) ? series[b] : -Infinity;
+        for (let i = b + 1; i <= e; i += 1) {
             const v = series[i];
             if (!Number.isFinite(v)) continue;
-            if (v > bestVal) {
-                bestVal = v;
-                bestIdx = i;
+            if (v > outVal) {
+                outVal = v;
+                out = i;
             }
         }
-        if (Number.isFinite(bestVal)) return bestIdx;
+        return out;
+    };
+
+    const peaks = [];
+    for (let i = Math.max(2, warmup); i <= n - 3; i += 1) {
+        const a = smoothed[i - 1], b = smoothed[i], c = smoothed[i + 1];
+        if (![a, b, c].every(Number.isFinite)) continue;
+        if (!(b >= a && b > c)) continue;
+
+        let preMin = Infinity;
+        for (let j = Math.max(0, i - 10); j < i; j += 1) {
+            const v = smoothed[j];
+            if (Number.isFinite(v)) preMin = Math.min(preMin, v);
+        }
+        if (!Number.isFinite(preMin)) continue;
+
+        let postMin = b;
+        for (let j = i + 1; j <= Math.min(n - 1, i + 6); j += 1) {
+            const v = smoothed[j];
+            if (Number.isFinite(v)) postMin = Math.min(postMin, v);
+        }
+
+        let inVel = 0;
+        for (let j = Math.max(1, i - 5); j <= i; j += 1) {
+            inVel = Math.max(inVel, deriv[j]);
+        }
+
+        const rise = b - preMin;
+        const drop = b - postMin;
+        const major = b >= minLevel && rise >= minRise && drop >= minDrop && inVel >= minRiseVel;
+        peaks.push({ i, val: b, rise, drop, inVel, major });
     }
 
-    // Final fallback: nearest local max to selected frame.
-    let out = anchor;
-    let bestDist = Infinity;
-    for (let i = 2; i <= n - 3; i += 1) {
-        const a = series[i - 1], b = series[i], c = series[i + 1];
-        if (![a, b, c].every(Number.isFinite)) continue;
-        if (!(b > a && b >= c)) continue;
-        const d = Math.abs(i - anchor);
-        if (d < bestDist) {
-            bestDist = d;
-            out = i;
+    // Primary: first major crest after warmup.
+    const firstMajor = peaks.find((p) => p.major);
+    if (firstMajor) return snapForwardRawPeak(firstMajor.i, 2);
+
+    // Secondary: first strong crest in upper band.
+    const upperBand = minV + range * 0.60;
+    const firstStrong = peaks.find((p) => p.val >= upperBand && p.rise >= range * 0.12);
+    if (firstStrong) return snapForwardRawPeak(firstStrong.i, 2);
+
+    // Fallback: strongest smoothed crest after warmup (not anchor-biased).
+    if (peaks.length) {
+        let best = peaks[0];
+        let bestScore = -Infinity;
+        for (const p of peaks) {
+            const score = p.val * 3.0 + p.rise * 2.2 + p.drop * 1.2 + p.inVel * 1.8 - p.i * 0.01;
+            if (score > bestScore) {
+                bestScore = score;
+                best = p;
+            }
+        }
+        return snapForwardRawPeak(best.i, 2);
+    }
+
+    // Last resort: maximum smoothed point after warmup.
+    let bestIdx = warmup;
+    let bestVal = -Infinity;
+    for (let i = warmup; i < n; i += 1) {
+        const v = smoothed[i];
+        if (!Number.isFinite(v)) continue;
+        if (v > bestVal) {
+            bestVal = v;
+            bestIdx = i;
         }
     }
-    return out;
+    if (Number.isFinite(bestVal)) return snapForwardRawPeak(bestIdx, 2);
+
+    return anchor;
 }
+
 function updateGraphLine(selectedIdx) {
     if (!graphReady) return;
     drawContactDualSeriesChart("graph-contact", "Contact: Hip Distance (raw+smoothed) | marker=contact | selected=white", contactSeries, contactSmoothedSeries || smoothSeries(contactSeries || [], 2), contactFrame, selectedIdx);
@@ -1407,6 +1410,7 @@ document.getElementById("build_charts_btn").onclick = async () => {
     }
 
     markerStatus.textContent = "Building pose charts...";
+    await resetPoseInstance();
     const pose = await ensurePose();
     if (!pose) {
         markerStatus.textContent = "Pose library unavailable.";
@@ -1580,6 +1584,16 @@ loadVideo();
 </script>
 
 {% endblock %}
+
+
+
+
+
+
+
+
+
+
 
 
 
