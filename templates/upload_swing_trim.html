@@ -35,6 +35,7 @@
 <div style="margin-top:10px;">
     <button id="prev_btn">&laquo; Prev</button>
     <button id="next_btn">Next &raquo;</button>
+    <button id="goto_decision_btn">Go Decision</button>
     <button id="goto_contact_btn">Go Contact</button>
 </div>
 
@@ -910,7 +911,7 @@ function ensureGraphCanvas(id, anchorId) {
     return c;
 }
 
-function drawSeriesChart(canvasId, title, series, markerIdx, selectedIdx) {
+function drawSeriesChart(canvasId, title, series, markerIdx, selectedIdx, extraMarkers = []) {
     const c = document.getElementById(canvasId);
     if (!c || !series || !series.length) return;
     const g = c.getContext("2d");
@@ -952,6 +953,10 @@ function drawSeriesChart(canvasId, title, series, markerIdx, selectedIdx) {
         g.strokeStyle = color; g.lineWidth = width; g.beginPath();
         g.moveTo(x, padT); g.lineTo(x, H - padB); g.stroke();
     };
+    for (const m of extraMarkers) {
+        if (!m) continue;
+        drawMarker(m.idx, m.color || "#ffaa00", m.width || 2);
+    }
     drawMarker(markerIdx, "#33ff88", 3);
     drawMarker(selectedIdx, "#ffffff", 1);
 
@@ -1271,10 +1276,59 @@ function detectContactFrameFromHipSeries(series, selectedIdx) {
     return anchor;
 }
 
+function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) {
+    if (!series || !series.length) return 0;
+    const n = series.length;
+    const clamp = (v) => Math.max(0, Math.min(n - 1, v));
+    const smoothed = smoothSeries(series, 1);
+
+    const warmup = Math.max(2, Math.min(10, Math.floor(n * 0.10)));
+    let end = n - 1;
+    if (Number.isFinite(contactIdx)) {
+        end = Math.max(warmup + 2, Math.min(n - 1, Math.round(contactIdx) - 2));
+    }
+    const start = Math.max(warmup + 1, end - 14);
+
+    let bestJump = -Infinity;
+    let bestJumpIdx = -1;
+    for (let i = start; i <= end; i += 1) {
+        const v0 = smoothed[i - 1];
+        const v1 = smoothed[i];
+        if (!Number.isFinite(v0) || !Number.isFinite(v1)) continue;
+        const jump = v1 - v0;
+        if (jump > bestJump) {
+            bestJump = jump;
+            bestJumpIdx = i;
+        }
+    }
+    if (bestJumpIdx > 0) return clamp(bestJumpIdx - 1);
+
+    let bestIdx = Number.isFinite(fallbackIdx) ? clamp(Math.round(fallbackIdx)) : warmup;
+    let bestVal = -Infinity;
+    for (let i = warmup; i <= end; i += 1) {
+        const v = smoothed[i];
+        if (!Number.isFinite(v)) continue;
+        if (v > bestVal) {
+            bestVal = v;
+            bestIdx = i;
+        }
+    }
+    return clamp(bestIdx);
+}
+
 function updateGraphLine(selectedIdx) {
     if (!graphReady) return;
     drawContactDualSeriesChart("graph-contact", "Contact: Hip Distance (raw+smoothed) | marker=contact | selected=white", contactSeries, contactSmoothedSeries || smoothSeries(contactSeries || [], 2), contactFrame, selectedIdx);
-    drawSeriesChart("graph-decision", "Decision: Hand Speed | marker=decision | selected=white", decisionSeries, decisionFrame, selectedIdx);
+    drawSeriesChart(
+        "graph-decision",
+        "Decision: Hand Speed | marker=decision | contact=blue | selected=white",
+        decisionSeries,
+        decisionFrame,
+        selectedIdx,
+        [
+            { idx: contactFrame, color: "#66aaff", width: 2 },
+        ]
+    );
     drawMultiSeriesChart(
         "graph-start",
         "Start: Lead Heel/Knee/Hip signed speed | marker=start | selected=white",
@@ -1301,6 +1355,13 @@ document.getElementById("prev_btn").onclick = () => {
 document.getElementById("next_btn").onclick = () => {
     slider.value = Math.min(frames.length - 1, +slider.value + 1);
     drawFrame(+slider.value);
+};
+
+document.getElementById("goto_decision_btn").onclick = () => {
+    if (!frames.length) return;
+    const target = Math.max(0, Math.min(frames.length - 1, Number.isFinite(decisionFrame) ? decisionFrame : 0));
+    slider.value = target;
+    drawFrame(target);
 };
 
 document.getElementById("goto_contact_btn").onclick = () => {
@@ -1404,7 +1465,10 @@ document.getElementById("build_charts_btn").onclick = async () => {
         const selectedNow = +slider.value || 0;
         const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow);
         if (Number.isFinite(autoContact)) contactFrame = autoContact;
-        markerStatus.textContent = `Charts reused (auto-contact=${contactFrame})`;
+        if (!Number.isFinite(decisionFrame) || decisionFrame <= 0 || decisionFrame >= contactFrame) {
+            decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, decisionFrame);
+        }
+        markerStatus.textContent = `Charts reused (decision=${decisionFrame}, auto-contact=${contactFrame})`;
         updateGraphLine(selectedNow);
         return;
     }
@@ -1479,6 +1543,9 @@ document.getElementById("build_charts_btn").onclick = async () => {
     if (Number.isFinite(autoContact)) {
         contactFrame = autoContact;
     }
+    if (!Number.isFinite(decisionFrame) || decisionFrame <= 0 || decisionFrame >= contactFrame) {
+        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, decisionFrame);
+    }
     lastBuildSeedPoint = {
         frame: manualSeedPoint.frame,
         x: manualSeedPoint.x,
@@ -1490,7 +1557,7 @@ document.getElementById("build_charts_btn").onclick = async () => {
     ensureGraphCanvas("graph-start", "graph-decision");
     graphReady = true;
     const subjectMode = manualSeedPoint ? "manual-lock" : "batter-track";
-    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, auto-contact=${contactFrame})`;
+    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
     updateGraphLine(+slider.value || 0);
 };
 
@@ -1584,19 +1651,4 @@ loadVideo();
 </script>
 
 {% endblock %}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
