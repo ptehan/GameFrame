@@ -2126,12 +2126,123 @@ document.getElementById("build_charts_btn").onclick = async () => {
 // TRIM + UPLOAD
 ////////////////////////////////////////////////////////////
 const { createFFmpeg } = FFmpeg;
+const PORTRAIT_OUT_W = 720;
+const PORTRAIT_OUT_H = 1280;
+const PORTRAIT_ASPECT = PORTRAIT_OUT_W / PORTRAIT_OUT_H;
 
 async function bitmapToPNG(bitmap) {
     const off = new OffscreenCanvas(bitmap.width, bitmap.height);
     const ctx = off.getContext("2d");
     ctx.drawImage(bitmap, 0, 0);
     const blob = await off.convertToBlob({ type: "image/png" });
+    return new Uint8Array(await blob.arrayBuffer());
+}
+
+function computePortraitCropFromLandmarks(lm, fallback = null) {
+    if (!lm || !lm.length) return fallback;
+    const idxs = [11, 12, 23, 24, 25, 26, 27, 28, 15, 16];
+    const pts = [];
+    for (const idx of idxs) {
+        const p = lm[idx];
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+        pts.push({ x: p.x, y: p.y });
+    }
+    if (pts.length < 4) return fallback;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of pts) {
+        minX = Math.min(minX, p.x);
+        maxX = Math.max(maxX, p.x);
+        minY = Math.min(minY, p.y);
+        maxY = Math.max(maxY, p.y);
+    }
+    const boxW = Math.max(0.001, maxX - minX);
+    const boxH = Math.max(0.001, maxY - minY);
+    const cx = (minX + maxX) * 0.5;
+    const cy = ((minY + maxY) * 0.5) - (boxH * 0.08);
+
+    // Keep batter framed reasonably tight while preserving a portrait window.
+    let cropH = Math.max(boxH * 1.75, 0.56);
+    let cropW = cropH * PORTRAIT_ASPECT;
+    cropW = Math.max(cropW, boxW * 1.55);
+    cropH = cropW / PORTRAIT_ASPECT;
+    cropH = Math.min(cropH, 0.95);
+    cropW = Math.min(cropW, 0.95);
+
+    let x = cx - cropW * 0.5;
+    let y = cy - cropH * 0.5;
+    x = Math.max(0, Math.min(1 - cropW, x));
+    y = Math.max(0, Math.min(1 - cropH, y));
+    return { x, y, w: cropW, h: cropH };
+}
+
+function smoothCropSeries(crops, radius = 2) {
+    if (!crops || !crops.length) return [];
+    const out = new Array(crops.length).fill(null);
+    for (let i = 0; i < crops.length; i += 1) {
+        let sx = 0, sy = 0, sw = 0, sh = 0, n = 0;
+        for (let k = -radius; k <= radius; k += 1) {
+            const j = i + k;
+            if (j < 0 || j >= crops.length) continue;
+            const c = crops[j];
+            if (!c) continue;
+            sx += c.x; sy += c.y; sw += c.w; sh += c.h; n += 1;
+        }
+        if (n) out[i] = { x: sx / n, y: sy / n, w: sw / n, h: sh / n };
+    }
+    return out;
+}
+
+function buildPortraitCropSeries(landmarksSeq) {
+    if (!landmarksSeq || !landmarksSeq.length) return [];
+    const raw = new Array(landmarksSeq.length).fill(null);
+    let prev = null;
+    for (let i = 0; i < landmarksSeq.length; i += 1) {
+        const c = computePortraitCropFromLandmarks(landmarksSeq[i], prev);
+        raw[i] = c;
+        if (c) prev = c;
+    }
+    const smooth = smoothCropSeries(raw, 2);
+    let last = null;
+    for (let i = 0; i < smooth.length; i += 1) {
+        if (smooth[i]) last = smooth[i];
+        else if (last) smooth[i] = last;
+    }
+    return smooth;
+}
+
+async function bitmapToPortraitPNG(bitmap, crop) {
+    const out = new OffscreenCanvas(PORTRAIT_OUT_W, PORTRAIT_OUT_H);
+    const outCtx = out.getContext("2d");
+    outCtx.fillStyle = "black";
+    outCtx.fillRect(0, 0, PORTRAIT_OUT_W, PORTRAIT_OUT_H);
+
+    let sx = 0;
+    let sy = 0;
+    let sw = bitmap.width;
+    let sh = bitmap.height;
+    if (crop) {
+        sx = Math.max(0, Math.floor(crop.x * bitmap.width));
+        sy = Math.max(0, Math.floor(crop.y * bitmap.height));
+        sw = Math.max(1, Math.floor(crop.w * bitmap.width));
+        sh = Math.max(1, Math.floor(crop.h * bitmap.height));
+        if (sx + sw > bitmap.width) sw = bitmap.width - sx;
+        if (sy + sh > bitmap.height) sh = bitmap.height - sy;
+    } else {
+        const srcAspect = bitmap.width / bitmap.height;
+        if (srcAspect > PORTRAIT_ASPECT) {
+            sw = Math.max(1, Math.floor(bitmap.height * PORTRAIT_ASPECT));
+            sx = Math.floor((bitmap.width - sw) * 0.5);
+        } else {
+            sh = Math.max(1, Math.floor(bitmap.width / PORTRAIT_ASPECT));
+            sy = Math.floor((bitmap.height - sh) * 0.5);
+        }
+    }
+    outCtx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, PORTRAIT_OUT_W, PORTRAIT_OUT_H);
+    const blob = await out.convertToBlob({ type: "image/png" });
     return new Uint8Array(await blob.arrayBuffer());
 }
 
@@ -2150,14 +2261,23 @@ async function trimAndUpload() {
     });
     await ffmpeg.load();
 
-    updateProgress(25, "Preparing framesâ€¦");
+    const selectedLandmarks = poseLandmarksFrames
+        ? poseLandmarksFrames.slice(startFrame, contactFrame + 1)
+        : [];
+    const usePortraitCrop = selectedLandmarks.some((lm) => !!lm);
+    const portraitCrops = usePortraitCrop ? buildPortraitCropSeries(selectedLandmarks) : null;
+
+    updateProgress(25, usePortraitCrop ? "Preparing portrait framesâ€¦" : "Preparing framesâ€¦");
 
     const selected = frames.slice(startFrame, contactFrame + 1);
     const trimmedDecision = decisionFrame - startFrame;
 
     for (let i = 0; i < selected.length; i++) {
+        const framePng = usePortraitCrop
+            ? await bitmapToPortraitPNG(selected[i], portraitCrops ? portraitCrops[i] : null)
+            : await bitmapToPNG(selected[i]);
         ffmpeg.FS("writeFile", `f_${i}.png`,
-            await bitmapToPNG(selected[i]));
+            framePng);
         if (i % 5 === 0) {
             updateProgress(25 + (i / selected.length) * 30,
                 `Preparing frame ${i}/${selected.length}`);
