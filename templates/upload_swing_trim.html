@@ -31,6 +31,10 @@
 <!-- SLIDER -->
 <input type="range" id="frame_slider" min="0" max="0" value="0"
        style="width:320px; margin-top:10px;">
+<div style="margin-top:6px;">
+    <button id="prev_frame_btn">Previous</button>
+    <button id="next_frame_btn">Next</button>
+</div>
 
 <div style="margin-top:10px;">
     <button id="pick_batter_btn">Pick Batter</button>
@@ -60,6 +64,14 @@
 
 <div id="upload_status"
      style="margin-top:10px;font-weight:bold;"></div>
+
+<div style="margin-top:16px;">
+    <button id="export_pose_table_btn">Export Pose Table CSV</button>
+    <button id="copy_pose_table_btn" style="margin-left:6px;">Copy CSV</button>
+</div>
+<textarea id="pose_table_output"
+          style="margin-top:8px;width:100%;max-width:1100px;height:180px;font-family:monospace;font-size:12px;"
+          placeholder="Build charts first, then click Export Pose Table CSV."></textarea>
 
 <script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
@@ -95,6 +107,7 @@ let graphReady = false;
 let contactSeries = null;
 let contactSmoothedSeries = null;
 let decisionSeries = null;
+let decisionDisplaySeries = null;
 let startSeries = null;
 let startKneeSeries = null;
 let startHipSeries = null;
@@ -117,6 +130,24 @@ const POSE_CONNECTIONS = [
     [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
     [11, 23], [12, 24], [23, 24], [23, 25], [25, 27],
     [24, 26], [26, 28], [27, 31], [28, 32], [27, 29], [28, 30],
+];
+const POSE_LANDMARK_NAMES = [
+    "nose",
+    "left_eye_inner", "left_eye", "left_eye_outer",
+    "right_eye_inner", "right_eye", "right_eye_outer",
+    "left_ear", "right_ear",
+    "mouth_left", "mouth_right",
+    "left_shoulder", "right_shoulder",
+    "left_elbow", "right_elbow",
+    "left_wrist", "right_wrist",
+    "left_pinky", "right_pinky",
+    "left_index", "right_index",
+    "left_thumb", "right_thumb",
+    "left_hip", "right_hip",
+    "left_knee", "right_knee",
+    "left_ankle", "right_ankle",
+    "left_heel", "right_heel",
+    "left_foot_index", "right_foot_index",
 ];
 
 ////////////////////////////////////////////////////////////
@@ -901,6 +932,46 @@ function smoothSeries(series, radius = 2) {
     }
     return out;
 }
+
+function landmarkVisible(p, minV = 0.45) {
+    if (!p) return false;
+    const v = Number.isFinite(p.visibility) ? p.visibility : 1;
+    return v >= minV;
+}
+
+function shoulderWidth(lm) {
+    if (!lm || !lm[11] || !lm[12]) return null;
+    return Math.hypot(lm[11].x - lm[12].x, lm[11].y - lm[12].y);
+}
+
+// Display-only hand-speed series (does not affect decision detection).
+function buildDecisionDisplaySeries(landmarks) {
+    if (!landmarks || !landmarks.length) return [];
+    const n = landmarks.length;
+    const out = new Array(n).fill(null);
+    for (let i = 1; i < n; i += 1) {
+        const prev = landmarks[i - 1];
+        const curr = landmarks[i];
+        if (!prev || !curr) continue;
+
+        const sw0 = shoulderWidth(prev);
+        const sw1 = shoulderWidth(curr);
+        const norm = Math.max(0.05, Number.isFinite(sw0) && Number.isFinite(sw1) ? (sw0 + sw1) * 0.5 : 0.05);
+
+        let speed = 0;
+        const wrists = [15, 16];
+        for (const wi of wrists) {
+            const p0 = prev[wi];
+            const p1 = curr[wi];
+            if (!landmarkVisible(p0) || !landmarkVisible(p1)) continue;
+            const d = Math.hypot(p1.x - p0.x, p1.y - p0.y) / norm;
+            if (d > speed) speed = d;
+        }
+        if (speed > 0) out[i] = speed;
+    }
+    return smoothSeries(out, 1);
+}
+
 function ensureGraphCanvas(id, anchorId) {
     let c = document.getElementById(id);
     if (!c) {
@@ -1163,13 +1234,38 @@ function drawMultiSeriesChart(canvasId, title, seriesSet, markerIdx, selectedIdx
     g.fillText(title, 8, 16);
 }
 
-function detectContactFrameFromHipSeries(series, selectedIdx) {
+////////////////////////////////////////////////////////////
+// MARKER DETECTION RULES (DOCUMENTATION)
+////////////////////////////////////////////////////////////
+// Contact rule set:
+// 1) Use RAW hip-distance series (blue), not smoothed, for selection.
+// 2) Ignore early setup jitter via a warmup window.
+// 3) Candidate contact must be a local peak.
+// 4) Prefer the FIRST peak that is:
+//    - at least 65% of the max local peak, and
+//    - has sufficient incoming acceleration.
+// 5) If no "fast" peak clears threshold, use first >=65% peak.
+// 6) If no peak clears threshold, use strongest remaining raw peak.
+// 7) Hard gate: contact cannot occur before hand-speed onset
+//    (implemented as minContactIdx = decisionOnset + 1).
+//
+// Decision rule set:
+// 1) Default decision is 5 frames before contact.
+// 2) Allow slower swings up to 7 before contact, and fast swings up to 4 before contact.
+// 3) Start from 5-before and adjust within [contact-7, contact-4] using local hand-speed shape.
+//
+// Start rule set:
+// 1) Prefer first sustained lead-heel lift onset.
+// 2) Fallback to first sustained forward move of lead knee/hip.
+// 3) Keep start before decision/contact window.
+function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0) {
     if (!series || !series.length) return null;
     const n = series.length;
     const anchor = Math.max(0, Math.min(n - 1, Number.isFinite(selectedIdx) ? selectedIdx : 0));
+    const floorIdx = Math.max(0, Math.min(n - 1, Number.isFinite(minContactIdx) ? Math.round(minContactIdx) : 0));
 
-    const smoothed = smoothSeries(series, 2);
-    const vals = smoothed.filter((v) => Number.isFinite(v));
+    const raw = series.map((v) => (Number.isFinite(v) ? v : null));
+    const vals = raw.filter((v) => Number.isFinite(v));
     if (!vals.length) return anchor;
 
     const minV = Math.min(...vals);
@@ -1178,8 +1274,8 @@ function detectContactFrameFromHipSeries(series, selectedIdx) {
 
     const deriv = new Array(n).fill(0);
     for (let i = 1; i < n; i += 1) {
-        if (Number.isFinite(smoothed[i]) && Number.isFinite(smoothed[i - 1])) {
-            deriv[i] = smoothed[i] - smoothed[i - 1];
+        if (Number.isFinite(raw[i]) && Number.isFinite(raw[i - 1])) {
+            deriv[i] = raw[i] - raw[i - 1];
         }
     }
 
@@ -1192,13 +1288,14 @@ function detectContactFrameFromHipSeries(series, selectedIdx) {
 
     // Ignore early setup jitter.
     const warmup = Math.max(6, Math.min(14, Math.floor(n * 0.15)));
+    const scanStart = Math.max(2, warmup, floorIdx);
 
     const minRiseVel = Math.max(q(posDer, 0.70), range * 0.025);
     const minRise = range * 0.18;
     const minDrop = range * 0.06;
     const minLevel = minV + range * 0.45;
 
-    const snapForwardRawPeak = (baseIdx, maxAhead = 2) => {
+    const snapForwardRawPeak = (baseIdx, maxAhead = 0) => {
         const b = Math.max(0, Math.min(n - 1, baseIdx));
         const e = Math.max(b, Math.min(n - 1, b + maxAhead));
         let out = b;
@@ -1215,21 +1312,21 @@ function detectContactFrameFromHipSeries(series, selectedIdx) {
     };
 
     const peaks = [];
-    for (let i = Math.max(2, warmup); i <= n - 3; i += 1) {
-        const a = smoothed[i - 1], b = smoothed[i], c = smoothed[i + 1];
+    for (let i = scanStart; i <= n - 3; i += 1) {
+        const a = raw[i - 1], b = raw[i], c = raw[i + 1];
         if (![a, b, c].every(Number.isFinite)) continue;
         if (!(b >= a && b > c)) continue;
 
         let preMin = Infinity;
         for (let j = Math.max(0, i - 10); j < i; j += 1) {
-            const v = smoothed[j];
+            const v = raw[j];
             if (Number.isFinite(v)) preMin = Math.min(preMin, v);
         }
         if (!Number.isFinite(preMin)) continue;
 
         let postMin = b;
         for (let j = i + 1; j <= Math.min(n - 1, i + 6); j += 1) {
-            const v = smoothed[j];
+            const v = raw[j];
             if (Number.isFinite(v)) postMin = Math.min(postMin, v);
         }
 
@@ -1243,60 +1340,56 @@ function detectContactFrameFromHipSeries(series, selectedIdx) {
         const major = b >= minLevel && rise >= minRise && drop >= minDrop && inVel >= minRiseVel;
         peaks.push({ i, val: b, rise, drop, inVel, major });
     }
+    const maxPeakVal = peaks.length ? Math.max(...peaks.map((p) => p.val)) : -Infinity;
+    const minComparablePeakVal = Number.isFinite(maxPeakVal) ? (maxPeakVal * 0.65) : -Infinity;
 
-    // Primary: first major crest after warmup.
-    const firstMajor = peaks.find((p) => p.major);
-    if (firstMajor) return snapForwardRawPeak(firstMajor.i, 2);
+    // Primary rule (strict): first local peak with fast acceleration
+    // whose height is at least 65% of the highest local peak.
+    const firstBigFast = peaks.find((p) =>
+        p.val >= minComparablePeakVal &&
+        p.inVel >= minRiseVel
+    );
+    if (firstBigFast) return snapForwardRawPeak(firstBigFast.i);
 
-    // Secondary: first strong crest in upper band.
-    const upperBand = minV + range * 0.60;
-    const firstStrong = peaks.find((p) => p.val >= upperBand && p.rise >= range * 0.12);
-    if (firstStrong) return snapForwardRawPeak(firstStrong.i, 2);
+    // Secondary (still threshold-bound): first >=65% peak, even if acceleration is weak.
+    const firstBig = peaks.find((p) => p.val >= minComparablePeakVal);
+    if (firstBig) return snapForwardRawPeak(firstBig.i);
 
-    // Fallback: strongest smoothed crest after warmup (not anchor-biased).
+    // Fallback: strongest peak only when no peak clears the threshold.
     if (peaks.length) {
         let best = peaks[0];
-        let bestScore = -Infinity;
         for (const p of peaks) {
-            const score = p.val * 3.0 + p.rise * 2.2 + p.drop * 1.2 + p.inVel * 1.8 - p.i * 0.01;
-            if (score > bestScore) {
-                bestScore = score;
-                best = p;
-            }
+            if (p.val > best.val) best = p;
         }
-        return snapForwardRawPeak(best.i, 2);
+        return snapForwardRawPeak(best.i);
     }
 
-    // Last resort: maximum smoothed point after warmup.
-    let bestIdx = warmup;
+    // Last resort: maximum raw point after warmup.
+    let bestIdx = Math.max(warmup, floorIdx);
     let bestVal = -Infinity;
-    for (let i = warmup; i < n; i += 1) {
-        const v = smoothed[i];
+    for (let i = Math.max(warmup, floorIdx); i < n; i += 1) {
+        const v = raw[i];
         if (!Number.isFinite(v)) continue;
         if (v > bestVal) {
             bestVal = v;
             bestIdx = i;
         }
     }
-    if (Number.isFinite(bestVal)) return snapForwardRawPeak(bestIdx, 2);
+    if (Number.isFinite(bestVal)) return snapForwardRawPeak(bestIdx);
 
-    return anchor;
+    return Math.max(anchor, floorIdx);
 }
 
-function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) {
+function detectHandOnsetForContactGate(series, fallbackIdx = 0) {
     if (!series || !series.length) return 0;
     const n = series.length;
     const clamp = (v) => Math.max(0, Math.min(n - 1, v));
     const smoothed = smoothSeries(series, 1);
 
     const warmup = Math.max(2, Math.min(10, Math.floor(n * 0.10)));
-    let end = n - 1;
-    if (Number.isFinite(contactIdx)) {
-        end = Math.max(warmup + 2, Math.min(n - 1, Math.round(contactIdx) - 2));
-    }
     const start = warmup + 1;
+    const end = n - 1;
 
-    // Decision = onset of the pre-contact hand-speed ramp, not the late peak.
     const baseVals = [];
     for (let i = warmup; i <= Math.min(end, warmup + 8); i += 1) {
         const v = smoothed[i];
@@ -1314,12 +1407,10 @@ function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) 
             peakIdx = i;
         }
     }
-
     if (peakIdx >= 0 && Number.isFinite(peakVal)) {
         const rise = Math.max(0, peakVal - baseline);
         const onsetLevel = baseline + rise * 0.28;
         const minRiseStep = Math.max(0.0008, rise * 0.03);
-
         for (let i = Math.max(start, 1); i <= peakIdx; i += 1) {
             const v0 = smoothed[i - 1];
             const v1 = smoothed[i];
@@ -1332,31 +1423,59 @@ function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) 
         }
     }
 
-    // Fallback: strongest positive jump before contact.
-    let bestJump = -Infinity;
-    let bestJumpIdx = -1;
-    for (let i = Math.max(start, 1); i <= end; i += 1) {
+    return clamp(Number.isFinite(fallbackIdx) ? Math.round(fallbackIdx) : warmup);
+}
+
+function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) {
+    if (!series || !series.length) return 0;
+    const n = series.length;
+    const clamp = (v) => Math.max(0, Math.min(n - 1, v));
+    const smoothed = smoothSeries(series, 1);
+
+    if (!Number.isFinite(contactIdx)) {
+        return clamp(Number.isFinite(fallbackIdx) ? Math.round(fallbackIdx) : 0);
+    }
+
+    const contact = clamp(Math.round(contactIdx));
+    // Decision defaults to 5 before contact, with bounded adjustment.
+    const defaultDecision = clamp(contact - 5);
+    const slowBound = clamp(contact - 7);
+    const fastBound = clamp(contact - 4);
+
+    let winStart = Math.min(slowBound, fastBound);
+    let winEnd = Math.max(slowBound, fastBound);
+    winEnd = Math.min(winEnd, contact - 1);
+    winStart = Math.max(1, Math.min(winStart, winEnd));
+
+    const baseVals = [];
+    const baseStart = Math.max(1, winStart - 6);
+    const baseEnd = Math.max(baseStart, winStart - 2);
+    for (let i = baseStart; i <= baseEnd; i += 1) {
+        const v = smoothed[i];
+        if (Number.isFinite(v)) baseVals.push(v);
+    }
+    const baseline = baseVals.length ? (baseVals.reduce((a, b) => a + b, 0) / baseVals.length) : 0;
+
+    let bestIdx = defaultDecision;
+    let bestScore = -Infinity;
+    for (let i = winStart; i <= winEnd; i += 1) {
         const v0 = smoothed[i - 1];
         const v1 = smoothed[i];
-        if (!Number.isFinite(v0) || !Number.isFinite(v1)) continue;
-        const jump = v1 - v0;
-        if (jump > bestJump) {
-            bestJump = jump;
-            bestJumpIdx = i;
-        }
-    }
-    if (bestJumpIdx > 0) return clamp(bestJumpIdx - 1);
+        const v2 = smoothed[Math.min(winEnd, i + 1)];
+        if (![v0, v1, v2].every(Number.isFinite)) continue;
 
-    let bestIdx = Number.isFinite(fallbackIdx) ? clamp(Math.round(fallbackIdx)) : warmup;
-    let bestVal = -Infinity;
-    for (let i = warmup; i <= end; i += 1) {
-        const v = smoothed[i];
-        if (!Number.isFinite(v)) continue;
-        if (v > bestVal) {
-            bestVal = v;
+        const riseNow = v1 - v0;
+        const sustain = Math.max(0, v2 - v0);
+        const level = Math.max(0, v1 - baseline);
+        const centerPenalty = Math.abs(i - defaultDecision) * 0.03;
+        const score = riseNow * 2.0 + sustain * 1.2 + level * 0.8 - centerPenalty;
+        if (score > bestScore) {
+            bestScore = score;
             bestIdx = i;
         }
     }
+
+    if (!Number.isFinite(bestScore) || bestScore < 0) return defaultDecision;
     return clamp(bestIdx);
 }
 
@@ -1604,7 +1723,7 @@ function updateGraphLine(selectedIdx) {
     drawSeriesChart(
         "graph-decision",
         "Decision: Hand Speed | marker=decision | contact=blue | selected=white",
-        decisionSeries,
+        decisionDisplaySeries || decisionSeries,
         decisionFrame,
         selectedIdx,
         [
@@ -1624,10 +1743,65 @@ function updateGraphLine(selectedIdx) {
     );
 }
 
+function eventTypeForFrame(i) {
+    if (i === startFrame) return "start";
+    if (i === decisionFrame) return "decision";
+    if (i === contactFrame) return "contact";
+    return "null";
+}
+
+function csvEscape(v) {
+    const s = v == null ? "" : String(v);
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, "\"\"")}"`;
+    return s;
+}
+
+function buildPoseTableCSV() {
+    const rows = [];
+    rows.push(["frame_number", "event_type", "mediapipe_pose_marker", "mediapipe_pose_data"]);
+    const frameCount = frames.length || (poseLandmarksFrames ? poseLandmarksFrames.length : 0);
+    const hasContact = Number.isFinite(contactFrame) && contactFrame >= 0;
+    const exportEnd = hasContact
+        ? Math.min(frameCount - 1, Math.round(contactFrame) + 10)
+        : Math.max(0, frameCount - 1);
+
+    for (let fi = 0; fi <= exportEnd; fi += 1) {
+        const frameLm = poseLandmarksFrames && poseLandmarksFrames[fi] ? poseLandmarksFrames[fi] : null;
+        const eventType = eventTypeForFrame(fi);
+        for (let li = 0; li < POSE_LANDMARK_NAMES.length; li += 1) {
+            const marker = POSE_LANDMARK_NAMES[li] || `landmark_${li}`;
+            const lm = frameLm && frameLm[li] ? frameLm[li] : null;
+            const poseData = lm ? JSON.stringify(lm) : "null";
+            rows.push([fi, eventType, marker, poseData]);
+        }
+    }
+    return {
+        csv: rows.map((r) => r.map(csvEscape).join(",")).join("\n"),
+        exportEnd,
+    };
+}
+
 ////////////////////////////////////////////////////////////
 // SCRUBBING
 ////////////////////////////////////////////////////////////
 slider.oninput = () => drawFrame(+slider.value);
+
+document.getElementById("prev_frame_btn").onclick = () => {
+    if (!frames.length) return;
+    const curr = +slider.value || 0;
+    const next = Math.max(0, curr - 1);
+    slider.value = next;
+    drawFrame(next);
+};
+
+document.getElementById("next_frame_btn").onclick = () => {
+    if (!frames.length) return;
+    const curr = +slider.value || 0;
+    const maxIdx = Math.max(0, frames.length - 1);
+    const next = Math.min(maxIdx, curr + 1);
+    slider.value = next;
+    drawFrame(next);
+};
 
 document.getElementById("goto_start_btn").onclick = () => {
     if (!frames.length) return;
@@ -1741,12 +1915,16 @@ document.getElementById("build_charts_btn").onclick = async () => {
         if (!contactSmoothedSeries || !contactSmoothedSeries.length) {
             contactSmoothedSeries = smoothSeries(contactSeries, 2);
         }
-        const selectedNow = +slider.value || 0;
-        const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow);
-        if (Number.isFinite(autoContact)) contactFrame = autoContact;
-        if (!Number.isFinite(decisionFrame) || decisionFrame <= 0 || decisionFrame >= contactFrame) {
-            decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, decisionFrame);
+        if ((!decisionDisplaySeries || !decisionDisplaySeries.length) && poseLandmarksFrames && poseLandmarksFrames.length) {
+            decisionDisplaySeries = buildDecisionDisplaySeries(poseLandmarksFrames);
         }
+        const selectedNow = +slider.value || 0;
+        // Enforce ordering rule: decision (hands fast) must happen before contact.
+        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, decisionFrame);
+        const minContactIdx = Math.max(0, handOnsetGate + 1);
+        const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow, minContactIdx);
+        if (Number.isFinite(autoContact)) contactFrame = autoContact;
+        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
         if (!startRawSeries || !startRawKneeSeries || !startRawHipSeries) {
             const leadIdxReuse = leadSide === "left"
                 ? { heel: 27, knee: 25, hip: 23 }
@@ -1792,6 +1970,7 @@ document.getElementById("build_charts_btn").onclick = async () => {
     contactSeries = new Array(n).fill(null);
     contactSmoothedSeries = null;
     decisionSeries = new Array(n).fill(0);
+    decisionDisplaySeries = new Array(n).fill(null);
     startSeries = new Array(n).fill(null);
     startKneeSeries = new Array(n).fill(null);
     startHipSeries = new Array(n).fill(null);
@@ -1846,15 +2025,17 @@ document.getElementById("build_charts_btn").onclick = async () => {
     }
 
     contactSmoothedSeries = smoothSeries(contactSeries, 2);
+    decisionDisplaySeries = buildDecisionDisplaySeries(landmarks);
 
     const selectedNow = +slider.value || 0;
-    const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow);
+    // Enforce ordering rule: decision (hands fast) must happen before contact.
+    const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, decisionFrame);
+    const minContactIdx = Math.max(0, handOnsetGate + 1);
+    const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow, minContactIdx);
     if (Number.isFinite(autoContact)) {
         contactFrame = autoContact;
     }
-    if (!Number.isFinite(decisionFrame) || decisionFrame <= 0 || decisionFrame >= contactFrame) {
-        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, decisionFrame);
-    }
+    decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
     refreshStartChartSeries();
     const autoStart = detectStartFrameFromLeadMotion(
         landmarks,
@@ -1962,6 +2143,31 @@ async function trimAndUpload() {
 
 document.getElementById("finalize_btn").onclick = trimAndUpload;
 
+document.getElementById("export_pose_table_btn").onclick = () => {
+    if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
+        markerStatus.textContent = "No pose data yet. Click Autodetect first.";
+        return;
+    }
+    const out = buildPoseTableCSV();
+    const ta = document.getElementById("pose_table_output");
+    ta.value = out.csv;
+    markerStatus.textContent = `Pose table ready: frames 0-${out.exportEnd} x ${POSE_LANDMARK_NAMES.length} landmarks.`;
+};
+
+document.getElementById("copy_pose_table_btn").onclick = async () => {
+    const ta = document.getElementById("pose_table_output");
+    if (!ta.value) {
+        markerStatus.textContent = "Nothing to copy yet. Click Export Pose Table CSV.";
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(ta.value);
+        markerStatus.textContent = "Pose table copied to clipboard.";
+    } catch (e) {
+        markerStatus.textContent = "Clipboard copy failed. Select and copy the text area manually.";
+    }
+};
+
 ////////////////////////////////////////////////////////////
 // START
 ////////////////////////////////////////////////////////////
@@ -1969,4 +2175,5 @@ loadVideo();
 </script>
 
 {% endblock %}
+
 
