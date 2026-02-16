@@ -15,62 +15,124 @@
 
 <p id="info">Loading videoâ€¦</p>
 
-<!-- PREVIEW -->
-<canvas id="preview" width="320" height="320"
-        style="border:1px solid #333; background:black;"></canvas>
+<style>
+.trim-workspace {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+.trim-preview-pane {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: max-content;
+}
+.trim-controls-pane {
+    width: 360px;
+}
+.trim-preview-controls {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+.trim-small-btn {
+    padding: 2px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+.trim-icon-btn {
+    width: 34px;
+    height: 26px;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+}
+.trim-row-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.trim-row-3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.trim-btn {
+    width: 100%;
+}
+@media (max-width: 900px) {
+    .trim-controls-pane {
+        width: 320px;
+    }
+}
+</style>
 
-<!-- ZOOM CONTROLS -->
-<div style="margin-top:6px;">
-    <button id="zoom_out">Smaller</button>
-    <button id="zoom_reset">Reset</button>
-    <button id="zoom_in">Larger</button>
+<div class="trim-workspace">
+    <div class="trim-preview-pane">
+        <!-- PREVIEW -->
+        <canvas id="preview" width="320" height="320"
+                style="border:1px solid #333; background:black;"></canvas>
+
+        <div class="trim-preview-controls">
+            <button id="zoom_out" class="trim-small-btn">Smaller</button>
+            <button id="zoom_reset" class="trim-small-btn">Reset</button>
+            <button id="zoom_in" class="trim-small-btn">Larger</button>
+        </div>
+
+        <div class="trim-preview-controls">
+            <button id="prev_frame_btn" class="trim-icon-btn" title="Previous Frame" aria-label="Previous Frame">&#9664;</button>
+            <button id="next_frame_btn" class="trim-icon-btn" title="Next Frame" aria-label="Next Frame">&#9654;</button>
+        </div>
+
+        <!-- SLIDER -->
+        <input type="range" id="frame_slider" min="0" max="0" value="0"
+               style="width:100%; margin-top:10px;">
+    </div>
+
+    <div class="trim-controls-pane">
+        <div class="trim-row-2">
+            <button id="pick_batter_btn" class="trim-btn">Pick Batter</button>
+            <button id="build_charts_btn" class="trim-btn">Autodetect</button>
+        </div>
+
+        <!-- MARKERS -->
+        <div class="trim-row-3" style="margin-top:12px;">
+            <button id="goto_start_btn" class="trim-btn">Go to Start</button>
+            <button id="goto_decision_btn" class="trim-btn">Go to Decision</button>
+            <button id="goto_contact_btn" class="trim-btn">Go to Contact</button>
+        </div>
+
+        <div class="trim-row-3">
+            <button id="set_start_btn" class="trim-btn">Set Start Manually</button>
+            <button id="set_decision_btn" class="trim-btn">Set Decision Manually</button>
+            <button id="set_contact_btn" class="trim-btn">Set Contact Manually</button>
+        </div>
+
+        <div id="marker_status"
+             style="margin-top:10px;font-weight:bold;"></div>
+
+        <button id="finalize_btn"
+                class="trim-btn"
+                style="margin-top:16px;font-size:18px;">
+            Finalize Swing
+        </button>
+
+        <div id="upload_status"
+             style="margin-top:10px;font-weight:bold;"></div>
+
+        <div class="trim-row-2" style="margin-top:12px;">
+            <button id="export_pose_table_btn" class="trim-btn">Export Pose Table CSV</button>
+            <button id="copy_pose_table_btn" class="trim-btn">Copy CSV</button>
+        </div>
+    </div>
 </div>
 
-<br>
-
-<!-- SLIDER -->
-<input type="range" id="frame_slider" min="0" max="0" value="0"
-       style="width:320px; margin-top:10px;">
-<div style="margin-top:6px;">
-    <button id="prev_frame_btn">Previous</button>
-    <button id="next_frame_btn">Next</button>
-</div>
-
-<div style="margin-top:10px;">
-    <button id="pick_batter_btn">Pick Batter</button>
-    <button id="build_charts_btn">Autodetect</button>
-</div>
-
-<!-- MARKERS -->
-<div style="margin-top:15px;">
-    <button id="goto_start_btn">Go to Start</button>
-    <button id="goto_decision_btn">Go to Decision</button>
-    <button id="goto_contact_btn">Go to Contact</button>
-</div>
-
-<div style="margin-top:10px;">
-    <button id="set_start_btn">Set Start Manually</button>
-    <button id="set_decision_btn">Set Decision Manually</button>
-    <button id="set_contact_btn">Set Contact Manually</button>
-</div>
-
-<div id="marker_status"
-     style="margin-top:10px;font-weight:bold;"></div>
-
-<button id="finalize_btn"
-        style="margin-top:20px;font-size:18px;">
-    Finalize Swing
-</button>
-
-<div id="upload_status"
-     style="margin-top:10px;font-weight:bold;"></div>
-
-<div style="margin-top:16px;">
-    <button id="export_pose_table_btn">Export Pose Table CSV</button>
-    <button id="copy_pose_table_btn" style="margin-left:6px;">Copy CSV</button>
-</div>
 <textarea id="pose_table_output"
-          style="margin-top:8px;width:100%;max-width:1100px;height:180px;font-family:monospace;font-size:12px;"
+          style="margin-top:10px;width:100%;max-width:1100px;height:180px;font-family:monospace;font-size:12px;"
           placeholder="Build charts first, then click Export Pose Table CSV."></textarea>
 
 <script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
