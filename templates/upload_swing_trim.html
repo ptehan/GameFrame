@@ -22,8 +22,8 @@
 <!-- ZOOM CONTROLS -->
 <div style="margin-top:6px;">
     <button id="zoom_out">Smaller</button>
-    <button id="zoom_reset">Reset  </button>
-    <button id="zoom_in">Larger </button>
+    <button id="zoom_reset">Reset</button>
+    <button id="zoom_in">Larger</button>
 </div>
 
 <br>
@@ -33,19 +33,21 @@
        style="width:320px; margin-top:10px;">
 
 <div style="margin-top:10px;">
-    <button id="prev_btn">&laquo; Prev</button>
-    <button id="next_btn">Next &raquo;</button>
-    <button id="goto_decision_btn">Go Decision</button>
-    <button id="goto_contact_btn">Go Contact</button>
+    <button id="pick_batter_btn">Pick Batter</button>
+    <button id="build_charts_btn">Autodetect</button>
 </div>
 
 <!-- MARKERS -->
 <div style="margin-top:15px;">
-    <button id="set_start_btn">Set Start</button>
-    <button id="set_decision_btn">Set Decision</button>
-    <button id="set_contact_btn">Set Contact</button>
-    <button id="build_charts_btn">Build Charts</button>
-    <button id="pick_batter_btn">Pick Batter</button>
+    <button id="goto_start_btn">Go to Start</button>
+    <button id="goto_decision_btn">Go to Decision</button>
+    <button id="goto_contact_btn">Go to Contact</button>
+</div>
+
+<div style="margin-top:10px;">
+    <button id="set_start_btn">Set Start Manually</button>
+    <button id="set_decision_btn">Set Decision Manually</button>
+    <button id="set_contact_btn">Set Contact Manually</button>
 </div>
 
 <div id="marker_status"
@@ -96,10 +98,15 @@ let decisionSeries = null;
 let startSeries = null;
 let startKneeSeries = null;
 let startHipSeries = null;
+let startRawSeries = null;
+let startRawKneeSeries = null;
+let startRawHipSeries = null;
+let startRawHeelYSeries = null;
 let poseLandmarksFrames = null;
 let manualSeedPoint = null;
 let awaitingManualPick = false;
 let lastBuildSeedPoint = null;
+let leadSide = "left";
 const GRAPH_W = 1000;
 const GRAPH_H = 220;
 
@@ -1287,11 +1294,48 @@ function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) 
     if (Number.isFinite(contactIdx)) {
         end = Math.max(warmup + 2, Math.min(n - 1, Math.round(contactIdx) - 2));
     }
-    const start = Math.max(warmup + 1, end - 14);
+    const start = warmup + 1;
 
+    // Decision = onset of the pre-contact hand-speed ramp, not the late peak.
+    const baseVals = [];
+    for (let i = warmup; i <= Math.min(end, warmup + 8); i += 1) {
+        const v = smoothed[i];
+        if (Number.isFinite(v)) baseVals.push(v);
+    }
+    const baseline = baseVals.length ? (baseVals.reduce((a, b) => a + b, 0) / baseVals.length) : 0;
+
+    let peakIdx = -1;
+    let peakVal = -Infinity;
+    for (let i = start; i <= end; i += 1) {
+        const v = smoothed[i];
+        if (!Number.isFinite(v)) continue;
+        if (v > peakVal) {
+            peakVal = v;
+            peakIdx = i;
+        }
+    }
+
+    if (peakIdx >= 0 && Number.isFinite(peakVal)) {
+        const rise = Math.max(0, peakVal - baseline);
+        const onsetLevel = baseline + rise * 0.28;
+        const minRiseStep = Math.max(0.0008, rise * 0.03);
+
+        for (let i = Math.max(start, 1); i <= peakIdx; i += 1) {
+            const v0 = smoothed[i - 1];
+            const v1 = smoothed[i];
+            const v2 = smoothed[Math.min(end, i + 1)];
+            if (![v0, v1, v2].every(Number.isFinite)) continue;
+            const crossesOnset = v1 >= onsetLevel;
+            const risingNow = (v1 - v0) >= minRiseStep;
+            const sustained = v2 >= v1 * 0.90;
+            if (crossesOnset && risingNow && sustained) return clamp(i);
+        }
+    }
+
+    // Fallback: strongest positive jump before contact.
     let bestJump = -Infinity;
     let bestJumpIdx = -1;
-    for (let i = start; i <= end; i += 1) {
+    for (let i = Math.max(start, 1); i <= end; i += 1) {
         const v0 = smoothed[i - 1];
         const v1 = smoothed[i];
         if (!Number.isFinite(v0) || !Number.isFinite(v1)) continue;
@@ -1316,6 +1360,244 @@ function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) 
     return clamp(bestIdx);
 }
 
+function detectStartFrameFromLeadMotion(landmarks, leadIdx, decisionIdx, contactIdx, fpsVal = 30) {
+    if (!landmarks || !landmarks.length || !leadIdx) return 0;
+    const n = landmarks.length;
+    const clamp = (v) => Math.max(0, Math.min(n - 1, v));
+    const toInt = (v, d) => (Number.isFinite(v) ? clamp(Math.round(v)) : d);
+
+    const decision = toInt(decisionIdx, n - 1);
+    const contact = toInt(contactIdx, n - 1);
+    const maxLookback = Math.max(8, Math.round((Number.isFinite(fpsVal) ? fpsVal : 30) * 1.2));
+    const winStart = Math.max(1, contact - maxLookback);
+    const winEnd = Math.max(winStart + 1, Math.min(decision, contact - 1));
+
+    if (winEnd <= winStart) return clamp(Math.max(0, decision - 6));
+
+    const heelY = new Array(n).fill(null);
+    const kneeX = new Array(n).fill(null);
+    const hipX = new Array(n).fill(null);
+    for (let i = 0; i < n; i += 1) {
+        const lm = landmarks[i];
+        if (!lm) continue;
+        if (lm[leadIdx.heel]) heelY[i] = lm[leadIdx.heel].y;
+        if (lm[leadIdx.knee]) kneeX[i] = lm[leadIdx.knee].x;
+        if (lm[leadIdx.hip]) hipX[i] = lm[leadIdx.hip].x;
+    }
+
+    const heelYSmooth = smoothSeries(heelY, 1);
+    const kneeXSmooth = smoothSeries(kneeX, 1);
+    const hipXSmooth = smoothSeries(hipX, 1);
+
+    // 1) Heel-lift onset first (y decreases when heel lifts in image coordinates).
+    // Use early-frame "ground" baseline, then pick first sustained rise above it.
+    const baselineVals = [];
+    for (let i = winStart; i <= Math.min(winEnd, winStart + 8); i += 1) {
+        const y = heelYSmooth[i];
+        if (Number.isFinite(y)) baselineVals.push(y);
+    }
+    const baselineHeelY = baselineVals.length ? Math.max(...baselineVals) : null;
+    const heelLift = new Array(n).fill(null);
+    if (Number.isFinite(baselineHeelY)) {
+        for (let i = winStart; i <= winEnd; i += 1) {
+            const y = heelYSmooth[i];
+            if (!Number.isFinite(y)) continue;
+            heelLift[i] = Math.max(0, baselineHeelY - y);
+        }
+    }
+
+    if (Number.isFinite(baselineHeelY)) {
+        const liftVals = [];
+        for (let i = winStart; i <= winEnd; i += 1) {
+            if (Number.isFinite(heelLift[i])) liftVals.push(heelLift[i]);
+        }
+        liftVals.sort((a, b) => a - b);
+        const q80 = liftVals.length
+            ? liftVals[Math.floor((liftVals.length - 1) * 0.8)]
+            : 0;
+        const onsetThresh = Math.max(0.0045, q80 * 0.45);
+        const riseThresh = Math.max(0.0010, onsetThresh * 0.22);
+
+        for (let i = Math.max(winStart + 1, 1); i <= winEnd - 1; i += 1) {
+            const v0 = heelLift[i - 1];
+            const v1 = heelLift[i];
+            const v2 = heelLift[i + 1];
+            if (![v0, v1, v2].every(Number.isFinite)) continue;
+            const rising = (v1 - v0) >= riseThresh;
+            const sustained = v1 >= onsetThresh && v2 >= onsetThresh * 0.85;
+            if (rising && sustained) return i;
+        }
+
+        // If lift is clear but onset is noisy, backtrack from first major lift peak.
+        let peakIdx = -1;
+        let peakVal = -Infinity;
+        for (let i = winStart; i <= winEnd; i += 1) {
+            const v = heelLift[i];
+            if (!Number.isFinite(v)) continue;
+            if (v > peakVal) {
+                peakVal = v;
+                peakIdx = i;
+            }
+        }
+        if (peakIdx >= 0 && peakVal >= onsetThresh * 1.2) {
+            const backThresh = Math.max(onsetThresh * 0.55, peakVal * 0.22);
+            for (let j = peakIdx; j >= winStart + 1; j -= 1) {
+                const v = heelLift[j];
+                const p = heelLift[j - 1];
+                if (!Number.isFinite(v) || !Number.isFinite(p)) continue;
+                if (p <= backThresh && v > backThresh) return j;
+            }
+        }
+    }
+
+    // 2) No-stride fallback: first lead knee/hip forward onset.
+    const signedVel = (series, sign) => {
+        const out = new Array(n).fill(null);
+        for (let i = 1; i < n; i += 1) {
+            const a = series[i - 1], b = series[i];
+            if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+            out[i] = sign * (b - a);
+        }
+        return out;
+    };
+
+    let netHip = 0;
+    let netKnee = 0;
+    const tailStart = Math.max(winStart, winEnd - 6);
+    for (let i = tailStart + 1; i <= winEnd; i += 1) {
+        const h0 = hipXSmooth[i - 1], h1 = hipXSmooth[i];
+        const k0 = kneeXSmooth[i - 1], k1 = kneeXSmooth[i];
+        if (Number.isFinite(h0) && Number.isFinite(h1)) netHip += (h1 - h0);
+        if (Number.isFinite(k0) && Number.isFinite(k1)) netKnee += (k1 - k0);
+    }
+    let forwardSign = Math.sign(Math.abs(netHip) >= Math.abs(netKnee) ? netHip : netKnee);
+    if (!forwardSign) forwardSign = 1;
+
+    const hipV = signedVel(hipXSmooth, forwardSign);
+    const kneeV = signedVel(kneeXSmooth, forwardSign);
+    const combo = new Array(n).fill(null);
+    const pos = [];
+    for (let i = winStart; i <= winEnd; i += 1) {
+        const hv = Number.isFinite(hipV[i]) ? hipV[i] : -Infinity;
+        const kv = Number.isFinite(kneeV[i]) ? kneeV[i] : -Infinity;
+        const v = Math.max(hv, kv);
+        if (Number.isFinite(v)) {
+            combo[i] = v;
+            if (v > 0) pos.push(v);
+        }
+    }
+    pos.sort((a, b) => a - b);
+    const q70 = pos.length ? pos[Math.floor((pos.length - 1) * 0.7)] : 0;
+    const moveThresh = Math.max(0.0012, q70);
+
+    for (let i = winStart; i <= winEnd; i += 1) {
+        const v = combo[i];
+        if (!Number.isFinite(v) || v < moveThresh) continue;
+        const nxt = combo[Math.min(winEnd, i + 1)];
+        if (!Number.isFinite(nxt) || nxt < moveThresh * 0.55) continue;
+        return i;
+    }
+
+    // Final fallback: start near decision (not at earliest search bound),
+    // then clamp into valid pre-decision window.
+    return clamp(Math.max(winStart, Math.min(winEnd, decision - 6)));
+}
+
+function computeLeadMotionRawSeries(landmarks, leadIdx) {
+    const n = landmarks ? landmarks.length : 0;
+    const heel = new Array(n).fill(0);
+    const knee = new Array(n).fill(0);
+    const hip = new Array(n).fill(0);
+    const heelY = new Array(n).fill(null);
+    if (n > 0 && landmarks[0] && landmarks[0][leadIdx.heel]) {
+        heelY[0] = landmarks[0][leadIdx.heel].y;
+    }
+    for (let i = 1; i < n; i += 1) {
+        const prev = landmarks[i - 1];
+        const curr = landmarks[i];
+        if (!prev || !curr) continue;
+        const pHeel = prev[leadIdx.heel], cHeel = curr[leadIdx.heel];
+        const pKnee = prev[leadIdx.knee], cKnee = curr[leadIdx.knee];
+        const pHip = prev[leadIdx.hip], cHip = curr[leadIdx.hip];
+        if (pHeel && cHeel) heel[i] = cHeel.x - pHeel.x;
+        if (pKnee && cKnee) knee[i] = cKnee.x - pKnee.x;
+        if (pHip && cHip) hip[i] = cHip.x - pHip.x;
+        if (cHeel) heelY[i] = cHeel.y;
+    }
+    return { heel, knee, hip, heelY };
+}
+
+function computeLeadForwardSign(rawKnee, rawHip, decisionIdx) {
+    if (!rawKnee || !rawHip || !rawKnee.length || !rawHip.length) return 1;
+    const n = Math.min(rawKnee.length, rawHip.length);
+    const end = Math.max(1, Math.min(n - 1, Number.isFinite(decisionIdx) ? Math.round(decisionIdx) - 1 : n - 1));
+    const start = Math.max(1, end - 10);
+    let netKnee = 0;
+    let netHip = 0;
+    for (let i = start; i <= end; i += 1) {
+        const kv = rawKnee[i];
+        const hv = rawHip[i];
+        if (Number.isFinite(kv)) netKnee += kv;
+        if (Number.isFinite(hv)) netHip += hv;
+    }
+    const net = Math.abs(netHip) >= Math.abs(netKnee) ? netHip : netKnee;
+    return net >= 0 ? 1 : -1;
+}
+
+function normalizeStartSeries(rawSeries, forwardSign, decisionIdx) {
+    if (!rawSeries || !rawSeries.length) return [];
+    const n = rawSeries.length;
+    const end = Math.max(0, Math.min(n - 1, Number.isFinite(decisionIdx) ? Math.round(decisionIdx) : n - 1));
+    const out = new Array(n).fill(null);
+    for (let i = 1; i <= end; i += 1) {
+        const v = rawSeries[i];
+        if (!Number.isFinite(v)) continue;
+        out[i] = v * forwardSign;
+    }
+    return out;
+}
+
+function refreshStartChartSeries() {
+    if (!startRawSeries || !startRawKneeSeries || !startRawHipSeries || !startRawHeelYSeries) return;
+    const n = Math.min(startRawSeries.length, startRawKneeSeries.length, startRawHipSeries.length, startRawHeelYSeries.length);
+    const end = Math.max(0, Math.min(n - 1, Number.isFinite(decisionFrame) ? Math.round(decisionFrame) : n - 1));
+    const sign = computeLeadForwardSign(startRawKneeSeries, startRawHipSeries, decisionFrame);
+
+    // Heel channel should represent heel-lift magnitude (y decreases when heel lifts).
+    const heelLift = new Array(n).fill(null);
+    const heelVals = [];
+    for (let i = 4; i <= Math.min(end, 12); i += 1) {
+        const y = startRawHeelYSeries[i];
+        if (Number.isFinite(y)) heelVals.push(y);
+    }
+    const baselineHeelY = heelVals.length ? (heelVals.reduce((a, b) => a + b, 0) / heelVals.length) : null;
+    for (let i = 0; i <= end; i += 1) {
+        const y = startRawHeelYSeries[i];
+        if (!Number.isFinite(y) || !Number.isFinite(baselineHeelY)) continue;
+        heelLift[i] = Math.max(0, baselineHeelY - y);
+    }
+
+    const kneeForward = normalizeStartSeries(startRawKneeSeries, sign, decisionFrame);
+    const hipForward = normalizeStartSeries(startRawHipSeries, sign, decisionFrame);
+    const kneeSmooth = smoothSeries(kneeForward, 1);
+    const hipSmooth = smoothSeries(hipForward, 1);
+    const heelSmooth = smoothSeries(heelLift, 1);
+
+    // Remove early decoder jitter and post-decision data from the chart.
+    const warmupCut = 1;
+    for (let i = 0; i < n; i += 1) {
+        if (i < warmupCut || i > end) {
+            if (heelSmooth[i] !== undefined) heelSmooth[i] = null;
+            if (kneeSmooth[i] !== undefined) kneeSmooth[i] = null;
+            if (hipSmooth[i] !== undefined) hipSmooth[i] = null;
+        }
+    }
+
+    startSeries = heelSmooth;
+    startKneeSeries = kneeSmooth;
+    startHipSeries = hipSmooth;
+}
+
 function updateGraphLine(selectedIdx) {
     if (!graphReady) return;
     drawContactDualSeriesChart("graph-contact", "Contact: Hip Distance (raw+smoothed) | marker=contact | selected=white", contactSeries, contactSmoothedSeries || smoothSeries(contactSeries || [], 2), contactFrame, selectedIdx);
@@ -1331,11 +1613,11 @@ function updateGraphLine(selectedIdx) {
     );
     drawMultiSeriesChart(
         "graph-start",
-        "Start: Lead Heel/Knee/Hip signed speed | marker=start | selected=white",
+        "Start: Heel lift + lead knee/hip forward | marker=start | selected=white",
         [
-            { values: startSeries || [], color: "#42d9ff" },     // heel
-            { values: startKneeSeries || [], color: "#ff9933" }, // knee
-            { values: startHipSeries || [], color: "#ff66cc" },  // hip
+            { values: startSeries || [], color: "#42d9ff" },     // heel lift
+            { values: startKneeSeries || [], color: "#ff9933" }, // knee forward
+            { values: startHipSeries || [], color: "#ff66cc" },  // hip forward
         ],
         startFrame,
         selectedIdx
@@ -1347,14 +1629,11 @@ function updateGraphLine(selectedIdx) {
 ////////////////////////////////////////////////////////////
 slider.oninput = () => drawFrame(+slider.value);
 
-document.getElementById("prev_btn").onclick = () => {
-    slider.value = Math.max(0, +slider.value - 1);
-    drawFrame(+slider.value);
-};
-
-document.getElementById("next_btn").onclick = () => {
-    slider.value = Math.min(frames.length - 1, +slider.value + 1);
-    drawFrame(+slider.value);
+document.getElementById("goto_start_btn").onclick = () => {
+    if (!frames.length) return;
+    const target = Math.max(0, Math.min(frames.length - 1, Number.isFinite(startFrame) ? startFrame : 0));
+    slider.value = target;
+    drawFrame(target);
 };
 
 document.getElementById("goto_decision_btn").onclick = () => {
@@ -1443,13 +1722,13 @@ canvas.addEventListener("click", (ev) => {
         y: Math.max(0, Math.min(1, ny)),
     };
     awaitingManualPick = false;
-    markerStatus.textContent = `Batter locked at frame ${i}. Click Build Charts.`;
+    markerStatus.textContent = `Batter locked at frame ${i}. Click Autodetect.`;
 });
 
 document.getElementById("build_charts_btn").onclick = async () => {
     if (!frames.length) return;
     if (!manualSeedPoint) {
-        markerStatus.textContent = "Click Pick Batter, then click the batter, then Build Charts.";
+        markerStatus.textContent = "Click Pick Batter, then click the batter, then Autodetect.";
         return;
     }
 
@@ -1468,7 +1747,28 @@ document.getElementById("build_charts_btn").onclick = async () => {
         if (!Number.isFinite(decisionFrame) || decisionFrame <= 0 || decisionFrame >= contactFrame) {
             decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, decisionFrame);
         }
-        markerStatus.textContent = `Charts reused (decision=${decisionFrame}, auto-contact=${contactFrame})`;
+        if (!startRawSeries || !startRawKneeSeries || !startRawHipSeries) {
+            const leadIdxReuse = leadSide === "left"
+                ? { heel: 27, knee: 25, hip: 23 }
+                : { heel: 28, knee: 26, hip: 24 };
+            const rawReuse = computeLeadMotionRawSeries(poseLandmarksFrames, leadIdxReuse);
+            startRawSeries = rawReuse.heel;
+            startRawKneeSeries = rawReuse.knee;
+            startRawHipSeries = rawReuse.hip;
+            startRawHeelYSeries = rawReuse.heelY;
+        }
+        refreshStartChartSeries();
+        const autoStart = detectStartFrameFromLeadMotion(
+            poseLandmarksFrames,
+            leadSide === "left"
+                ? { heel: 27, knee: 25, hip: 23 }
+                : { heel: 28, knee: 26, hip: 24 },
+            decisionFrame,
+            contactFrame,
+            fps
+        );
+        if (Number.isFinite(autoStart)) startFrame = autoStart;
+        markerStatus.textContent = `Charts reused (start=${startFrame}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
         updateGraphLine(selectedNow);
         return;
     }
@@ -1492,9 +1792,13 @@ document.getElementById("build_charts_btn").onclick = async () => {
     contactSeries = new Array(n).fill(null);
     contactSmoothedSeries = null;
     decisionSeries = new Array(n).fill(0);
-    startSeries = new Array(n).fill(0);
-    startKneeSeries = new Array(n).fill(0);
-    startHipSeries = new Array(n).fill(0);
+    startSeries = new Array(n).fill(null);
+    startKneeSeries = new Array(n).fill(null);
+    startHipSeries = new Array(n).fill(null);
+    startRawSeries = new Array(n).fill(0);
+    startRawKneeSeries = new Array(n).fill(0);
+    startRawHipSeries = new Array(n).fill(0);
+    startRawHeelYSeries = new Array(n).fill(null);
 
     const sideScore = { left: 0, right: 0 };
     for (let i = 1; i < n; i += 1) {
@@ -1505,9 +1809,13 @@ document.getElementById("build_charts_btn").onclick = async () => {
         if (prev[28] && curr[28]) sideScore.right += Math.abs(curr[28].x - prev[28].x);
     }
     const lead = sideScore.left >= sideScore.right ? "left" : "right";
+    leadSide = lead;
     const leadIdx = lead === "left"
         ? { heel: 27, knee: 25, hip: 23, wrist: 15, otherWrist: 16 }
         : { heel: 28, knee: 26, hip: 24, wrist: 16, otherWrist: 15 };
+    if (n > 0 && landmarks[0] && landmarks[0][leadIdx.heel]) {
+        startRawHeelYSeries[0] = landmarks[0][leadIdx.heel].y;
+    }
 
     for (let i = 1; i < n; i += 1) {
         const prev = landmarks[i - 1];
@@ -1531,9 +1839,10 @@ document.getElementById("build_charts_btn").onclick = async () => {
         const pHeel = prev[leadIdx.heel], cHeel = curr[leadIdx.heel];
         const pKnee = prev[leadIdx.knee], cKnee = curr[leadIdx.knee];
         const pHip = prev[leadIdx.hip], cHip = curr[leadIdx.hip];
-        if (pHeel && cHeel) startSeries[i] = cHeel.x - pHeel.x;       // signed speed (direction)
-        if (pKnee && cKnee) startKneeSeries[i] = cKnee.x - pKnee.x;   // signed speed (direction)
-        if (pHip && cHip) startHipSeries[i] = cHip.x - pHip.x;        // signed speed (direction)
+        if (pHeel && cHeel) startRawSeries[i] = cHeel.x - pHeel.x;
+        if (pKnee && cKnee) startRawKneeSeries[i] = cKnee.x - pKnee.x;
+        if (pHip && cHip) startRawHipSeries[i] = cHip.x - pHip.x;
+        if (cHeel) startRawHeelYSeries[i] = cHeel.y;
     }
 
     contactSmoothedSeries = smoothSeries(contactSeries, 2);
@@ -1546,6 +1855,15 @@ document.getElementById("build_charts_btn").onclick = async () => {
     if (!Number.isFinite(decisionFrame) || decisionFrame <= 0 || decisionFrame >= contactFrame) {
         decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, decisionFrame);
     }
+    refreshStartChartSeries();
+    const autoStart = detectStartFrameFromLeadMotion(
+        landmarks,
+        { heel: leadIdx.heel, knee: leadIdx.knee, hip: leadIdx.hip },
+        decisionFrame,
+        contactFrame,
+        fps
+    );
+    if (Number.isFinite(autoStart)) startFrame = autoStart;
     lastBuildSeedPoint = {
         frame: manualSeedPoint.frame,
         x: manualSeedPoint.x,
@@ -1557,7 +1875,7 @@ document.getElementById("build_charts_btn").onclick = async () => {
     ensureGraphCanvas("graph-start", "graph-decision");
     graphReady = true;
     const subjectMode = manualSeedPoint ? "manual-lock" : "batter-track";
-    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
+    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, start=${startFrame}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
     updateGraphLine(+slider.value || 0);
 };
 
