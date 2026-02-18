@@ -64,6 +64,18 @@
 .trim-btn {
     width: 100%;
 }
+.trim-analytics-panel {
+    margin-top: 10px;
+    width: 100%;
+    max-width: 1100px;
+    display: none;
+}
+.trim-analytics-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
 @media (max-width: 900px) {
     .trim-controls-pane {
         width: 320px;
@@ -91,6 +103,11 @@
         <!-- SLIDER -->
         <input type="range" id="frame_slider" min="0" max="0" value="0"
                style="width:100%; margin-top:10px;">
+
+        <div class="trim-preview-controls">
+            <button id="toggle_analytics_btn" class="trim-small-btn">Show Graphs + CSV</button>
+        </div>
+
     </div>
 
     <div class="trim-controls-pane">
@@ -114,6 +131,8 @@
 
         <div id="marker_status"
              style="margin-top:10px;font-weight:bold;"></div>
+        <div id="swing_duration_status"
+             style="margin-top:6px;font-weight:bold;"></div>
 
         <button id="finalize_btn"
                 class="trim-btn"
@@ -124,21 +143,49 @@
         <div id="upload_status"
              style="margin-top:10px;font-weight:bold;"></div>
 
-        <div class="trim-row-2" style="margin-top:12px;">
-            <button id="export_pose_table_btn" class="trim-btn">Export Pose Table CSV</button>
-            <button id="copy_pose_table_btn" class="trim-btn">Copy CSV</button>
-        </div>
     </div>
 </div>
 
-<textarea id="pose_table_output"
-          style="margin-top:10px;width:100%;max-width:1100px;height:180px;font-family:monospace;font-size:12px;"
-          placeholder="Build charts first, then click Export Pose Table CSV."></textarea>
+<div id="analytics_panel" class="trim-analytics-panel">
+    <div id="analytics_graph_anchor"></div>
+
+    <div class="trim-analytics-row">
+        <button id="export_pose_table_btn" class="trim-btn">Export Pose Table CSV</button>
+        <button id="copy_pose_table_btn" class="trim-btn">Copy CSV</button>
+    </div>
+
+    <textarea id="pose_table_output"
+              style="margin-top:10px;width:100%;max-width:1100px;height:180px;font-family:monospace;font-size:12px;"
+              placeholder="Build charts first, then click Export Pose Table CSV."></textarea>
+</div>
 
 <script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
 
 <script>
+/*
+ * Swing Trim Page - Developer Documentation
+ * -----------------------------------------
+ * Primary workflow:
+ * 1) Decode source video into `frames` (ImageBitmap list).
+ * 2) User scrubs/selects batter seed (manual lock).
+ * 3) Pose is tracked for that batter across frames.
+ * 4) Marker series are built:
+ *    - contactSeries: hip distance signal (contact timing)
+ *    - decisionSeries: wrist speed signal (decision timing)
+ *    - startSeries: lead heel/knee/hip motion (start timing)
+ * 5) Auto-markers are computed, then user can override manually.
+ * 6) Finalize trims [startFrame..contactFrame] and uploads MP4.
+ *
+ * Rule priorities (current behavior):
+ * - Contact: first strong raw hip-distance peak with gating.
+ * - Decision: default to contact-5, adjust in [contact-7..contact-4].
+ * - Start: prefer heel-lift onset, fallback to lead-side forward move.
+ *
+ * Finalization output:
+ * - If pose data exists, output is portrait-cropped around tracked batter.
+ * - If not, fallback to centered portrait crop.
+ */
 ////////////////////////////////////////////////////////////
 // VARS
 ////////////////////////////////////////////////////////////
@@ -163,6 +210,9 @@ const canvas  = document.getElementById("preview");
 const ctx     = canvas.getContext("2d");
 const info    = document.getElementById("info");
 const markerStatus = document.getElementById("marker_status");
+const swingDurationStatus = document.getElementById("swing_duration_status");
+const analyticsPanel = document.getElementById("analytics_panel");
+const toggleAnalyticsBtn = document.getElementById("toggle_analytics_btn");
 
 let analysisFrames = null;
 let graphReady = false;
@@ -180,7 +230,6 @@ let startRawHeelYSeries = null;
 let poseLandmarksFrames = null;
 let manualSeedPoint = null;
 let awaitingManualPick = false;
-let lastBuildSeedPoint = null;
 let leadSide = "left";
 const GRAPH_W = 1000;
 const GRAPH_H = 220;
@@ -228,7 +277,23 @@ function updateProgress(pct, msg = "") {
     if (msg) document.getElementById("progress-label").innerText = msg;
 }
 
+function updateSwingDurationDisplay() {
+    if (!swingDurationStatus) return;
+    if (!Number.isFinite(startFrame) || !Number.isFinite(contactFrame) || !Number.isFinite(fps) || fps <= 0) {
+        swingDurationStatus.textContent = "Swing Duration: n/a";
+        return;
+    }
+    const frameDelta = contactFrame - startFrame;
+    if (frameDelta < 0) {
+        swingDurationStatus.textContent = "Swing Duration: invalid (contact before start)";
+        return;
+    }
+    const seconds = frameDelta / fps;
+    swingDurationStatus.textContent = `Swing Duration: ${seconds.toFixed(3)}s (${frameDelta} frames @ ${fps.toFixed(2)} fps)`;
+}
+
 function ensurePose() {
+    // Lazy initialize a single MediaPipe Pose instance for static-frame inference.
     if (poseInstance) return Promise.resolve(poseInstance);
     if (poseInitPromise) return poseInitPromise;
     if (typeof Pose === "undefined") return Promise.resolve(null);
@@ -257,6 +322,7 @@ function ensurePose() {
 }
 
 async function resetPoseInstance() {
+    // Reset Pose instance between builds so stale state does not leak across runs.
     if (!poseInstance) return;
     try {
         if (typeof poseInstance.close === "function") await poseInstance.close();
@@ -268,6 +334,7 @@ async function resetPoseInstance() {
     poseResolver = null;
 }
 function runPoseOnBitmap(bitmap) {
+    // Full-frame single-subject pose pass.
     return new Promise(async (resolve) => {
         const pose = await ensurePose();
         if (!pose) {
@@ -283,6 +350,7 @@ function runPoseOnBitmap(bitmap) {
 }
 
 function runPoseOnBitmapCrop(bitmap, crop) {
+    // Crop-window pass; mapped landmarks are converted back to full-frame normalized coords.
     return new Promise(async (resolve) => {
         const pose = await ensurePose();
         if (!pose) {
@@ -313,6 +381,7 @@ function runPoseOnBitmapCrop(bitmap, crop) {
 }
 
 async function detectAllPoseCandidatesForFrame(bitmap) {
+    // Multi-window workaround: MediaPipe Pose is single person, so scan several windows.
     const candidates = [];
     const full = await runPoseOnBitmap(bitmap);
     if (full) candidates.push(full);
@@ -570,6 +639,10 @@ function signatureDistance(sigA, sigB) {
 }
 
 function chooseBatterLandmarks(candidatesByFrame, frameCount, manualSeed = null) {
+    // Subject association strategy:
+    // - find best seed in early setup
+    // - enforce anti-switch constraints across frames
+    // - brief hold-on-miss to avoid identity jumps
     const n = candidatesByFrame.length;
     if (!n) return null;
     const earlyEnd = Math.max(8, Math.min(frameCount - 1, Math.floor(frameCount * 0.35)));
@@ -691,6 +764,8 @@ function chooseBatterLandmarks(candidatesByFrame, frameCount, manualSeed = null)
 }
 
 async function trackBatterFromManualSeed(manualSeed) {
+    // Main batter tracker used by Autodetect.
+    // Starts from user click, then follows nearby hip centers forward/backward.
     if (!manualSeed || !Number.isFinite(manualSeed.frame)) return null;
     const n = frames.length;
     if (!n || manualSeed.frame < 0 || manualSeed.frame >= n) return null;
@@ -800,6 +875,7 @@ async function trackBatterFromManualSeed(manualSeed) {
 // LOAD + DECODE VIDEO
 ////////////////////////////////////////////////////////////
 async function loadVideo() {
+    // Browser-side decode pipeline: fetch MP4, decode to per-frame ImageBitmaps for scrubbing.
     showProgress();
     updateProgress(5, "Fetching videoâ€¦");
 
@@ -855,12 +931,17 @@ async function loadVideo() {
     hideProgress();
 
     info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
+    updateSwingDurationDisplay();
 }
 
 ////////////////////////////////////////////////////////////
 // DRAW FRAME (SCALE SAFE)
 ////////////////////////////////////////////////////////////
 function drawFrame(i) {
+    // Preview renderer:
+    // - scaled frame draw
+    // - optional pose overlay
+    // - HUD with active marker values
     const f = frames[i];
     if (!f) return;
 
@@ -894,20 +975,18 @@ function drawFrame(i) {
             v: Number.isFinite(p.visibility) ? p.visibility : 1,
         });
 
-        const leftHip = lm[23];
-        const rightHip = lm[24];
-        if (leftHip) {
-            const c = toCanvas(leftHip);
-            if (c.v >= 0.35) {
+        if (shouldDrawHipPair(lm)) {
+            const leftHip = lm[23];
+            const rightHip = lm[24];
+            if (leftHip) {
+                const c = toCanvas(leftHip);
                 ctx.beginPath();
                 ctx.fillStyle = "#ff4d4d";
                 ctx.arc(c.x, c.y, 4.0, 0, Math.PI * 2);
                 ctx.fill();
             }
-        }
-        if (rightHip) {
-            const c = toCanvas(rightHip);
-            if (c.v >= 0.35) {
+            if (rightHip) {
+                const c = toCanvas(rightHip);
                 ctx.beginPath();
                 ctx.fillStyle = "#33ff66";
                 ctx.arc(c.x, c.y, 4.0, 0, Math.PI * 2);
@@ -1004,6 +1083,40 @@ function landmarkVisible(p, minV = 0.45) {
 function shoulderWidth(lm) {
     if (!lm || !lm[11] || !lm[12]) return null;
     return Math.hypot(lm[11].x - lm[12].x, lm[11].y - lm[12].y);
+}
+
+function computeContactSignal(lm) {
+    if (!lm) return null;
+    const lHip = lm[23];
+    const rHip = lm[24];
+    if (!lHip || !rHip) return null;
+    return Math.abs(lHip.x - rHip.x);
+}
+
+function shouldDrawHipPair(lm) {
+    if (!lm) return false;
+    const lh = lm[23];
+    const rh = lm[24];
+    const ls = lm[11];
+    const rs = lm[12];
+    const lk = lm[25];
+    const rk = lm[26];
+    if (!lh || !rh || !ls || !rs || !lk || !rk) return false;
+    if (!landmarkVisible(lh, 0.35) || !landmarkVisible(rh, 0.35)) return false;
+
+    const shoulderMidY = (ls.y + rs.y) * 0.5;
+    const hipMidY = (lh.y + rh.y) * 0.5;
+    const kneesMidY = (lk.y + rk.y) * 0.5;
+    if (hipMidY < shoulderMidY + 0.03) return false;
+    if (hipMidY > kneesMidY - 0.02) return false;
+
+    const kneeSpan = Math.abs(lk.x - rk.x);
+    const hipSpan = Math.abs(lh.x - rh.x);
+    if (kneeSpan > 0.01) {
+        if (hipSpan < kneeSpan * 0.25) return false;
+        if (hipSpan > kneeSpan * 1.8) return false;
+    }
+    return true;
 }
 
 // Display-only hand-speed series (does not affect decision detection).
@@ -1300,16 +1413,11 @@ function drawMultiSeriesChart(canvasId, title, seriesSet, markerIdx, selectedIdx
 // MARKER DETECTION RULES (DOCUMENTATION)
 ////////////////////////////////////////////////////////////
 // Contact rule set:
-// 1) Use RAW hip-distance series (blue), not smoothed, for selection.
-// 2) Ignore early setup jitter via a warmup window.
-// 3) Candidate contact must be a local peak.
-// 4) Prefer the FIRST peak that is:
-//    - at least 65% of the max local peak, and
-//    - has sufficient incoming acceleration.
-// 5) If no "fast" peak clears threshold, use first >=65% peak.
-// 6) If no peak clears threshold, use strongest remaining raw peak.
-// 7) Hard gate: contact cannot occur before hand-speed onset
-//    (implemented as minContactIdx = decisionOnset + 1).
+// 1) Build hip-distance-change signal (absolute per-frame change).
+// 2) Find first rapid local max in that change signal around hand onset + [4..7] frames.
+// 3) Require that rapid max to be >=65% of overall change max.
+// 4) Map to a TRUE raw hip-distance local extremum (peak or valley) near that change max.
+// 5) Keep hard gate: contact cannot occur before hand-speed onset + 1.
 //
 // Decision rule set:
 // 1) Default decision is 5 frames before contact.
@@ -1320,129 +1428,150 @@ function drawMultiSeriesChart(canvasId, title, seriesSet, markerIdx, selectedIdx
 // 1) Prefer first sustained lead-heel lift onset.
 // 2) Fallback to first sustained forward move of lead knee/hip.
 // 3) Keep start before decision/contact window.
-function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0) {
+function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0, landmarks = null) {
+    // Contact rule:
+    // For each frame i (i>=7), compute abs(series[i] - series[i-7]).
+    // Pick the first frame whose 7-frame net change is >= 2/3 of the max.
+    // Then map to direction-aware extremum:
+    // - starts high -> pick valley
+    // - starts low  -> pick peak
     if (!series || !series.length) return null;
     const n = series.length;
     const anchor = Math.max(0, Math.min(n - 1, Number.isFinite(selectedIdx) ? selectedIdx : 0));
     const floorIdx = Math.max(0, Math.min(n - 1, Number.isFinite(minContactIdx) ? Math.round(minContactIdx) : 0));
 
-    const raw = series.map((v) => (Number.isFinite(v) ? v : null));
-    const vals = raw.filter((v) => Number.isFinite(v));
-    if (!vals.length) return anchor;
-
-    const minV = Math.min(...vals);
-    const maxV = Math.max(...vals);
-    const range = Math.max(1e-6, maxV - minV);
-
-    const deriv = new Array(n).fill(0);
-    for (let i = 1; i < n; i += 1) {
-        if (Number.isFinite(raw[i]) && Number.isFinite(raw[i - 1])) {
-            deriv[i] = raw[i] - raw[i - 1];
+    const raw = new Array(n).fill(null);
+    let validHipCount = 0;
+    for (let i = 0; i < n; i += 1) {
+        const v = series[i];
+        if (!Number.isFinite(v)) continue;
+        if (landmarks) {
+            const lm = landmarks[i];
+            if (!shouldDrawHipPair(lm)) continue;
         }
+        raw[i] = v;
+        validHipCount += 1;
+    }
+    // Require enough plausible hip frames; if not, keep current/anchor contact.
+    if (validHipCount < Math.max(10, Math.floor(n * 0.28))) return Math.max(anchor, floorIdx);
+    const net7 = new Array(n).fill(null);
+    const scanStart = Math.max(7, floorIdx);
+    for (let i = scanStart; i < n; i += 1) {
+        const a = raw[i - 7];
+        const b = raw[i];
+        if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+        net7[i] = Math.abs(b - a);
     }
 
-    const posDer = deriv.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
-    const q = (arr, p) => {
-        if (!arr.length) return 0;
-        const idx = Math.max(0, Math.min(arr.length - 1, Math.floor((arr.length - 1) * p)));
-        return arr[idx];
-    };
+    const vals = net7.filter((v) => Number.isFinite(v));
+    if (!vals.length) return Math.max(anchor, floorIdx);
+    const maxNet7 = Math.max(...vals);
+    const threshold = maxNet7 * (2 / 3);
 
-    // Ignore early setup jitter.
-    const warmup = Math.max(6, Math.min(14, Math.floor(n * 0.15)));
-    const scanStart = Math.max(2, warmup, floorIdx);
-
-    const minRiseVel = Math.max(q(posDer, 0.70), range * 0.025);
-    const minRise = range * 0.18;
-    const minDrop = range * 0.06;
-    const minLevel = minV + range * 0.45;
-
-    const snapForwardRawPeak = (baseIdx, maxAhead = 0) => {
-        const b = Math.max(0, Math.min(n - 1, baseIdx));
-        const e = Math.max(b, Math.min(n - 1, b + maxAhead));
-        let out = b;
-        let outVal = Number.isFinite(series[b]) ? series[b] : -Infinity;
-        for (let i = b + 1; i <= e; i += 1) {
-            const v = series[i];
+    let triggerIdx = -1;
+    for (let i = scanStart; i < n; i += 1) {
+        const v = net7[i];
+        if (!Number.isFinite(v)) continue;
+        if (v >= threshold) {
+            triggerIdx = i;
+            break;
+        }
+    }
+    if (!Number.isFinite(triggerIdx) || triggerIdx < 0) {
+        let bestIdx = scanStart;
+        let bestVal = -Infinity;
+        for (let i = scanStart; i < n; i += 1) {
+            const v = net7[i];
             if (!Number.isFinite(v)) continue;
-            if (v > outVal) {
-                outVal = v;
-                out = i;
+            if (v > bestVal) {
+                bestVal = v;
+                bestIdx = i;
             }
         }
-        return out;
-    };
-
-    const peaks = [];
-    for (let i = scanStart; i <= n - 3; i += 1) {
-        const a = raw[i - 1], b = raw[i], c = raw[i + 1];
-        if (![a, b, c].every(Number.isFinite)) continue;
-        if (!(b >= a && b > c)) continue;
-
-        let preMin = Infinity;
-        for (let j = Math.max(0, i - 10); j < i; j += 1) {
-            const v = raw[j];
-            if (Number.isFinite(v)) preMin = Math.min(preMin, v);
-        }
-        if (!Number.isFinite(preMin)) continue;
-
-        let postMin = b;
-        for (let j = i + 1; j <= Math.min(n - 1, i + 6); j += 1) {
-            const v = raw[j];
-            if (Number.isFinite(v)) postMin = Math.min(postMin, v);
-        }
-
-        let inVel = 0;
-        for (let j = Math.max(1, i - 5); j <= i; j += 1) {
-            inVel = Math.max(inVel, deriv[j]);
-        }
-
-        const rise = b - preMin;
-        const drop = b - postMin;
-        const major = b >= minLevel && rise >= minRise && drop >= minDrop && inVel >= minRiseVel;
-        peaks.push({ i, val: b, rise, drop, inVel, major });
-    }
-    const maxPeakVal = peaks.length ? Math.max(...peaks.map((p) => p.val)) : -Infinity;
-    const minComparablePeakVal = Number.isFinite(maxPeakVal) ? (maxPeakVal * 0.65) : -Infinity;
-
-    // Primary rule (strict): first local peak with fast acceleration
-    // whose height is at least 65% of the highest local peak.
-    const firstBigFast = peaks.find((p) =>
-        p.val >= minComparablePeakVal &&
-        p.inVel >= minRiseVel
-    );
-    if (firstBigFast) return snapForwardRawPeak(firstBigFast.i);
-
-    // Secondary (still threshold-bound): first >=65% peak, even if acceleration is weak.
-    const firstBig = peaks.find((p) => p.val >= minComparablePeakVal);
-    if (firstBig) return snapForwardRawPeak(firstBig.i);
-
-    // Fallback: strongest peak only when no peak clears the threshold.
-    if (peaks.length) {
-        let best = peaks[0];
-        for (const p of peaks) {
-            if (p.val > best.val) best = p;
-        }
-        return snapForwardRawPeak(best.i);
+        triggerIdx = bestIdx;
     }
 
-    // Last resort: maximum raw point after warmup.
-    let bestIdx = Math.max(warmup, floorIdx);
-    let bestVal = -Infinity;
-    for (let i = Math.max(warmup, floorIdx); i < n; i += 1) {
+    // Determine whether this swing starts "high" or "low" in hip-width.
+    const rawVals = raw.filter((v) => Number.isFinite(v));
+    if (!rawVals.length) return Math.max(anchor, triggerIdx);
+    const minRaw = Math.min(...rawVals);
+    const maxRaw = Math.max(...rawVals);
+    const midRaw = (minRaw + maxRaw) * 0.5;
+    const startWindowEnd = Math.min(n - 1, scanStart + 8);
+    let startSum = 0;
+    let startCount = 0;
+    for (let i = 0; i <= startWindowEnd; i += 1) {
         const v = raw[i];
         if (!Number.isFinite(v)) continue;
-        if (v > bestVal) {
-            bestVal = v;
-            bestIdx = i;
+        startSum += v;
+        startCount += 1;
+    }
+    const startLevel = startCount ? (startSum / startCount) : raw[scanStart];
+    const expectValley = Number.isFinite(startLevel) ? (startLevel >= midRaw) : false;
+
+    const isLocalMax = (arr, i) => {
+        if (i <= 0 || i >= arr.length - 1) return false;
+        const a = arr[i - 1], b = arr[i], c = arr[i + 1];
+        if (![a, b, c].every(Number.isFinite)) return false;
+        return b >= a && b > c;
+    };
+    const isLocalMin = (arr, i) => {
+        if (i <= 0 || i >= arr.length - 1) return false;
+        const a = arr[i - 1], b = arr[i], c = arr[i + 1];
+        if (![a, b, c].every(Number.isFinite)) return false;
+        return b <= a && b < c;
+    };
+    const refineWithinTwoAhead = (idx) => {
+        let bestIdx = idx;
+        let bestVal = raw[idx];
+        const end = Math.min(n - 1, idx + 2);
+        for (let j = idx; j <= end; j += 1) {
+            const v = raw[j];
+            if (!Number.isFinite(v)) continue;
+            if (!Number.isFinite(bestVal)) {
+                bestVal = v;
+                bestIdx = j;
+                continue;
+            }
+            if (expectValley ? (v < bestVal) : (v > bestVal)) {
+                bestVal = v;
+                bestIdx = j;
+            }
+        }
+        return bestIdx;
+    };
+
+    // Find first appropriate extremum at/just after the trigger segment.
+    const searchStart = Math.max(floorIdx, triggerIdx - 1);
+    const searchEnd = Math.min(n - 2, triggerIdx + 8);
+    for (let i = searchStart; i <= searchEnd; i += 1) {
+        const ok = expectValley ? isLocalMin(raw, i) : isLocalMax(raw, i);
+        if (ok) return refineWithinTwoAhead(i);
+    }
+
+    // Fallback to best value in local window if strict local extremum not found.
+    let bestLocalIdx = searchStart;
+    let bestLocalVal = raw[searchStart];
+    for (let i = searchStart; i <= searchEnd; i += 1) {
+        const v = raw[i];
+        if (!Number.isFinite(v)) continue;
+        if (!Number.isFinite(bestLocalVal)) {
+            bestLocalVal = v;
+            bestLocalIdx = i;
+            continue;
+        }
+        if (expectValley ? (v < bestLocalVal) : (v > bestLocalVal)) {
+            bestLocalVal = v;
+            bestLocalIdx = i;
         }
     }
-    if (Number.isFinite(bestVal)) return snapForwardRawPeak(bestIdx);
-
-    return Math.max(anchor, floorIdx);
+    return Math.max(anchor, refineWithinTwoAhead(bestLocalIdx));
 }
 
 function detectHandOnsetForContactGate(series, fallbackIdx = 0) {
+    // Onset gate only (used to block impossible early contact).
+    // This is intentionally conservative: prefer a later, clearer onset over
+    // tiny early noise bumps so contact windowing does not fire too early.
     if (!series || !series.length) return 0;
     const n = series.length;
     const clamp = (v) => Math.max(0, Math.min(n - 1, v));
@@ -1459,29 +1588,72 @@ function detectHandOnsetForContactGate(series, fallbackIdx = 0) {
     }
     const baseline = baseVals.length ? (baseVals.reduce((a, b) => a + b, 0) / baseVals.length) : 0;
 
-    let peakIdx = -1;
-    let peakVal = -Infinity;
+    // Ignore late follow-through spikes by preferring the strongest peak in an
+    // early search window (roughly the first 75-80% of the clip).
+    const earlyEnd = Math.max(start, Math.min(end, Math.floor(n * 0.78)));
+    let earlyPeakIdx = -1;
+    let earlyPeakVal = -Infinity;
+    for (let i = start; i <= earlyEnd; i += 1) {
+        const v = smoothed[i];
+        if (!Number.isFinite(v)) continue;
+        if (v > earlyPeakVal) {
+            earlyPeakVal = v;
+            earlyPeakIdx = i;
+        }
+    }
+
+    let globalPeakIdx = -1;
+    let globalPeakVal = -Infinity;
     for (let i = start; i <= end; i += 1) {
         const v = smoothed[i];
         if (!Number.isFinite(v)) continue;
-        if (v > peakVal) {
-            peakVal = v;
-            peakIdx = i;
+        if (v > globalPeakVal) {
+            globalPeakVal = v;
+            globalPeakIdx = i;
         }
     }
+
+    // If global max is a late outlier, keep early peak as the onset anchor.
+    let peakIdx = earlyPeakIdx;
+    let peakVal = earlyPeakVal;
+    if (
+        Number.isFinite(globalPeakVal) &&
+        Number.isFinite(globalPeakIdx) &&
+        globalPeakIdx <= earlyEnd
+    ) {
+        peakIdx = globalPeakIdx;
+        peakVal = globalPeakVal;
+    } else if (
+        !Number.isFinite(earlyPeakVal) &&
+        Number.isFinite(globalPeakVal)
+    ) {
+        peakIdx = globalPeakIdx;
+        peakVal = globalPeakVal;
+    }
+
     if (peakIdx >= 0 && Number.isFinite(peakVal)) {
         const rise = Math.max(0, peakVal - baseline);
-        const onsetLevel = baseline + rise * 0.28;
-        const minRiseStep = Math.max(0.0008, rise * 0.03);
+        const onsetLevel = baseline + rise * 0.45;
+        const minRiseStep = Math.max(0.0012, rise * 0.055);
         for (let i = Math.max(start, 1); i <= peakIdx; i += 1) {
             const v0 = smoothed[i - 1];
             const v1 = smoothed[i];
             const v2 = smoothed[Math.min(end, i + 1)];
-            if (![v0, v1, v2].every(Number.isFinite)) continue;
+            const v3 = smoothed[Math.min(end, i + 2)];
+            if (![v0, v1, v2, v3].every(Number.isFinite)) continue;
             const crossesOnset = v1 >= onsetLevel;
             const risingNow = (v1 - v0) >= minRiseStep;
-            const sustained = v2 >= v1 * 0.90;
-            if (crossesOnset && risingNow && sustained) return clamp(i);
+            const sustained = v2 >= v1 * 0.95 && v3 >= v2 * 0.92;
+            const accel = (v2 - v1) >= (minRiseStep * 0.25);
+            if (crossesOnset && risingNow && sustained && accel) return clamp(i);
+        }
+
+        // Fallback to a stronger threshold crossing if strict sustained onset missed.
+        const strongOnsetLevel = baseline + rise * 0.58;
+        for (let i = Math.max(start, 1); i <= peakIdx; i += 1) {
+            const v = smoothed[i];
+            if (!Number.isFinite(v)) continue;
+            if (v >= strongOnsetLevel) return clamp(i);
         }
     }
 
@@ -1489,6 +1661,8 @@ function detectHandOnsetForContactGate(series, fallbackIdx = 0) {
 }
 
 function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) {
+    // Decision rule:
+    // Find hand-acceleration initiation within [contact-7, contact-4].
     if (!series || !series.length) return 0;
     const n = series.length;
     const clamp = (v) => Math.max(0, Math.min(n - 1, v));
@@ -1499,59 +1673,54 @@ function detectDecisionFrameFromHandSeries(series, contactIdx, fallbackIdx = 0) 
     }
 
     const contact = clamp(Math.round(contactIdx));
-    // Decision defaults to 5 before contact, with bounded adjustment.
+    const winStart = Math.max(1, clamp(contact - 7));
+    const winEnd = Math.max(winStart, Math.min(clamp(contact - 4), contact - 1));
     const defaultDecision = clamp(contact - 5);
-    const slowBound = clamp(contact - 7);
-    const fastBound = clamp(contact - 4);
-
-    let winStart = Math.min(slowBound, fastBound);
-    let winEnd = Math.max(slowBound, fastBound);
-    winEnd = Math.min(winEnd, contact - 1);
-    winStart = Math.max(1, Math.min(winStart, winEnd));
 
     const baseVals = [];
-    const baseStart = Math.max(1, winStart - 6);
-    const baseEnd = Math.max(baseStart, winStart - 2);
-    for (let i = baseStart; i <= baseEnd; i += 1) {
+    for (let i = Math.max(1, winStart - 6); i <= Math.max(1, winStart - 2); i += 1) {
         const v = smoothed[i];
         if (Number.isFinite(v)) baseVals.push(v);
     }
     const baseline = baseVals.length ? (baseVals.reduce((a, b) => a + b, 0) / baseVals.length) : 0;
 
-    let bestIdx = defaultDecision;
-    let bestScore = -Infinity;
-    for (let i = winStart; i <= winEnd; i += 1) {
+    let maxRise = 0;
+    const rise = new Array(n).fill(0);
+    for (let i = Math.max(1, winStart); i <= winEnd; i += 1) {
         const v0 = smoothed[i - 1];
         const v1 = smoothed[i];
-        const v2 = smoothed[Math.min(winEnd, i + 1)];
-        if (![v0, v1, v2].every(Number.isFinite)) continue;
+        if (!Number.isFinite(v0) || !Number.isFinite(v1)) continue;
+        rise[i] = Math.max(0, v1 - v0);
+        if (rise[i] > maxRise) maxRise = rise[i];
+    }
+    const riseThresh = Math.max(0.0008, maxRise * 0.35);
 
-        const riseNow = v1 - v0;
-        const sustain = Math.max(0, v2 - v0);
-        const level = Math.max(0, v1 - baseline);
-        const centerPenalty = Math.abs(i - defaultDecision) * 0.03;
-        const score = riseNow * 2.0 + sustain * 1.2 + level * 0.8 - centerPenalty;
-        if (score > bestScore) {
-            bestScore = score;
-            bestIdx = i;
-        }
+    // Initiation = first frame in window with clear rise and non-trivial level.
+    for (let i = Math.max(1, winStart); i <= winEnd; i += 1) {
+        const v = smoothed[i];
+        const r = rise[i];
+        if (!Number.isFinite(v)) continue;
+        if (r < riseThresh) continue;
+        if ((v - baseline) < riseThresh * 0.6) continue;
+        return clamp(i);
     }
 
-    if (!Number.isFinite(bestScore) || bestScore < 0) return defaultDecision;
-    return clamp(bestIdx);
+    return defaultDecision;
 }
 
 function detectStartFrameFromLeadMotion(landmarks, leadIdx, decisionIdx, contactIdx, fpsVal = 30) {
+    // Start detector:
+    // 1) heel-lift onset
+    // 2) lead knee/hip forward onset
+    // 3) bounded fallback near decision
     if (!landmarks || !landmarks.length || !leadIdx) return 0;
     const n = landmarks.length;
     const clamp = (v) => Math.max(0, Math.min(n - 1, v));
-    const toInt = (v, d) => (Number.isFinite(v) ? clamp(Math.round(v)) : d);
-
-    const decision = toInt(decisionIdx, n - 1);
-    const contact = toInt(contactIdx, n - 1);
-    const maxLookback = Math.max(8, Math.round((Number.isFinite(fpsVal) ? fpsVal : 30) * 1.2));
-    const winStart = Math.max(1, contact - maxLookback);
-    const winEnd = Math.max(winStart + 1, Math.min(decision, contact - 1));
+    const decision = Number.isFinite(decisionIdx) ? clamp(Math.round(decisionIdx)) : (n - 1);
+    const fpsUse = Number.isFinite(fpsVal) && fpsVal > 0 ? fpsVal : 30;
+    const maxLookback = Math.max(8, Math.round(fpsUse * 1.2));
+    const winEnd = Math.max(2, Math.min(n - 1, decision - 1));
+    const winStart = Math.max(1, winEnd - maxLookback);
 
     if (winEnd <= winStart) return clamp(Math.max(0, decision - 6));
 
@@ -1781,7 +1950,7 @@ function refreshStartChartSeries() {
 
 function updateGraphLine(selectedIdx) {
     if (!graphReady) return;
-    drawContactDualSeriesChart("graph-contact", "Contact: Hip Distance (raw+smoothed) | marker=contact | selected=white", contactSeries, contactSmoothedSeries || smoothSeries(contactSeries || [], 2), contactFrame, selectedIdx);
+    drawContactDualSeriesChart("graph-contact", "Contact: Hip Width X (raw+smoothed) | marker=contact | selected=white", contactSeries, contactSmoothedSeries || smoothSeries(contactSeries || [], 2), contactFrame, selectedIdx);
     drawSeriesChart(
         "graph-decision",
         "Decision: Hand Speed | marker=decision | contact=blue | selected=white",
@@ -1819,23 +1988,201 @@ function csvEscape(v) {
 }
 
 function buildPoseTableCSV() {
+    // Exports one row per frame in the requested swing schema.
     const rows = [];
-    rows.push(["frame_number", "event_type", "mediapipe_pose_marker", "mediapipe_pose_data"]);
+    rows.push([
+        "video_id",
+        "frame",
+        "timestamp",
+        "fps",
+        "event_decision",
+        "event_swing_start",
+        "event_contact",
+        "nose_x",
+        "nose_y",
+        "nose_conf",
+        "shoulder1_x",
+        "shoulder1_y",
+        "shoulder1_conf",
+        "shoulder2_x",
+        "shoulder2_y",
+        "shoulder2_conf",
+        "elbow1_x",
+        "elbow1_y",
+        "elbow1_conf",
+        "elbow2_x",
+        "elbow2_y",
+        "elbow2_conf",
+        "wrist1_x",
+        "wrist1_y",
+        "wrist1_conf",
+        "wrist2_x",
+        "wrist2_y",
+        "wrist2_conf",
+        "hip1_x",
+        "hip1_y",
+        "hip1_conf",
+        "hip2_x",
+        "hip2_y",
+        "hip2_conf",
+        "knee1_x",
+        "knee1_y",
+        "knee1_conf",
+        "knee2_x",
+        "knee2_y",
+        "knee2_conf",
+        "ankle1_x",
+        "ankle1_y",
+        "ankle1_conf",
+        "ankle2_x",
+        "ankle2_y",
+        "ankle2_conf",
+        "hand_center_x",
+        "hand_center_y",
+        "hand_speed",
+        "hip_distance",
+        "hip_speed",
+        "shoulder_distance",
+        "shoulder_hip_separation",
+        "ball_x",
+        "ball_y",
+        "ball_conf",
+        "ball_visible",
+    ]);
+
     const frameCount = frames.length || (poseLandmarksFrames ? poseLandmarksFrames.length : 0);
     const hasContact = Number.isFinite(contactFrame) && contactFrame >= 0;
     const exportEnd = hasContact
         ? Math.min(frameCount - 1, Math.round(contactFrame) + 10)
         : Math.max(0, frameCount - 1);
+    const fpsVal = Number.isFinite(fps) && fps > 0 ? fps : 30;
+    const useLeftAsOne = leadSide === "left";
+    const idx = useLeftAsOne
+        ? {
+            shoulder1: 11, shoulder2: 12,
+            elbow1: 13, elbow2: 14,
+            wrist1: 15, wrist2: 16,
+            hip1: 23, hip2: 24,
+            knee1: 25, knee2: 26,
+            ankle1: 27, ankle2: 28,
+        }
+        : {
+            shoulder1: 12, shoulder2: 11,
+            elbow1: 14, elbow2: 13,
+            wrist1: 16, wrist2: 15,
+            hip1: 24, hip2: 23,
+            knee1: 26, knee2: 25,
+            ankle1: 28, ankle2: 27,
+        };
+
+    const vis = (p) => (p && Number.isFinite(p.visibility) ? p.visibility : (p ? 1 : null));
+    const dist = (a, b) => {
+        if (!a || !b) return null;
+        return Math.hypot(a.x - b.x, a.y - b.y);
+    };
+    let prevHipDistance = null;
 
     for (let fi = 0; fi <= exportEnd; fi += 1) {
-        const frameLm = poseLandmarksFrames && poseLandmarksFrames[fi] ? poseLandmarksFrames[fi] : null;
-        const eventType = eventTypeForFrame(fi);
-        for (let li = 0; li < POSE_LANDMARK_NAMES.length; li += 1) {
-            const marker = POSE_LANDMARK_NAMES[li] || `landmark_${li}`;
-            const lm = frameLm && frameLm[li] ? frameLm[li] : null;
-            const poseData = lm ? JSON.stringify(lm) : "null";
-            rows.push([fi, eventType, marker, poseData]);
-        }
+        const lmFrame = poseLandmarksFrames && poseLandmarksFrames[fi] ? poseLandmarksFrames[fi] : null;
+        const p = (i) => (lmFrame && lmFrame[i] ? lmFrame[i] : null);
+        const nose = p(0);
+        const shoulder1 = p(idx.shoulder1);
+        const shoulder2 = p(idx.shoulder2);
+        const elbow1 = p(idx.elbow1);
+        const elbow2 = p(idx.elbow2);
+        const wrist1 = p(idx.wrist1);
+        const wrist2 = p(idx.wrist2);
+        const hip1 = p(idx.hip1);
+        const hip2 = p(idx.hip2);
+        const knee1 = p(idx.knee1);
+        const knee2 = p(idx.knee2);
+        const ankle1 = p(idx.ankle1);
+        const ankle2 = p(idx.ankle2);
+
+        const handCenterX = (wrist1 && wrist2) ? ((wrist1.x + wrist2.x) * 0.5) : null;
+        const handCenterY = (wrist1 && wrist2) ? ((wrist1.y + wrist2.y) * 0.5) : null;
+        const handSpeed = (decisionSeries && Number.isFinite(decisionSeries[fi])) ? decisionSeries[fi] : null;
+
+        const hipDistance = dist(hip1, hip2);
+        const hipSpeed = (Number.isFinite(hipDistance) && Number.isFinite(prevHipDistance))
+            ? Math.abs(hipDistance - prevHipDistance) * fpsVal
+            : null;
+        if (Number.isFinite(hipDistance)) prevHipDistance = hipDistance;
+
+        const shoulderDistance = dist(shoulder1, shoulder2);
+        const shoulderHipSeparation = (Number.isFinite(shoulderDistance) && Number.isFinite(hipDistance))
+            ? Math.abs(shoulderDistance - hipDistance)
+            : null;
+
+        rows.push([
+            TEMP_ID,
+            fi,
+            (fi / fpsVal).toFixed(4),
+            fpsVal,
+            fi === decisionFrame ? 1 : 0,
+            fi === startFrame ? 1 : 0,
+            fi === contactFrame ? 1 : 0,
+
+            nose ? nose.x : null,
+            nose ? nose.y : null,
+            vis(nose),
+
+            shoulder1 ? shoulder1.x : null,
+            shoulder1 ? shoulder1.y : null,
+            vis(shoulder1),
+            shoulder2 ? shoulder2.x : null,
+            shoulder2 ? shoulder2.y : null,
+            vis(shoulder2),
+
+            elbow1 ? elbow1.x : null,
+            elbow1 ? elbow1.y : null,
+            vis(elbow1),
+            elbow2 ? elbow2.x : null,
+            elbow2 ? elbow2.y : null,
+            vis(elbow2),
+
+            wrist1 ? wrist1.x : null,
+            wrist1 ? wrist1.y : null,
+            vis(wrist1),
+            wrist2 ? wrist2.x : null,
+            wrist2 ? wrist2.y : null,
+            vis(wrist2),
+
+            hip1 ? hip1.x : null,
+            hip1 ? hip1.y : null,
+            vis(hip1),
+            hip2 ? hip2.x : null,
+            hip2 ? hip2.y : null,
+            vis(hip2),
+
+            knee1 ? knee1.x : null,
+            knee1 ? knee1.y : null,
+            vis(knee1),
+            knee2 ? knee2.x : null,
+            knee2 ? knee2.y : null,
+            vis(knee2),
+
+            ankle1 ? ankle1.x : null,
+            ankle1 ? ankle1.y : null,
+            vis(ankle1),
+            ankle2 ? ankle2.x : null,
+            ankle2 ? ankle2.y : null,
+            vis(ankle2),
+
+            handCenterX,
+            handCenterY,
+            handSpeed,
+
+            hipDistance,
+            hipSpeed,
+            shoulderDistance,
+            shoulderHipSeparation,
+
+            null,
+            null,
+            0,
+            0,
+        ]);
     }
     return {
         csv: rows.map((r) => r.map(csvEscape).join(",")).join("\n"),
@@ -1904,6 +2251,14 @@ document.getElementById("zoom_reset").onclick = () => {
     drawFrame(+slider.value);
 };
 
+if (toggleAnalyticsBtn && analyticsPanel) {
+    toggleAnalyticsBtn.onclick = () => {
+        const isHidden = analyticsPanel.style.display === "none" || !analyticsPanel.style.display;
+        analyticsPanel.style.display = isHidden ? "block" : "none";
+        toggleAnalyticsBtn.textContent = isHidden ? "Hide Graphs + CSV" : "Show Graphs + CSV";
+    };
+}
+
 ////////////////////////////////////////////////////////////
 // MARKERS
 ////////////////////////////////////////////////////////////
@@ -1911,6 +2266,7 @@ document.getElementById("set_start_btn").onclick = () => {
     startFrame = +slider.value;
     markerStatus.textContent =
         `Start = ${startFrame}`;
+    updateSwingDurationDisplay();
     updateGraphLine(+slider.value || 0);
 };
 
@@ -1925,6 +2281,7 @@ document.getElementById("set_contact_btn").onclick = () => {
     contactFrame = +slider.value;
     markerStatus.textContent =
         `Contact = ${contactFrame}`;
+    updateSwingDurationDisplay();
     updateGraphLine(+slider.value || 0);
 };
 
@@ -1968,51 +2325,6 @@ document.getElementById("build_charts_btn").onclick = async () => {
         return;
     }
 
-    const sameSeedAsLastBuild =
-        !!lastBuildSeedPoint &&
-        lastBuildSeedPoint.frame === manualSeedPoint.frame &&
-        Math.hypot(lastBuildSeedPoint.x - manualSeedPoint.x, lastBuildSeedPoint.y - manualSeedPoint.y) <= 0.015;
-
-    if (graphReady && sameSeedAsLastBuild && contactSeries && contactSeries.length) {
-        if (!contactSmoothedSeries || !contactSmoothedSeries.length) {
-            contactSmoothedSeries = smoothSeries(contactSeries, 2);
-        }
-        if ((!decisionDisplaySeries || !decisionDisplaySeries.length) && poseLandmarksFrames && poseLandmarksFrames.length) {
-            decisionDisplaySeries = buildDecisionDisplaySeries(poseLandmarksFrames);
-        }
-        const selectedNow = +slider.value || 0;
-        // Enforce ordering rule: decision (hands fast) must happen before contact.
-        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, decisionFrame);
-        const minContactIdx = Math.max(0, handOnsetGate + 1);
-        const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow, minContactIdx);
-        if (Number.isFinite(autoContact)) contactFrame = autoContact;
-        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
-        if (!startRawSeries || !startRawKneeSeries || !startRawHipSeries) {
-            const leadIdxReuse = leadSide === "left"
-                ? { heel: 27, knee: 25, hip: 23 }
-                : { heel: 28, knee: 26, hip: 24 };
-            const rawReuse = computeLeadMotionRawSeries(poseLandmarksFrames, leadIdxReuse);
-            startRawSeries = rawReuse.heel;
-            startRawKneeSeries = rawReuse.knee;
-            startRawHipSeries = rawReuse.hip;
-            startRawHeelYSeries = rawReuse.heelY;
-        }
-        refreshStartChartSeries();
-        const autoStart = detectStartFrameFromLeadMotion(
-            poseLandmarksFrames,
-            leadSide === "left"
-                ? { heel: 27, knee: 25, hip: 23 }
-                : { heel: 28, knee: 26, hip: 24 },
-            decisionFrame,
-            contactFrame,
-            fps
-        );
-        if (Number.isFinite(autoStart)) startFrame = autoStart;
-        markerStatus.textContent = `Charts reused (start=${startFrame}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
-        updateGraphLine(selectedNow);
-        return;
-    }
-
     markerStatus.textContent = "Building pose charts...";
     await resetPoseInstance();
     const pose = await ensurePose();
@@ -2028,7 +2340,7 @@ document.getElementById("build_charts_btn").onclick = async () => {
     }
     poseLandmarksFrames = landmarks;
 
-    const n = landmarks.length;
+    const n = poseLandmarksFrames.length;
     contactSeries = new Array(n).fill(null);
     contactSmoothedSeries = null;
     decisionSeries = new Array(n).fill(0);
@@ -2043,8 +2355,8 @@ document.getElementById("build_charts_btn").onclick = async () => {
 
     const sideScore = { left: 0, right: 0 };
     for (let i = 1; i < n; i += 1) {
-        const prev = landmarks[i - 1];
-        const curr = landmarks[i];
+        const prev = poseLandmarksFrames[i - 1];
+        const curr = poseLandmarksFrames[i];
         if (!prev || !curr) continue;
         if (prev[27] && curr[27]) sideScore.left += Math.abs(curr[27].x - prev[27].x);
         if (prev[28] && curr[28]) sideScore.right += Math.abs(curr[28].x - prev[28].x);
@@ -2054,21 +2366,18 @@ document.getElementById("build_charts_btn").onclick = async () => {
     const leadIdx = lead === "left"
         ? { heel: 27, knee: 25, hip: 23, wrist: 15, otherWrist: 16 }
         : { heel: 28, knee: 26, hip: 24, wrist: 16, otherWrist: 15 };
-    if (n > 0 && landmarks[0] && landmarks[0][leadIdx.heel]) {
-        startRawHeelYSeries[0] = landmarks[0][leadIdx.heel].y;
+    if (n > 0 && poseLandmarksFrames[0] && poseLandmarksFrames[0][leadIdx.heel]) {
+        startRawHeelYSeries[0] = poseLandmarksFrames[0][leadIdx.heel].y;
+    }
+    if (n > 0) {
+        contactSeries[0] = computeContactSignal(poseLandmarksFrames[0]);
     }
 
     for (let i = 1; i < n; i += 1) {
-        const prev = landmarks[i - 1];
-        const curr = landmarks[i];
+        const prev = poseLandmarksFrames[i - 1];
+        const curr = poseLandmarksFrames[i];
         if (!curr || !prev) continue;
-
-        const lHip = curr[23], rHip = curr[24];
-        if (lHip && rHip) {
-            const dx = lHip.x - rHip.x;
-            const dy = lHip.y - rHip.y;
-            contactSeries[i] = Math.hypot(dx, dy);
-        }
+        contactSeries[i] = computeContactSignal(curr);
 
         const w0 = prev[leadIdx.wrist], w1 = curr[leadIdx.wrist];
         const ow0 = prev[leadIdx.otherWrist], ow1 = curr[leadIdx.otherWrist];
@@ -2087,38 +2396,31 @@ document.getElementById("build_charts_btn").onclick = async () => {
     }
 
     contactSmoothedSeries = smoothSeries(contactSeries, 2);
-    decisionDisplaySeries = buildDecisionDisplaySeries(landmarks);
+    decisionDisplaySeries = buildDecisionDisplaySeries(poseLandmarksFrames);
 
     const selectedNow = +slider.value || 0;
-    // Enforce ordering rule: decision (hands fast) must happen before contact.
-    const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, decisionFrame);
-    const minContactIdx = Math.max(0, handOnsetGate + 1);
-    const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow, minContactIdx);
-    if (Number.isFinite(autoContact)) {
-        contactFrame = autoContact;
-    }
+    // Select contact from hip signal first (no hand-speed gate).
+    const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow, 0, poseLandmarksFrames);
+    if (Number.isFinite(autoContact)) contactFrame = autoContact;
+    // Then use hand acceleration only to refine decision timing.
+    const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, Math.max(0, contactFrame - 6));
     decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
     refreshStartChartSeries();
     const autoStart = detectStartFrameFromLeadMotion(
-        landmarks,
+        poseLandmarksFrames,
         { heel: leadIdx.heel, knee: leadIdx.knee, hip: leadIdx.hip },
         decisionFrame,
         contactFrame,
         fps
     );
     if (Number.isFinite(autoStart)) startFrame = autoStart;
-    lastBuildSeedPoint = {
-        frame: manualSeedPoint.frame,
-        x: manualSeedPoint.x,
-        y: manualSeedPoint.y,
-    };
-
-    ensureGraphCanvas("graph-contact", "marker_status");
+    ensureGraphCanvas("graph-contact", "analytics_graph_anchor");
     ensureGraphCanvas("graph-decision", "graph-contact");
     ensureGraphCanvas("graph-start", "graph-decision");
     graphReady = true;
     const subjectMode = manualSeedPoint ? "manual-lock" : "batter-track";
     markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, start=${startFrame}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
+    updateSwingDurationDisplay();
     updateGraphLine(+slider.value || 0);
 };
 
@@ -2139,6 +2441,7 @@ async function bitmapToPNG(bitmap) {
 }
 
 function computePortraitCropFromLandmarks(lm, fallback = null) {
+    // Derive a portrait crop box around torso/legs/hands of the tracked batter.
     if (!lm || !lm.length) return fallback;
     const idxs = [11, 12, 23, 24, 25, 26, 27, 28, 15, 16];
     const pts = [];
@@ -2180,6 +2483,7 @@ function computePortraitCropFromLandmarks(lm, fallback = null) {
 }
 
 function smoothCropSeries(crops, radius = 2) {
+    // Temporal smoothing so portrait crop does not jitter frame-to-frame.
     if (!crops || !crops.length) return [];
     const out = new Array(crops.length).fill(null);
     for (let i = 0; i < crops.length; i += 1) {
@@ -2197,6 +2501,7 @@ function smoothCropSeries(crops, radius = 2) {
 }
 
 function buildPortraitCropSeries(landmarksSeq) {
+    // Build per-frame crop path from pose, then smooth and fill gaps.
     if (!landmarksSeq || !landmarksSeq.length) return [];
     const raw = new Array(landmarksSeq.length).fill(null);
     let prev = null;
@@ -2215,6 +2520,7 @@ function buildPortraitCropSeries(landmarksSeq) {
 }
 
 async function bitmapToPortraitPNG(bitmap, crop) {
+    // Render one frame into fixed portrait canvas (720x1280) using crop window.
     const out = new OffscreenCanvas(PORTRAIT_OUT_W, PORTRAIT_OUT_H);
     const outCtx = out.getContext("2d");
     outCtx.fillStyle = "black";
@@ -2247,6 +2553,11 @@ async function bitmapToPortraitPNG(bitmap, crop) {
 }
 
 async function trimAndUpload() {
+    // Finalization pipeline:
+    // - trim to marker window
+    // - optionally portrait-crop around batter
+    // - encode MP4 via FFmpeg WASM
+    // - upload finalized clip
     if (contactFrame <= startFrame) {
         alert("Contact must be after start.");
         return;
