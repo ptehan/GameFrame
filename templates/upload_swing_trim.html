@@ -1720,7 +1720,7 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
     }
 
     const regionStart = Math.max(floorIdx, triggerIdx);
-    const regionEnd = Math.min(n - 2, triggerIdx + 24);
+    const regionEnd = Math.min(n - 2, triggerIdx + 5);
     if (regionEnd <= regionStart) return Math.max(floorIdx, regionStart);
 
     const isLocalMax = (arr, i) => {
