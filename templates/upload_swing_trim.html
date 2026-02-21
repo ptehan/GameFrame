@@ -13,7 +13,22 @@
 
 <h2>Trim Swing Clip</h2>
 
-<p id="info">Loading videoâ€¦</p>
+<p id="info">Loading videoÃ¢â‚¬Â¦</p>
+
+
+
+<div id="autodetect_splash" class="trim-splash" style="display:none;">
+    <div class="trim-splash-card">
+        <h3 style="margin:0 0 10px 0;">Step 1: Pick The Batter</h3>
+        <p style="margin:0 0 10px 0;">
+            Autodetect is required before trimming. Click the batter on the preview and analysis will start automatically.
+        </p>
+        <p style="margin:0 0 14px 0; color:#d6d6d6; font-size:13px;">
+            If tracking misses, click Pick Batter and try again on an early frame.
+        </p>
+        <button id="start_pick_flow_btn" class="trim-btn" style="font-size:15px;">Start Batter Selection</button>
+    </div>
+</div>
 
 <style>
 .trim-workspace {
@@ -76,6 +91,26 @@
     gap: 8px;
     margin-top: 8px;
 }
+
+.trim-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+}
+.trim-splash-card {
+    width: min(560px, 94vw);
+    border: 2px solid #ffdd00;
+    background: #121212;
+    color: #f2f2f2;
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 0 24px rgba(255, 221, 0, 0.25);
+}
 @media (max-width: 900px) {
     .trim-controls-pane {
         width: 320px;
@@ -106,7 +141,11 @@
 
         <div class="trim-preview-controls">
             <button id="toggle_analytics_btn" class="trim-small-btn">Show Graphs + CSV</button>
+            <button id="toggle_stick_btn" class="trim-small-btn">Show Stick Figure</button>
         </div>
+
+        <canvas id="stick_canvas" width="320" height="320"
+                style="display:none; margin-top:8px; border:1px solid #333; background:black;"></canvas>
 
     </div>
 
@@ -214,6 +253,15 @@ const markerStatus = document.getElementById("marker_status");
 const swingDurationStatus = document.getElementById("swing_duration_status");
 const analyticsPanel = document.getElementById("analytics_panel");
 const toggleAnalyticsBtn = document.getElementById("toggle_analytics_btn");
+const pickBatterBtn = document.getElementById("pick_batter_btn");
+const buildChartsBtn = document.getElementById("build_charts_btn");
+const stickCanvas = document.getElementById("stick_canvas");
+const stickCtx = stickCanvas ? stickCanvas.getContext("2d") : null;
+const toggleStickBtn = document.getElementById("toggle_stick_btn");
+const autodetectSplash = document.getElementById("autodetect_splash");
+const startPickFlowBtn = document.getElementById("start_pick_flow_btn");
+let showStickFigure = false;
+let autodetectRunning = false;
 
 let analysisFrames = null;
 let graphReady = false;
@@ -229,6 +277,7 @@ let startRawSeries = null;
 let startRawKneeSeries = null;
 let startRawHipSeries = null;
 let startRawHeelYSeries = null;
+let bodyPartPlotSeries = null;
 let poseLandmarksFrames = null;
 let manualSeedPoint = null;
 let awaitingManualPick = false;
@@ -292,6 +341,22 @@ function updateSwingDurationDisplay() {
     }
     const seconds = frameDelta / fps;
     swingDurationStatus.textContent = `Swing Duration: ${seconds.toFixed(3)}s (${frameDelta} frames @ ${fps.toFixed(2)} fps)`;
+}
+
+function showAutodetectSplash() {
+    if (!autodetectSplash) return;
+    autodetectSplash.style.display = "flex";
+}
+
+function hideAutodetectSplash() {
+    if (!autodetectSplash) return;
+    autodetectSplash.style.display = "none";
+}
+
+function beginBatterPickFlow() {
+    awaitingManualPick = true;
+    markerStatus.textContent = "Click directly on the batter. Autodetect will start immediately.";
+    if (pickBatterBtn) pickBatterBtn.textContent = "Click Batter In Preview";
 }
 
 function ensurePose() {
@@ -801,7 +866,7 @@ function chooseBatterLandmarks(candidatesByFrame, frameCount, manualSeed = null)
     return chosen;
 }
 
-async function trackBatterFromManualSeed(manualSeed) {
+async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
     // Main batter tracker used by Autodetect.
     // Starts from user click, then follows nearby hip centers forward/backward.
     if (!manualSeed || !Number.isFinite(manualSeed.frame)) return null;
@@ -824,6 +889,9 @@ async function trackBatterFromManualSeed(manualSeed) {
 
     const chosen = new Array(n).fill(null);
     chosen[manualSeed.frame] = seedLm;
+    const totalPassFrames = Math.max(1, (n - 1) * 2);
+    let processedFrames = 0;
+    if (onProgress) onProgress(0, "Autodetect: locking seed");
 
     const seedHip = hipCenter(seedLm);
     if (!seedHip) return null;
@@ -880,6 +948,10 @@ async function trackBatterFromManualSeed(manualSeed) {
     let misses = 0;
     for (let i = manualSeed.frame + 1; i < n; i += 1) {
         const lm = await detectNearHip(frames[i], prevHip);
+        processedFrames += 1;
+        if (onProgress && (processedFrames % 3 === 0 || i === n - 1)) {
+            onProgress(processedFrames / totalPassFrames, `Autodetect: tracking forward ${i + 1}/${n}`);
+        }
         if (!lm) {
             chosen[i] = null;
             misses += 1;
@@ -895,6 +967,10 @@ async function trackBatterFromManualSeed(manualSeed) {
     misses = 0;
     for (let i = manualSeed.frame - 1; i >= 0; i -= 1) {
         const lm = await detectNearHip(frames[i], prevHip);
+        processedFrames += 1;
+        if (onProgress && (processedFrames % 3 === 0 || i === 0)) {
+            onProgress(processedFrames / totalPassFrames, `Autodetect: tracking backward ${n - i}/${n}`);
+        }
         if (!lm) {
             chosen[i] = null;
             misses += 1;
@@ -906,6 +982,7 @@ async function trackBatterFromManualSeed(manualSeed) {
         misses = 0;
     }
 
+    if (onProgress) onProgress(1, "Autodetect: tracking complete");
     return chosen;
 }
 
@@ -970,6 +1047,8 @@ async function loadVideo() {
 
     info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
     updateSwingDurationDisplay();
+    showAutodetectSplash();
+    if (pickBatterBtn) pickBatterBtn.textContent = "Pick Batter";
 }
 
 ////////////////////////////////////////////////////////////
@@ -1023,46 +1102,18 @@ function drawFrame(i) {
             return c;
         };
 
-        // Shoulders
-        drawDot(lm[11], "#66e0ff", 4.5);
-        drawDot(lm[12], "#ffcc66", 4.5);
+        // Minimal marker set for debugging: hands, hips, knees, feet.
+        drawDot(lm[15], "#ff66cc", 4.8); // left hand
+        drawDot(lm[16], "#cc66ff", 4.8); // right hand
 
-        // Hands (wrists) + center marker
-        const lw = drawDot(lm[15], "#ff66cc", 5.0);
-        const rw = drawDot(lm[16], "#cc66ff", 5.0);
-        if (lw && rw) {
-            ctx.beginPath();
-            ctx.strokeStyle = "rgba(255,255,255,0.55)";
-            ctx.lineWidth = 1.5;
-            ctx.moveTo(lw.x, lw.y);
-            ctx.lineTo(rw.x, rw.y);
-            ctx.stroke();
+        drawDot(lm[23], "#ff4d4d", 4.4); // left hip
+        drawDot(lm[24], "#33ff66", 4.4); // right hip
 
-            const handMid = { x: (lw.x + rw.x) * 0.5, y: (lw.y + rw.y) * 0.5 };
-            ctx.beginPath();
-            ctx.fillStyle = "#33ff66";
-            ctx.arc(handMid.x, handMid.y, 3.6, 0, Math.PI * 2);
-            ctx.fill();
-        }
+        drawDot(lm[25], "#ffd54a", 4.2); // left knee
+        drawDot(lm[26], "#ffe98a", 4.2); // right knee
 
-        if (shouldDrawHipPair(lm)) {
-            const leftHip = lm[23];
-            const rightHip = lm[24];
-            if (leftHip) {
-                const c = toCanvas(leftHip);
-                ctx.beginPath();
-                ctx.fillStyle = "#ff4d4d";
-                ctx.arc(c.x, c.y, 4.0, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            if (rightHip) {
-                const c = toCanvas(rightHip);
-                ctx.beginPath();
-                ctx.fillStyle = "#33ff66";
-                ctx.arc(c.x, c.y, 4.0, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
+        drawDot(lm[27], "#66d9ff", 4.2); // left foot/ankle
+        drawDot(lm[28], "#9be9ff", 4.2); // right foot/ankle
     }
 
     // Preview HUD: selected frame + marker frames
@@ -1090,6 +1141,78 @@ function drawFrame(i) {
     }
 
     if (graphReady) updateGraphLine(i);
+    drawStickFigureFrame(i);
+}
+
+function drawStickFigureFrame(i) {
+    if (!stickCanvas || !stickCtx) return;
+    if (!showStickFigure) return;
+
+    const lm = poseLandmarksFrames && poseLandmarksFrames[i];
+    stickCanvas.width = canvas.width;
+    stickCanvas.height = canvas.height;
+    const W = stickCanvas.width;
+    const H = stickCanvas.height;
+
+    stickCtx.fillStyle = "black";
+    stickCtx.fillRect(0, 0, W, H);
+
+    if (!lm || !lm.length) {
+        stickCtx.fillStyle = "#888";
+        stickCtx.font = "13px monospace";
+        stickCtx.fillText("No pose data on this frame", 10, 20);
+        return;
+    }
+
+    const toCanvas = (p) => ({
+        x: p.x * W,
+        y: p.y * H,
+    });
+    const isVis = (p, minV = 0.12) => p && (Number.isFinite(p.visibility) ? p.visibility : 1) >= minV;
+
+    // Skeleton lines.
+    stickCtx.strokeStyle = "#9adfff";
+    stickCtx.lineWidth = 2;
+    for (const [aIdx, bIdx] of POSE_CONNECTIONS) {
+        const a = lm[aIdx];
+        const b = lm[bIdx];
+        if (!isVis(a) || !isVis(b)) continue;
+        const ca = toCanvas(a);
+        const cb = toCanvas(b);
+        stickCtx.beginPath();
+        stickCtx.moveTo(ca.x, ca.y);
+        stickCtx.lineTo(cb.x, cb.y);
+        stickCtx.stroke();
+    }
+
+    // Draw all visible landmarks.
+    for (let idx = 0; idx < lm.length; idx += 1) {
+        const p = lm[idx];
+        if (!isVis(p, 0.10)) continue;
+        const c = toCanvas(p);
+
+        let color = "#ffffff";
+        let r = 2.5;
+        if (idx === 15 || idx === 16) { color = "#ff66cc"; r = 4.0; } // hands
+        else if (idx === 23 || idx === 24) { color = "#33ff66"; r = 3.8; } // hips
+        else if (idx === 25 || idx === 26) { color = "#ffd54a"; r = 3.4; } // knees
+        else if (idx === 27 || idx === 28 || idx === 31 || idx === 32) { color = "#66d9ff"; r = 3.2; } // feet
+        else if (idx === 11 || idx === 12) { color = "#66e0ff"; r = 3.4; } // shoulders
+
+        stickCtx.beginPath();
+        stickCtx.fillStyle = color;
+        stickCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
+        stickCtx.fill();
+
+        // Label every point so all landmarks are inspectable.
+        stickCtx.fillStyle = "rgba(220,220,220,0.9)";
+        stickCtx.font = "9px monospace";
+        stickCtx.fillText(String(idx), c.x + 3, c.y - 3);
+    }
+
+    stickCtx.fillStyle = "#bbb";
+    stickCtx.font = "12px monospace";
+    stickCtx.fillText(`Stick Figure - Frame ${i}`, 10, 16);
 }
 
 function bitmapToGrayVector(bitmap, size = 64) {
@@ -1556,7 +1679,7 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
     }
     const sg = savgolSmooth(raw, 5);
     // Require enough plausible hip frames; if not, keep current/floor contact.
-    if (validHipCount < Math.max(10, Math.floor(n * 0.28))) return Math.max(anchor, floorIdx);
+    if (validHipCount < Math.max(10, Math.floor(n * 0.28))) return Math.max(floorIdx, anchor);
 
     const scanStart = Math.max(2, floorIdx);
     const net = new Array(n).fill(null);
@@ -1568,50 +1691,21 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
     }
 
     const vals = net.filter((v) => Number.isFinite(v));
-    if (!vals.length) return Math.max(anchor, floorIdx);
+    if (!vals.length) return Math.max(floorIdx, anchor);
     const maxNet = Math.max(...vals);
     const majorThresh = maxNet * 0.72;
 
-    // Stage 1: major-change region via contiguous above-threshold segments.
-    const segments = [];
-    let segStart = -1;
-    let segMax = -Infinity;
-    let segSum = 0;
+    // First big fast change (earliest threshold crossing).
+    let triggerIdx = -1;
     for (let i = scanStart; i < n; i += 1) {
         const v = net[i];
-        const hot = Number.isFinite(v) && v >= majorThresh;
-        if (hot) {
-            if (segStart < 0) {
-                segStart = i;
-                segMax = v;
-                segSum = v;
-            } else {
-                segMax = Math.max(segMax, v);
-                segSum += v;
-            }
-        } else if (segStart >= 0) {
-            segments.push({ start: segStart, end: i - 1, max: segMax, sum: segSum });
-            segStart = -1;
-            segMax = -Infinity;
-            segSum = 0;
+        if (Number.isFinite(v) && v >= majorThresh) {
+            triggerIdx = i;
+            break;
         }
     }
-    if (segStart >= 0) segments.push({ start: segStart, end: n - 1, max: segMax, sum: segSum });
-
-    let majorSeg = null;
-    if (segments.length) {
-        majorSeg = segments[0];
-        let majorScore = majorSeg.max * 1.2 + majorSeg.sum;
-        for (let i = 1; i < segments.length; i += 1) {
-            const s = segments[i];
-            const score = s.max * 1.2 + s.sum;
-            if (score > majorScore) {
-                majorScore = score;
-                majorSeg = s;
-            }
-        }
-    } else {
-        // Fallback region around global max net-change.
+    if (triggerIdx < 0) {
+        // Fallback to global fastest-change index.
         let bestIdx = scanStart;
         let bestVal = -Infinity;
         for (let i = scanStart; i < n; i += 1) {
@@ -1622,12 +1716,12 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
                 bestIdx = i;
             }
         }
-        majorSeg = { start: bestIdx, end: bestIdx, max: bestVal, sum: bestVal };
+        triggerIdx = bestIdx;
     }
 
-    const regionStart = Math.max(floorIdx, majorSeg.start - 2);
-    const regionEnd = Math.min(n - 2, majorSeg.end + 12);
-    if (regionEnd <= regionStart) return Math.max(anchor, regionStart);
+    const regionStart = Math.max(floorIdx, triggerIdx);
+    const regionEnd = Math.min(n - 2, triggerIdx + 24);
+    if (regionEnd <= regionStart) return Math.max(floorIdx, regionStart);
 
     const isLocalMax = (arr, i) => {
         if (i <= 0 || i >= arr.length - 1) return false;
@@ -1644,7 +1738,7 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
 
     // Determine expected extremum direction.
     const rawVals = sg.filter((v) => Number.isFinite(v));
-    if (!rawVals.length) return Math.max(anchor, regionStart);
+    if (!rawVals.length) return Math.max(floorIdx, regionStart);
     const minRaw = Math.min(...rawVals);
     const maxRaw = Math.max(...rawVals);
     const midRaw = (minRaw + maxRaw) * 0.5;
@@ -1661,7 +1755,7 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
     const expectValley = Number.isFinite(startLevel) ? (startLevel >= midRaw) : false;
 
     const swingRange = Math.max(1e-6, maxRaw - minRaw);
-    const minProm = swingRange * 0.18;
+    const minProm = swingRange * 0.14;
     const extremumCands = [];
     for (let i = regionStart + 1; i <= regionEnd - 1; i += 1) {
         const v = sg[i];
@@ -1694,13 +1788,13 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
         extremumCands.push({ i, prom, persistent, v });
     }
 
-    if (!extremumCands.length) return Math.max(anchor, regionStart);
-    // Prefer earliest persistent strong extremum; else strongest by prominence.
+    if (!extremumCands.length) return Math.max(floorIdx, regionStart);
+    // Rule: first big extremum after big fast change.
     for (const c of extremumCands) {
-        if (c.persistent && c.prom >= minProm) return Math.max(anchor, c.i);
+        if (c.prom >= minProm) return Math.max(floorIdx, c.i);
     }
     extremumCands.sort((a, b) => b.prom - a.prom);
-    return Math.max(anchor, extremumCands[0].i);
+    return Math.max(floorIdx, extremumCands[0].i);
 }
 
 function evaluateHipVisibilityConsistency(landmarks) {
@@ -1926,18 +2020,8 @@ function detectStartFrameFromLeadMotion(landmarks, leadIdx, decisionIdx, contact
             : 0;
         const onsetThresh = Math.max(0.0045, q80 * 0.45);
         const riseThresh = Math.max(0.0010, onsetThresh * 0.22);
-
-        for (let i = Math.max(winStart + 1, 1); i <= winEnd - 1; i += 1) {
-            const v0 = heelLift[i - 1];
-            const v1 = heelLift[i];
-            const v2 = heelLift[i + 1];
-            if (![v0, v1, v2].every(Number.isFinite)) continue;
-            const rising = (v1 - v0) >= riseThresh;
-            const sustained = v1 >= onsetThresh && v2 >= onsetThresh * 0.85;
-            if (rising && sustained) return i;
-        }
-
-        // If lift is clear but onset is noisy, backtrack from first major lift peak.
+        // Require a true, sustained off-ground lift before using heel onset.
+        // If that does not exist, we intentionally fall through to knee/hip forward.
         let peakIdx = -1;
         let peakVal = -Infinity;
         for (let i = winStart; i <= winEnd; i += 1) {
@@ -1948,13 +2032,39 @@ function detectStartFrameFromLeadMotion(landmarks, leadIdx, decisionIdx, contact
                 peakIdx = i;
             }
         }
-        if (peakIdx >= 0 && peakVal >= onsetThresh * 1.2) {
-            const backThresh = Math.max(onsetThresh * 0.55, peakVal * 0.22);
-            for (let j = peakIdx; j >= winStart + 1; j -= 1) {
-                const v = heelLift[j];
-                const p = heelLift[j - 1];
-                if (!Number.isFinite(v) || !Number.isFinite(p)) continue;
-                if (p <= backThresh && v > backThresh) return j;
+        const strongLiftThresh = Math.max(0.012, onsetThresh * 1.8);
+        if (peakIdx >= 0 && peakVal >= strongLiftThresh) {
+            const sustainLevel = Math.max(onsetThresh, strongLiftThresh * 0.65);
+            const minSustainFrames = 3;
+            let runStart = -1;
+            let runLen = 0;
+            let sustainedStart = -1;
+
+            for (let i = winStart; i <= winEnd; i += 1) {
+                const v = heelLift[i];
+                if (Number.isFinite(v) && v >= sustainLevel) {
+                    if (runStart < 0) runStart = i;
+                    runLen += 1;
+                    if (runLen >= minSustainFrames) {
+                        sustainedStart = runStart;
+                        break;
+                    }
+                } else {
+                    runStart = -1;
+                    runLen = 0;
+                }
+            }
+
+            if (sustainedStart >= 0) {
+                // Return first frame of lift onset by backtracking from sustained run.
+                const backThresh = Math.max(onsetThresh * 0.70, strongLiftThresh * 0.30);
+                for (let j = sustainedStart; j >= Math.max(winStart + 1, 1); j -= 1) {
+                    const v0 = heelLift[j - 1];
+                    const v1 = heelLift[j];
+                    if (![v0, v1].every(Number.isFinite)) continue;
+                    if ((v1 - v0) >= riseThresh && v0 <= backThresh && v1 > backThresh) return j;
+                }
+                return sustainedStart;
             }
         }
     }
@@ -2114,6 +2224,159 @@ function hasFiniteSeries(series) {
     }
     return false;
 }
+
+function buildPairXSeries(landmarks, leftIdx, rightIdx) {
+    const n = landmarks ? landmarks.length : 0;
+    const left = new Array(n).fill(null);
+    const right = new Array(n).fill(null);
+    for (let i = 0; i < n; i += 1) {
+        const lm = landmarks[i];
+        if (!lm) continue;
+        const l = lm[leftIdx];
+        const r = lm[rightIdx];
+        if (l && Number.isFinite(l.x)) left[i] = l.x;
+        if (r && Number.isFinite(r.x)) right[i] = r.x;
+    }
+    return { left, right };
+}
+
+function ensureBodyPartPlotSeries() {
+    if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
+        bodyPartPlotSeries = null;
+        return null;
+    }
+    if (bodyPartPlotSeries && bodyPartPlotSeries.n === poseLandmarksFrames.length) {
+        return bodyPartPlotSeries;
+    }
+    bodyPartPlotSeries = {
+        n: poseLandmarksFrames.length,
+        hips: buildPairXSeries(poseLandmarksFrames, 23, 24),
+        shoulders: buildPairXSeries(poseLandmarksFrames, 11, 12),
+        hands: buildPairXSeries(poseLandmarksFrames, 15, 16),
+        knees: buildPairXSeries(poseLandmarksFrames, 25, 26),
+        feet: buildPairXSeries(poseLandmarksFrames, 27, 28),
+    };
+    return bodyPartPlotSeries;
+}
+
+function drawPairXChart(canvasId, title, pairSeries, selectedIdx, labels = { left: "Left", right: "Right" }) {
+    const c = document.getElementById(canvasId);
+    if (!c || !pairSeries) return;
+    const left = pairSeries.left || [];
+    const right = pairSeries.right || [];
+    const n = Math.max(frames.length, left.length, right.length, 1);
+    const vals = [];
+    for (const v of left) if (Number.isFinite(v)) vals.push(v);
+    for (const v of right) if (Number.isFinite(v)) vals.push(v);
+    if (!vals.length) return;
+
+    const g = c.getContext("2d");
+    const W = c.width, H = c.height;
+    const padL = 42, padR = 16, padT = 26, padB = 24;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const xScale = plotW / Math.max(1, n - 1);
+
+    let minV = Math.min(...vals);
+    let maxV = Math.max(...vals);
+    if (!Number.isFinite(minV) || !Number.isFinite(maxV)) return;
+    const dataPad = Math.max(0.01, (maxV - minV) * 0.12);
+    minV = Math.max(0, minV - dataPad);
+    maxV = Math.min(1, maxV + dataPad);
+    if (minV === maxV) { minV = Math.max(0, minV - 0.05); maxV = Math.min(1, maxV + 0.05); }
+    const yScale = plotH / Math.max(1e-6, maxV - minV);
+
+    g.fillStyle = "#111";
+    g.fillRect(0, 0, W, H);
+    g.strokeStyle = "#444";
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(padL, padT);
+    g.lineTo(padL, H - padB);
+    g.lineTo(W - padR, H - padB);
+    g.stroke();
+
+    const drawSeries = (series, color) => {
+        g.strokeStyle = color;
+        g.lineWidth = 2;
+        g.beginPath();
+        let started = false;
+        for (let i = 0; i < series.length; i += 1) {
+            const v = series[i];
+            if (!Number.isFinite(v)) continue;
+            const x = padL + i * xScale;
+            const y = padT + (maxV - v) * yScale;
+            if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
+        }
+        g.stroke();
+    };
+    drawSeries(left, "#ff6a6a");
+    drawSeries(right, "#68b7ff");
+
+    const drawMarker = (idx, color, width = 2) => {
+        if (!Number.isFinite(idx)) return;
+        const x = padL + idx * xScale;
+        g.strokeStyle = color;
+        g.lineWidth = width;
+        g.beginPath();
+        g.moveTo(x, padT);
+        g.lineTo(x, H - padB);
+        g.stroke();
+    };
+    drawMarker(startFrame, "#00ffff", 2);
+    drawMarker(decisionFrame, "#33ff66", 2);
+    drawMarker(contactFrame, "#66aaff", 2.5);
+    drawMarker(selectedIdx, "#ffffff", 1);
+
+    g.fillStyle = "#8f8f8f";
+    g.font = "11px monospace";
+    g.fillText("X Position (normalized 0-1)", 4, padT + 4);
+    g.fillText("Frame Index", W - 86, H - 6);
+
+    const yTicks = 4;
+    g.textAlign = "right";
+    for (let yi = 0; yi <= yTicks; yi += 1) {
+        const t = yi / yTicks;
+        const y = padT + t * plotH;
+        const v = maxV - t * (maxV - minV);
+        g.strokeStyle = "#2f2f2f";
+        g.beginPath();
+        g.moveTo(padL - 4, y);
+        g.lineTo(W - padR, y);
+        g.stroke();
+        g.fillStyle = "#d2d2d2";
+        g.fillText(v.toFixed(3), padL - 6, y + 4);
+    }
+    const tickEvery = n > 120 ? 20 : 10;
+    g.textAlign = "center";
+    for (let ti = 0; ti < n; ti += tickEvery) {
+        const tx = padL + ti * xScale;
+        g.strokeStyle = "#333";
+        g.beginPath();
+        g.moveTo(tx, H - padB);
+        g.lineTo(tx, H - padB + 4);
+        g.stroke();
+        g.fillText(String(ti), tx, H - 6);
+    }
+    g.textAlign = "left";
+
+    g.fillStyle = "#bbb";
+    g.font = "12px monospace";
+    g.fillText(title, 8, 16);
+
+    // Series + marker legend.
+    g.strokeStyle = "#ff6a6a"; g.lineWidth = 2; g.beginPath(); g.moveTo(W - 380, 14); g.lineTo(W - 356, 14); g.stroke();
+    g.fillStyle = "#ffb0b0"; g.fillText(labels.left, W - 352, 18);
+    g.strokeStyle = "#68b7ff"; g.lineWidth = 2; g.beginPath(); g.moveTo(W - 300, 14); g.lineTo(W - 276, 14); g.stroke();
+    g.fillStyle = "#a8d6ff"; g.fillText(labels.right, W - 272, 18);
+    g.strokeStyle = "#00ffff"; g.lineWidth = 2; g.beginPath(); g.moveTo(W - 228, 14); g.lineTo(W - 214, 14); g.stroke();
+    g.fillStyle = "#bff"; g.fillText("start", W - 210, 18);
+    g.strokeStyle = "#33ff66"; g.lineWidth = 2; g.beginPath(); g.moveTo(W - 174, 14); g.lineTo(W - 160, 14); g.stroke();
+    g.fillStyle = "#b8ffcc"; g.fillText("decision", W - 156, 18);
+    g.strokeStyle = "#66aaff"; g.lineWidth = 2; g.beginPath(); g.moveTo(W - 98, 14); g.lineTo(W - 84, 14); g.stroke();
+    g.fillStyle = "#bfd8ff"; g.fillText("contact", W - 80, 18);
+}
+
 function updateGraphLine(selectedIdx) {
     if (!graphReady) return;
     drawContactDualSeriesChart(
@@ -2146,6 +2409,14 @@ function updateGraphLine(selectedIdx) {
         startFrame,
         selectedIdx
     );
+
+    const parts = ensureBodyPartPlotSeries();
+    if (!parts) return;
+    drawPairXChart("graph-part-hips", "Hips: Left vs Right X over full clip", parts.hips, selectedIdx, { left: "Left Hip", right: "Right Hip" });
+    drawPairXChart("graph-part-shoulders", "Shoulders: Left vs Right X over full clip", parts.shoulders, selectedIdx, { left: "Left Shoulder", right: "Right Shoulder" });
+    drawPairXChart("graph-part-hands", "Hands: Left vs Right X over full clip", parts.hands, selectedIdx, { left: "Left Hand", right: "Right Hand" });
+    drawPairXChart("graph-part-knees", "Knees: Left vs Right X over full clip", parts.knees, selectedIdx, { left: "Left Knee", right: "Right Knee" });
+    drawPairXChart("graph-part-feet", "Feet: Left vs Right X over full clip", parts.feet, selectedIdx, { left: "Left Foot", right: "Right Foot" });
 }
 
 function eventTypeForFrame(i) {
@@ -2433,6 +2704,19 @@ if (toggleAnalyticsBtn && analyticsPanel) {
     };
 }
 
+if (toggleStickBtn && stickCanvas) {
+    toggleStickBtn.onclick = () => {
+        if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
+            markerStatus.textContent = "Build charts first to generate stick figure data.";
+            return;
+        }
+        showStickFigure = !showStickFigure;
+        stickCanvas.style.display = showStickFigure ? "block" : "none";
+        toggleStickBtn.textContent = showStickFigure ? "Hide Stick Figure" : "Show Stick Figure";
+        drawStickFigureFrame(+slider.value || 0);
+    };
+}
+
 ////////////////////////////////////////////////////////////
 // MARKERS
 ////////////////////////////////////////////////////////////
@@ -2459,14 +2743,186 @@ document.getElementById("set_contact_btn").onclick = () => {
     updateGraphLine(+slider.value || 0);
 };
 
-document.getElementById("pick_batter_btn").onclick = () => {
+async function runAutodetectFromManualSeed() {
+    if (autodetectRunning) return;
     if (!frames.length) return;
-    awaitingManualPick = true;
-    markerStatus.textContent = "Click batter on the preview frame to lock subject.";
-};
+    if (!manualSeedPoint) {
+        markerStatus.textContent = "Click the batter on the preview to start autodetect.";
+        return;
+    }
 
-canvas.addEventListener("click", (ev) => {
-    if (!awaitingManualPick || !frames.length) return;
+    autodetectRunning = true;
+    showProgress();
+    updateProgress(2, "Autodetect: initializing...");
+    markerStatus.textContent = "Building pose charts...";
+    await resetPoseInstance();
+    updateProgress(8, "Autodetect: loading pose model...");
+    const pose = await ensurePose();
+    if (!pose) {
+        markerStatus.textContent = "Pose library unavailable.";
+        hideProgress();
+        autodetectRunning = false;
+        return;
+    }
+    markerStatus.textContent = `Building pose charts... tracking locked batter ${manualSeedPoint.frame + 1}/${frames.length}`;
+    updateProgress(14, "Autodetect: tracking batter...");
+    const landmarks = await trackBatterFromManualSeed(manualSeedPoint, (ratio, msg) => {
+        const pct = 14 + Math.max(0, Math.min(1, ratio)) * 46;
+        updateProgress(pct, msg);
+    });
+    if (!landmarks) {
+        markerStatus.textContent = "Manual batter lock failed. Re-pick batter on frame 0-5.";
+        hideProgress();
+        autodetectRunning = false;
+        return;
+    }
+    poseLandmarksFrames = landmarks;
+
+    const n = poseLandmarksFrames.length;
+    contactSeries = new Array(n).fill(null);
+    contactSmoothedSeries = null;
+    contactSavgolSeries = null;
+    decisionSeries = new Array(n).fill(0);
+    decisionDisplaySeries = new Array(n).fill(null);
+    startSeries = new Array(n).fill(null);
+    startKneeSeries = new Array(n).fill(null);
+    startHipSeries = new Array(n).fill(null);
+    startRawSeries = new Array(n).fill(0);
+    startRawKneeSeries = new Array(n).fill(0);
+    startRawHipSeries = new Array(n).fill(0);
+    startRawHeelYSeries = new Array(n).fill(null);
+    bodyPartPlotSeries = null;
+
+    const sideScore = { left: 0, right: 0 };
+    for (let i = 1; i < n; i += 1) {
+        const prev = poseLandmarksFrames[i - 1];
+        const curr = poseLandmarksFrames[i];
+        if (!prev || !curr) continue;
+        if (prev[27] && curr[27]) sideScore.left += Math.abs(curr[27].x - prev[27].x);
+        if (prev[28] && curr[28]) sideScore.right += Math.abs(curr[28].x - prev[28].x);
+    }
+    const lead = sideScore.left >= sideScore.right ? "left" : "right";
+    leadSide = lead;
+    const leadIdx = lead === "left"
+        ? { heel: 27, knee: 25, hip: 23, wrist: 15, otherWrist: 16 }
+        : { heel: 28, knee: 26, hip: 24, wrist: 16, otherWrist: 15 };
+    if (n > 0 && poseLandmarksFrames[0] && poseLandmarksFrames[0][leadIdx.heel]) {
+        startRawHeelYSeries[0] = poseLandmarksFrames[0][leadIdx.heel].y;
+    }
+    if (n > 0) {
+        contactSeries[0] = computeContactSignal(poseLandmarksFrames[0]);
+    }
+
+    updateProgress(64, "Autodetect: building signals...");
+    for (let i = 1; i < n; i += 1) {
+        const prev = poseLandmarksFrames[i - 1];
+        const curr = poseLandmarksFrames[i];
+        if (!curr || !prev) continue;
+        contactSeries[i] = computeContactSignal(curr);
+
+        const w0 = prev[leadIdx.wrist], w1 = curr[leadIdx.wrist];
+        const ow0 = prev[leadIdx.otherWrist], ow1 = curr[leadIdx.otherWrist];
+        let handSpeed = 0;
+        if (w0 && w1) handSpeed = Math.max(handSpeed, Math.hypot(w1.x - w0.x, w1.y - w0.y));
+        if (ow0 && ow1) handSpeed = Math.max(handSpeed, Math.hypot(ow1.x - ow0.x, ow1.y - ow0.y));
+        decisionSeries[i] = handSpeed;
+
+        const pHeel = prev[leadIdx.heel], cHeel = curr[leadIdx.heel];
+        const pKnee = prev[leadIdx.knee], cKnee = curr[leadIdx.knee];
+        const pHip = prev[leadIdx.hip], cHip = curr[leadIdx.hip];
+        if (pHeel && cHeel) startRawSeries[i] = cHeel.x - pHeel.x;
+        if (pKnee && cKnee) startRawKneeSeries[i] = cKnee.x - pKnee.x;
+        if (pHip && cHip) startRawHipSeries[i] = cHip.x - pHip.x;
+        if (cHeel) startRawHeelYSeries[i] = cHeel.y;
+        if (i % 12 === 0) {
+            updateProgress(64 + (i / n) * 20, `Autodetect: frame features ${i}/${n}`);
+        }
+    }
+
+    contactSmoothedSeries = smoothSeries(contactSeries, 2);
+    contactSavgolSeries = savgolSmooth(contactSeries, 5);
+    decisionDisplaySeries = buildDecisionDisplaySeries(poseLandmarksFrames);
+
+    const hipStats = evaluateHipVisibilityConsistency(poseLandmarksFrames);
+    // Use a relaxed visibility gate for contact so we still honor hip-first logic
+    // when hips are visible but not perfectly consistent.
+    const hipsUsableForContact =
+        hipStats.visibleCount >= Math.max(8, Math.floor(n * 0.18));
+    let contactMode = "hip";
+
+    if (hipsUsableForContact) {
+        // Normal path: contact first from hips, then refine decision.
+        // Do not anchor contact to the currently selected frame.
+        const autoContact = detectContactFrameFromHipSeries(contactSeries, 0, 0, poseLandmarksFrames);
+        if (Number.isFinite(autoContact)) contactFrame = autoContact;
+        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, Math.max(0, contactFrame - 6));
+        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
+        contactMode = hipStats.consistent ? "hip" : "hip-relaxed";
+    } else {
+        // Low-hip-visibility fallback:
+        // 1) decision first from hand acceleration
+        // 2) contact narrowed around decision+5
+        contactMode = "decision-first-low-hip";
+        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, 0);
+        const provisionalContact = Math.max(0, Math.min(n - 1, handOnsetGate + 5));
+        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, provisionalContact, handOnsetGate);
+
+        const targetContact = Math.max(0, Math.min(n - 1, decisionFrame + 5));
+        const minContact = Math.max(0, targetContact - 2);
+        const maxContact = Math.min(n - 1, targetContact + 3);
+        const autoContact = detectContactFrameFromHipSeries(contactSeries, targetContact, minContact, poseLandmarksFrames);
+        if (Number.isFinite(autoContact)) {
+            contactFrame = Math.max(minContact, Math.min(maxContact, autoContact));
+        } else {
+            contactFrame = targetContact;
+        }
+    }
+
+    updateProgress(90, "Autodetect: detecting start/decision/contact...");
+    refreshStartChartSeries();
+    const autoStart = detectStartFrameFromLeadMotion(
+        poseLandmarksFrames,
+        { heel: leadIdx.heel, knee: leadIdx.knee, hip: leadIdx.hip },
+        decisionFrame,
+        contactFrame,
+        fps
+    );
+    if (Number.isFinite(autoStart)) startFrame = autoStart;
+    ensureGraphCanvas("graph-contact", "analytics_graph_anchor");
+    ensureGraphCanvas("graph-decision", "graph-contact");
+    ensureGraphCanvas("graph-start", "graph-decision");
+    ensureGraphCanvas("graph-part-hips", "graph-start");
+    ensureGraphCanvas("graph-part-shoulders", "graph-part-hips");
+    ensureGraphCanvas("graph-part-hands", "graph-part-shoulders");
+    ensureGraphCanvas("graph-part-knees", "graph-part-hands");
+    ensureGraphCanvas("graph-part-feet", "graph-part-knees");
+    graphReady = true;
+    const subjectMode = manualSeedPoint ? "manual-lock" : "batter-track";
+    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, contact-mode=${contactMode}, hips=${hipStats.visibleCount}/${n}, start=${startFrame}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
+    updateSwingDurationDisplay();
+    updateGraphLine(+slider.value || 0);
+    updateProgress(100, "Autodetect complete.");
+    setTimeout(() => hideProgress(), 350);
+    autodetectRunning = false;
+}
+
+if (startPickFlowBtn) {
+    startPickFlowBtn.onclick = () => {
+        hideAutodetectSplash();
+        beginBatterPickFlow();
+    };
+}
+
+if (pickBatterBtn) {
+    pickBatterBtn.onclick = () => {
+        if (!frames.length) return;
+        hideAutodetectSplash();
+        beginBatterPickFlow();
+    };
+}
+
+canvas.addEventListener("click", async (ev) => {
+    if (!awaitingManualPick || !frames.length || autodetectRunning) return;
     const i = +slider.value || 0;
     const f = frames[i];
     if (!f) return;
@@ -2489,138 +2945,20 @@ canvas.addEventListener("click", (ev) => {
         y: Math.max(0, Math.min(1, ny)),
     };
     awaitingManualPick = false;
-    markerStatus.textContent = `Batter locked at frame ${i}. Click Autodetect.`;
+    markerStatus.textContent = `Batter locked at frame ${i}. Starting autodetect...`;
+    await runAutodetectFromManualSeed();
 });
 
-document.getElementById("build_charts_btn").onclick = async () => {
-    if (!frames.length) return;
-    if (!manualSeedPoint) {
-        markerStatus.textContent = "Click Pick Batter, then click the batter, then Autodetect.";
-        return;
-    }
-
-    markerStatus.textContent = "Building pose charts...";
-    await resetPoseInstance();
-    const pose = await ensurePose();
-    if (!pose) {
-        markerStatus.textContent = "Pose library unavailable.";
-        return;
-    }
-    markerStatus.textContent = `Building pose charts... tracking locked batter ${manualSeedPoint.frame + 1}/${frames.length}`;
-    const landmarks = await trackBatterFromManualSeed(manualSeedPoint);
-    if (!landmarks) {
-        markerStatus.textContent = "Manual batter lock failed. Re-pick batter on frame 0-5.";
-        return;
-    }
-    poseLandmarksFrames = landmarks;
-
-    const n = poseLandmarksFrames.length;
-    contactSeries = new Array(n).fill(null);
-    contactSmoothedSeries = null;
-    contactSavgolSeries = null;
-    decisionSeries = new Array(n).fill(0);
-    decisionDisplaySeries = new Array(n).fill(null);
-    startSeries = new Array(n).fill(null);
-    startKneeSeries = new Array(n).fill(null);
-    startHipSeries = new Array(n).fill(null);
-    startRawSeries = new Array(n).fill(0);
-    startRawKneeSeries = new Array(n).fill(0);
-    startRawHipSeries = new Array(n).fill(0);
-    startRawHeelYSeries = new Array(n).fill(null);
-
-    const sideScore = { left: 0, right: 0 };
-    for (let i = 1; i < n; i += 1) {
-        const prev = poseLandmarksFrames[i - 1];
-        const curr = poseLandmarksFrames[i];
-        if (!prev || !curr) continue;
-        if (prev[27] && curr[27]) sideScore.left += Math.abs(curr[27].x - prev[27].x);
-        if (prev[28] && curr[28]) sideScore.right += Math.abs(curr[28].x - prev[28].x);
-    }
-    const lead = sideScore.left >= sideScore.right ? "left" : "right";
-    leadSide = lead;
-    const leadIdx = lead === "left"
-        ? { heel: 27, knee: 25, hip: 23, wrist: 15, otherWrist: 16 }
-        : { heel: 28, knee: 26, hip: 24, wrist: 16, otherWrist: 15 };
-    if (n > 0 && poseLandmarksFrames[0] && poseLandmarksFrames[0][leadIdx.heel]) {
-        startRawHeelYSeries[0] = poseLandmarksFrames[0][leadIdx.heel].y;
-    }
-    if (n > 0) {
-        contactSeries[0] = computeContactSignal(poseLandmarksFrames[0]);
-    }
-
-    for (let i = 1; i < n; i += 1) {
-        const prev = poseLandmarksFrames[i - 1];
-        const curr = poseLandmarksFrames[i];
-        if (!curr || !prev) continue;
-        contactSeries[i] = computeContactSignal(curr);
-
-        const w0 = prev[leadIdx.wrist], w1 = curr[leadIdx.wrist];
-        const ow0 = prev[leadIdx.otherWrist], ow1 = curr[leadIdx.otherWrist];
-        let handSpeed = 0;
-        if (w0 && w1) handSpeed = Math.max(handSpeed, Math.hypot(w1.x - w0.x, w1.y - w0.y));
-        if (ow0 && ow1) handSpeed = Math.max(handSpeed, Math.hypot(ow1.x - ow0.x, ow1.y - ow0.y));
-        decisionSeries[i] = handSpeed;
-
-        const pHeel = prev[leadIdx.heel], cHeel = curr[leadIdx.heel];
-        const pKnee = prev[leadIdx.knee], cKnee = curr[leadIdx.knee];
-        const pHip = prev[leadIdx.hip], cHip = curr[leadIdx.hip];
-        if (pHeel && cHeel) startRawSeries[i] = cHeel.x - pHeel.x;
-        if (pKnee && cKnee) startRawKneeSeries[i] = cKnee.x - pKnee.x;
-        if (pHip && cHip) startRawHipSeries[i] = cHip.x - pHip.x;
-        if (cHeel) startRawHeelYSeries[i] = cHeel.y;
-    }
-
-    contactSmoothedSeries = smoothSeries(contactSeries, 2);
-    contactSavgolSeries = savgolSmooth(contactSeries, 5);
-    decisionDisplaySeries = buildDecisionDisplaySeries(poseLandmarksFrames);
-
-    const selectedNow = +slider.value || 0;
-    const hipStats = evaluateHipVisibilityConsistency(poseLandmarksFrames);
-    let contactMode = "hip";
-
-    if (hipStats.consistent) {
-        // Normal path: contact first from hips, then refine decision.
-        const autoContact = detectContactFrameFromHipSeries(contactSeries, selectedNow, 0, poseLandmarksFrames);
-        if (Number.isFinite(autoContact)) contactFrame = autoContact;
-        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, Math.max(0, contactFrame - 6));
-        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
-    } else {
-        // Low-hip-visibility fallback:
-        // 1) decision first from hand acceleration
-        // 2) contact narrowed around decision+5
-        contactMode = "decision-first-low-hip";
-        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, Math.max(0, selectedNow - 8));
-        const provisionalContact = Math.max(0, Math.min(n - 1, handOnsetGate + 5));
-        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, provisionalContact, handOnsetGate);
-
-        const targetContact = Math.max(0, Math.min(n - 1, decisionFrame + 5));
-        const minContact = Math.max(0, targetContact - 2);
-        const maxContact = Math.min(n - 1, targetContact + 3);
-        const autoContact = detectContactFrameFromHipSeries(contactSeries, targetContact, minContact, poseLandmarksFrames);
-        if (Number.isFinite(autoContact)) {
-            contactFrame = Math.max(minContact, Math.min(maxContact, autoContact));
-        } else {
-            contactFrame = targetContact;
+if (buildChartsBtn) {
+    buildChartsBtn.onclick = async () => {
+        if (!manualSeedPoint) {
+            hideAutodetectSplash();
+            beginBatterPickFlow();
+            return;
         }
-    }
-    refreshStartChartSeries();
-    const autoStart = detectStartFrameFromLeadMotion(
-        poseLandmarksFrames,
-        { heel: leadIdx.heel, knee: leadIdx.knee, hip: leadIdx.hip },
-        decisionFrame,
-        contactFrame,
-        fps
-    );
-    if (Number.isFinite(autoStart)) startFrame = autoStart;
-    ensureGraphCanvas("graph-contact", "analytics_graph_anchor");
-    ensureGraphCanvas("graph-decision", "graph-contact");
-    ensureGraphCanvas("graph-start", "graph-decision");
-    graphReady = true;
-    const subjectMode = manualSeedPoint ? "manual-lock" : "batter-track";
-    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, contact-mode=${contactMode}, hips=${hipStats.visibleCount}/${n}, start=${startFrame}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
-    updateSwingDurationDisplay();
-    updateGraphLine(+slider.value || 0);
-};
+        await runAutodetectFromManualSeed();
+    };
+}
 
 ////////////////////////////////////////////////////////////
 // TRIM + UPLOAD
@@ -2665,10 +3003,10 @@ function computePortraitCropFromLandmarks(lm, fallback = null) {
     const cx = (minX + maxX) * 0.5;
     const cy = ((minY + maxY) * 0.5) - (boxH * 0.08);
 
-    // Keep batter framed reasonably tight while preserving a portrait window.
-    let cropH = Math.max(boxH * 1.75, 0.56);
+    // Keep batter framed with more context (less zoomed-in) in portrait output.
+    let cropH = Math.max(boxH * 2.15, 0.68);
     let cropW = cropH * PORTRAIT_ASPECT;
-    cropW = Math.max(cropW, boxW * 1.55);
+    cropW = Math.max(cropW, boxW * 1.95);
     cropH = cropW / PORTRAIT_ASPECT;
     cropH = Math.min(cropH, 0.95);
     cropW = Math.min(cropW, 0.95);
@@ -2866,6 +3204,7 @@ loadVideo();
 </script>
 
 {% endblock %}
+
 
 
 
