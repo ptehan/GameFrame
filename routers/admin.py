@@ -38,6 +38,22 @@ def teams_delete(item_id: int = Form(...), sid: str = Form("x")):
     conn.close()
     return RedirectResponse(f"/teams?sid={sid}", status_code=303)
 
+@router.post("/teams/edit")
+def teams_edit(
+    item_id: int = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    sid: str = Form("x"),
+):
+    conn = db()
+    conn.execute(
+        "UPDATE teams SET name=?, description=? WHERE id=?",
+        (name, description, item_id),
+    )
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/teams?sid={sid}", status_code=303)
+
 @router.get("/hitters", response_class=HTMLResponse)
 def hitters_page(request: Request, sid: str = "x"):
     conn = db()
@@ -46,7 +62,8 @@ def hitters_page(request: Request, sid: str = "x"):
             hitters.id,
             hitters.name,
             hitters.description,
-            teams.name
+            teams.name,
+            hitters.team_id
         FROM hitters
         JOIN teams ON hitters.team_id = teams.id
         ORDER BY teams.name, hitters.name
@@ -76,6 +93,23 @@ def hitters_add(
 
     return RedirectResponse(f"/hitters?sid={sid}", status_code=303)
 
+@router.post("/hitters/edit")
+def hitters_edit(
+    item_id: int = Form(...),
+    team_id: int = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    sid: str = Form("x"),
+):
+    conn = db()
+    conn.execute(
+        "UPDATE hitters SET team_id=?, name=?, description=? WHERE id=?",
+        (team_id, name, description, item_id),
+    )
+    conn.commit()
+    conn.close()
+    return RedirectResponse(f"/hitters?sid={sid}", status_code=303)
+
 @router.post("/hitters/delete")
 def hitters_delete(item_id: int = Form(...), sid: str = Form("x")):
     conn = db()
@@ -93,7 +127,8 @@ def pitchers_page(request: Request, sid: str = "x"):
             pitchers.id,
             pitchers.name,
             pitchers.description,
-            teams.name
+            teams.name,
+            pitchers.team_id
         FROM pitchers
         JOIN teams ON pitchers.team_id = teams.id
         ORDER BY teams.name, pitchers.name
@@ -121,6 +156,23 @@ def pitchers_add(
     conn.commit()
     conn.close()
 
+    return RedirectResponse(f"/pitchers?sid={sid}", status_code=303)
+
+@router.post("/pitchers/edit")
+def pitchers_edit(
+    item_id: int = Form(...),
+    team_id: int = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    sid: str = Form("x"),
+):
+    conn = db()
+    conn.execute(
+        "UPDATE pitchers SET team_id=?, name=?, description=? WHERE id=?",
+        (team_id, name, description, item_id),
+    )
+    conn.commit()
+    conn.close()
     return RedirectResponse(f"/pitchers?sid={sid}", status_code=303)
 
 @router.post("/pitchers/delete")

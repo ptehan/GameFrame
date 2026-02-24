@@ -279,7 +279,7 @@ async def matchup_create(
 def swing_meta(id: int):
     conn = db()
     row = conn.execute(
-        "SELECT fps, decision_frame FROM swing_clips WHERE id=?",
+        "SELECT fps, decision_frame, swing_seconds, frame_count, clip_blob FROM swing_clips WHERE id=?",
         (id,)
     ).fetchone()
     conn.close()
@@ -287,11 +287,40 @@ def swing_meta(id: int):
     if not row:
         return {"error": "bad_meta"}
 
-    fps, decision_frame = row
+    fps, decision_frame, swing_seconds, frame_count, clip_blob = row
+    fps = float(fps or 0)
+    swing_seconds = float(swing_seconds) if swing_seconds is not None else None
+    frame_count = int(frame_count) if frame_count is not None else None
+
+    if swing_seconds is None and frame_count is not None and fps > 0:
+        swing_seconds = frame_count / fps
+    elif swing_seconds is None and clip_blob:
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
+        try:
+            with open(tmp, "wb") as f:
+                f.write(clip_blob)
+            cap = cv2.VideoCapture(tmp)
+            fc = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            detected_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0)
+            cap.release()
+            fps_use = fps if fps > 0 else detected_fps
+            if fc > 0 and fps_use > 0:
+                swing_seconds = fc / fps_use
+                if frame_count is None:
+                    frame_count = fc
+                if fps <= 0:
+                    fps = fps_use
+        finally:
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
 
     return {
         "fps": fps,
-        "decision_frame": decision_frame
+        "decision_frame": decision_frame,
+        "swing_seconds": swing_seconds,
+        "frame_count": frame_count,
     }
 
 

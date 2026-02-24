@@ -1,0 +1,1053 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<!-- PROGRESS BAR -->
+<div id="progress-container" style="margin-top:15px; width:360px; display:none;">
+    <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
+        <div id="progress-bar" style="height:100%; width:0%; background:#ffdd00;"></div>
+    </div>
+    <div id="progress-label" style="margin-top:6px; font-size:13px;">
+        Working…
+    </div>
+</div>
+
+<h2>Trim Swing Clip</h2>
+
+<p id="info">Loading video…</p>
+
+<!-- PREVIEW -->
+<canvas id="preview" width="320" height="320"
+        style="border:1px solid #333; background:black;"></canvas>
+
+<!-- ZOOM CONTROLS -->
+<div style="margin-top:6px;">
+    <button id="zoom_out">Smaller</button>
+    <button id="zoom_reset">Reset  </button>
+    <button id="zoom_in">Larger </button>
+</div>
+
+<br>
+
+<!-- SLIDER -->
+<input type="range" id="frame_slider" min="0" max="0" value="0"
+       style="width:320px; margin-top:10px;">
+
+<div style="margin-top:10px;">
+    <button id="prev_btn">&laquo; Prev</button>
+    <button id="next_btn">Next &raquo;</button>
+</div>
+
+<!-- MARKERS -->
+<div style="margin-top:15px;">
+    <button id="set_start_btn">Set Start</button>
+    <button id="set_decision_btn">Set Decision</button>
+    <button id="set_contact_btn">Set Contact</button>
+    <button id="auto_detect_btn">Auto Detect</button>
+</div>
+
+<div id="marker_status"
+     style="margin-top:10px;font-weight:bold;"></div>
+<div id="swing_time_status"
+     style="margin-top:6px;font-weight:bold;"></div>
+
+<button id="finalize_btn"
+        style="margin-top:20px;font-size:18px;">
+    Finalize Swing
+</button>
+
+<div id="upload_status"
+     style="margin-top:10px;font-weight:bold;"></div>
+
+<script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+
+<script>
+////////////////////////////////////////////////////////////
+// VARS
+////////////////////////////////////////////////////////////
+const TEMP_ID     = "{{ temp_id }}";
+const SID         = "{{ sid }}";
+const TEAM_ID     = "{{ team_id }}";
+const HITTER_ID   = "{{ hitter_id }}";
+const DESCRIPTION = "{{ description }}";
+
+let frames = [];
+let fps = 30;
+
+let startFrame    = 0;
+let decisionFrame = 0;
+let contactFrame  = 0;
+
+let previewScale = 1.0;
+const BASE_SIZE = 320;
+const GRAPH_WIDTH = () => Math.max(1100, Math.floor(window.innerWidth * 0.95));
+const GRAPH_HEIGHT = 240;
+
+const slider  = document.getElementById("frame_slider");
+const canvas  = document.getElementById("preview");
+const ctx     = canvas.getContext("2d");
+const info    = document.getElementById("info");
+const markerStatus = document.getElementById("marker_status");
+const swingTimeStatus = document.getElementById("swing_time_status");
+
+let graphDistances = null;
+let decisionSeries = null;
+let startHeelSeries = null;
+let startHipSeries = null;
+let startKneeSeries = null;
+
+////////////////////////////////////////////////////////////
+// PROGRESS
+////////////////////////////////////////////////////////////
+function showProgress() {
+    document.getElementById("progress-container").style.display = "block";
+}
+
+function hideProgress() {
+    document.getElementById("progress-container").style.display = "none";
+}
+
+function updateProgress(pct, msg = "") {
+    document.getElementById("progress-bar").style.width = pct + "%";
+    if (msg) document.getElementById("progress-label").innerText = msg;
+}
+
+function updateSwingTimeStatus() {
+    if (!Number.isFinite(decisionFrame) || !Number.isFinite(contactFrame) || !fps) {
+        swingTimeStatus.textContent = "Swing Time: n/a";
+        return;
+    }
+    const frameDelta = decisionFrame - contactFrame;
+    const seconds = frameDelta / fps;
+    swingTimeStatus.textContent =
+        `Swing Time (Decision - Contact): ${frameDelta} frames (${seconds.toFixed(3)} s)`;
+}
+
+////////////////////////////////////////////////////////////
+// POSE SETUP (CLIENT-SIDE)
+////////////////////////////////////////////////////////////
+let poseInstance = null;
+let poseInitPromise = null;
+let poseResolver = null;
+
+function ensurePose() {
+    if (poseInstance) return Promise.resolve(poseInstance);
+    if (poseInitPromise) return poseInitPromise;
+    if (typeof Pose === "undefined") {
+        return Promise.resolve(null);
+    }
+
+    poseInitPromise = new Promise((resolve) => {
+        const pose = new Pose({
+            locateFile: (file) =>
+                `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+        });
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            enableSegmentation: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+        });
+        pose.onResults((results) => {
+            if (poseResolver) {
+                poseResolver(results.poseLandmarks || null);
+                poseResolver = null;
+            }
+        });
+        poseInstance = pose;
+        resolve(pose);
+    });
+
+    return poseInitPromise;
+}
+
+function runPoseOnBitmap(bitmap) {
+    return new Promise(async (resolve) => {
+        const pose = await ensurePose();
+        if (!pose) {
+            resolve(null);
+            return;
+        }
+        poseResolver = resolve;
+        const off = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const ctx = off.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0);
+        await pose.send({ image: off });
+    });
+}
+
+////////////////////////////////////////////////////////////
+// FRAME ANALYSIS (REGION-BASED MOTION HEURISTICS)
+////////////////////////////////////////////////////////////
+const ANALYSIS_SIZE = 48;
+let analysisFrames = null;
+
+function bitmapToGrayVector(bitmap) {
+    const off = new OffscreenCanvas(ANALYSIS_SIZE, ANALYSIS_SIZE);
+    const offCtx = off.getContext("2d", { willReadFrequently: true });
+    offCtx.drawImage(bitmap, 0, 0, ANALYSIS_SIZE, ANALYSIS_SIZE);
+    const img = offCtx.getImageData(0, 0, ANALYSIS_SIZE, ANALYSIS_SIZE).data;
+    const gray = new Uint8Array(ANALYSIS_SIZE * ANALYSIS_SIZE);
+    for (let i = 0, j = 0; i < img.length; i += 4, j += 1) {
+        gray[j] = Math.round(
+            img[i] * 0.299 + img[i + 1] * 0.587 + img[i + 2] * 0.114
+        );
+    }
+    return gray;
+}
+
+async function ensureAnalysisFrames() {
+    if (analysisFrames) return analysisFrames;
+    analysisFrames = [];
+    updateProgress(0, "Analyzing frames…");
+    for (let i = 0; i < frames.length; i += 1) {
+        analysisFrames.push(bitmapToGrayVector(frames[i]));
+        if (i % 25 === 0) {
+            updateProgress(
+                Math.min(100, Math.round((i / frames.length) * 100)),
+                `Analyzing… ${i}/${frames.length}`
+            );
+        }
+    }
+    updateProgress(100, "Analysis ready");
+    return analysisFrames;
+}
+
+function regionMotion(prev, curr, x0, y0, x1, y1) {
+    let sum = 0;
+    for (let y = y0; y < y1; y += 1) {
+        let row = y * ANALYSIS_SIZE;
+        for (let x = x0; x < x1; x += 1) {
+            const idx = row + x;
+            sum += Math.abs(curr[idx] - prev[idx]);
+        }
+    }
+    return sum;
+}
+
+function computeMotionScores(grayFrames) {
+    const scores = {
+        global: new Array(grayFrames.length).fill(0),
+        lower: new Array(grayFrames.length).fill(0),
+        upper: new Array(grayFrames.length).fill(0),
+    };
+    const lowerStart = Math.floor(ANALYSIS_SIZE * 0.6);
+    const upperEnd = Math.floor(ANALYSIS_SIZE * 0.45);
+    for (let i = 1; i < grayFrames.length; i += 1) {
+        const prev = grayFrames[i - 1];
+        const curr = grayFrames[i];
+        scores.global[i] = regionMotion(
+            prev,
+            curr,
+            0,
+            0,
+            ANALYSIS_SIZE,
+            ANALYSIS_SIZE
+        );
+        scores.lower[i] = regionMotion(
+            prev,
+            curr,
+            0,
+            lowerStart,
+            ANALYSIS_SIZE,
+            ANALYSIS_SIZE
+        );
+        scores.upper[i] = regionMotion(
+            prev,
+            curr,
+            0,
+            0,
+            ANALYSIS_SIZE,
+            upperEnd
+        );
+    }
+    return scores;
+}
+
+function baselineStats(values, count) {
+    const sampleCount = Math.min(count, values.length - 1);
+    if (sampleCount <= 1) return { mean: 0, std: 0 };
+    let mean = 0;
+    for (let i = 1; i <= sampleCount; i += 1) mean += values[i];
+    mean /= sampleCount;
+    let variance = 0;
+    for (let i = 1; i <= sampleCount; i += 1) {
+        variance += (values[i] - mean) ** 2;
+    }
+    variance /= sampleCount;
+    return { mean, std: Math.sqrt(variance) };
+}
+
+function distance(a, b) {
+    if (!a || !b) return null;
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function computePoseSignals(landmarkFrames) {
+    const signals = {
+        left: { ankle: [], hip: [], wrist: [] },
+        right: { ankle: [], hip: [], wrist: [] },
+        frames: landmarkFrames,
+    };
+    for (let i = 0; i < landmarkFrames.length; i += 1) {
+        const current = landmarkFrames[i];
+        const prev = i > 0 ? landmarkFrames[i - 1] : null;
+        const leftAnkle = current ? current[27] : null;
+        const rightAnkle = current ? current[28] : null;
+        const leftHip = current ? current[23] : null;
+        const rightHip = current ? current[24] : null;
+        const leftWrist = current ? current[15] : null;
+        const rightWrist = current ? current[16] : null;
+        const prevLeftAnkle = prev ? prev[27] : null;
+        const prevRightAnkle = prev ? prev[28] : null;
+        const prevLeftHip = prev ? prev[23] : null;
+        const prevRightHip = prev ? prev[24] : null;
+        const prevLeftWrist = prev ? prev[15] : null;
+        const prevRightWrist = prev ? prev[16] : null;
+
+        signals.left.ankle.push(distance(leftAnkle, prevLeftAnkle));
+        signals.right.ankle.push(distance(rightAnkle, prevRightAnkle));
+        signals.left.hip.push(distance(leftHip, prevLeftHip));
+        signals.right.hip.push(distance(rightHip, prevRightHip));
+        signals.left.wrist.push(distance(leftWrist, prevLeftWrist));
+        signals.right.wrist.push(distance(rightWrist, prevRightWrist));
+    }
+    return signals;
+}
+
+function pickStartFrameFromPose(signals, decisionIdx = null) {
+    const leftSeries = signals.left.ankle.map((v, i) =>
+        Math.max(v || 0, signals.left.hip[i] || 0)
+    );
+    const rightSeries = signals.right.ankle.map((v, i) =>
+        Math.max(v || 0, signals.right.hip[i] || 0)
+    );
+
+    const leftStats = baselineStats(leftSeries, 10);
+    const rightStats = baselineStats(rightSeries, 10);
+    const leftThreshold = leftStats.mean + leftStats.std * 2.5;
+    const rightThreshold = rightStats.mean + rightStats.std * 2.5;
+
+    let leftIdx = null;
+    let rightIdx = null;
+    const leftLimit = Number.isFinite(decisionIdx)
+        ? Math.max(2, Math.min(leftSeries.length - 1, decisionIdx - 1))
+        : leftSeries.length - 1;
+    const rightLimit = Number.isFinite(decisionIdx)
+        ? Math.max(2, Math.min(rightSeries.length - 1, decisionIdx - 1))
+        : rightSeries.length - 1;
+    for (let i = 1; i < leftLimit - 1; i += 1) {
+        if (leftSeries[i] > leftThreshold && leftSeries[i + 1] > leftThreshold) {
+            leftIdx = i;
+            break;
+        }
+    }
+    for (let i = 1; i < rightLimit - 1; i += 1) {
+        if (rightSeries[i] > rightThreshold && rightSeries[i + 1] > rightThreshold) {
+            rightIdx = i;
+            break;
+        }
+    }
+
+    if (leftIdx === null && rightIdx === null) return { frame: 0, side: "left" };
+    if (rightIdx === null || (leftIdx !== null && leftIdx <= rightIdx)) {
+        return { frame: leftIdx, side: "left" };
+    }
+    return { frame: rightIdx, side: "right" };
+}
+
+function pickDecisionFrameFromPose(signals, startIdx, side, contactIdx = null) {
+    const series = side === "right" ? signals.right.wrist : signals.left.wrist;
+    const safeSeries = series.map((v) => v || 0);
+    const endLimit = Number.isFinite(contactIdx)
+        ? Math.max(startIdx + 2, Math.min(safeSeries.length - 1, contactIdx - 1))
+        : safeSeries.length - 1;
+    const baselineWindow = safeSeries.slice(0, endLimit + 1);
+    const baselineCount = Math.max(2, Math.min(20, baselineWindow.length - 1));
+    const stats = baselineStats(baselineWindow, baselineCount);
+    const speedThreshold = stats.mean + stats.std * 1.5;
+    const accelThreshold = stats.std * 0.75;
+    for (let i = startIdx + 1; i < endLimit - 1; i += 1) {
+        const speed = safeSeries[i];
+        const nextSpeed = safeSeries[i + 1];
+        const accel = nextSpeed - speed;
+        if (speed > speedThreshold && accel > accelThreshold) {
+            return i;
+        }
+    }
+    return Math.max(startIdx + 1, startIdx + 4);
+}
+
+function pickContactFrameFromPose(signals, decisionIdx, startIdx) {
+    const frames = signals.frames || [];
+    if (!frames.length) return Math.max(0, decisionIdx + 1);
+
+    const hipSpan = frames.map((frame) => {
+        if (!frame) return null;
+        const leftHip = frame[23];
+        const rightHip = frame[24];
+        if (!leftHip || !rightHip) return null;
+        return distance(leftHip, rightHip);
+    });
+
+    const hipDelta = hipSpan.map((value, i) => {
+        if (i === 0 || value === null || hipSpan[i - 1] === null) {
+            return null;
+        }
+        return Math.abs(value - hipSpan[i - 1]);
+    });
+
+    const safeDelta = hipDelta.map((v) => v || 0);
+    const stats = baselineStats(safeDelta, 10);
+    const highThreshold = stats.mean + stats.std * 1.2;
+    const lowThreshold = stats.mean + stats.std * 0.3;
+    const searchStart = Math.max(1, decisionIdx + 1, startIdx + 1);
+
+    let peakIdx = null;
+    let peakValue = -Infinity;
+    for (let i = searchStart; i < hipDelta.length; i += 1) {
+        const current = hipDelta[i] || 0;
+        if (current >= highThreshold && current > peakValue) {
+            peakValue = current;
+            peakIdx = i;
+        }
+    }
+    if (peakIdx !== null) {
+        for (let i = peakIdx + 1; i < hipDelta.length; i += 1) {
+            const current = hipDelta[i] || 0;
+            if (current <= lowThreshold) {
+                return i;
+            }
+        }
+        return peakIdx;
+    }
+
+    let maxIdx = searchStart;
+    let maxValue = -Infinity;
+    for (let i = searchStart; i < hipDelta.length; i += 1) {
+        const value = hipDelta[i] || 0;
+        if (value > maxValue) {
+            maxValue = value;
+            maxIdx = i;
+        }
+    }
+    return maxIdx;
+}
+
+function pickStartFrame(scores, decisionIdx = null) {
+    const { mean, std } = baselineStats(scores.lower, 12);
+    const threshold = mean + std * 2.8;
+    const endLimit = Number.isFinite(decisionIdx)
+        ? Math.min(scores.lower.length - 2, Math.max(1, decisionIdx - 1))
+        : scores.lower.length - 2;
+    for (let i = 1; i < endLimit; i += 1) {
+        if (
+            scores.lower[i] > threshold &&
+            scores.lower[i + 1] > threshold
+        ) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+function pickContactFrame(scores, startIdx = 1) {
+    const fromIdx = Math.max(startIdx, 1);
+    const toIdx = scores.global.length - 1;
+    let maxIdx = fromIdx;
+    let maxScore = -Infinity;
+    for (let i = fromIdx; i <= toIdx; i += 1) {
+        if (scores.global[i] > maxScore) {
+            maxScore = scores.global[i];
+            maxIdx = i;
+        }
+    }
+    return maxIdx;
+}
+
+function pickDecisionFrame(scores, startIdx, contactIdx) {
+    const { mean, std } = baselineStats(scores.upper, 12);
+    const threshold = mean + std * 2.5;
+    for (let i = startIdx + 1; i < contactIdx; i += 1) {
+        if (scores.upper[i] > threshold && scores.upper[i + 1] > threshold) {
+            return i;
+        }
+    }
+    return Math.max(startIdx + 1, contactIdx - 6);
+}
+
+function computeHipSeries(landmarkFrames) {
+    return (landmarkFrames || []).map((frame) => {
+        if (!frame || !frame[23] || !frame[24]) return null;
+        return distance(frame[23], frame[24]);
+    });
+}
+
+function computeStartSeries(landmarkFrames) {
+    const heelSeries = [];
+    const hipSeries = [];
+    const kneeSeries = [];
+    for (const frame of landmarkFrames || []) {
+        if (!frame) {
+            heelSeries.push(null);
+            hipSeries.push(null);
+            kneeSeries.push(null);
+            continue;
+        }
+        const la = frame[27];
+        const ra = frame[28];
+        const lh = frame[23];
+        const rh = frame[24];
+        const lk = frame[25];
+        const rk = frame[26];
+        heelSeries.push(la && ra ? -(Math.max(la.y, ra.y)) : null);
+        hipSeries.push(lh && rh ? ((lh.x + rh.x) * 0.5) : null);
+        kneeSeries.push(lk && rk ? Math.max(lk.x, rk.x) : null);
+    }
+    return { heelSeries, hipSeries, kneeSeries };
+}
+
+function ensureGraphCanvas(id, anchorId) {
+    let canvas = document.getElementById(id);
+    if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.id = id;
+        canvas.style.border = "1px solid #666";
+        canvas.style.marginTop = "10px";
+        canvas.style.background = "#1a1a1a";
+        canvas.style.width = "100%";
+        canvas.style.maxWidth = "100%";
+        const anchor = document.getElementById(anchorId) || markerStatus;
+        anchor.insertAdjacentElement("afterend", canvas);
+    }
+    canvas.width = GRAPH_WIDTH();
+    canvas.height = GRAPH_HEIGHT;
+    return canvas;
+}
+
+function getGraphFrameCount() {
+    return Math.max(
+        frames ? frames.length : 0,
+        graphDistances ? graphDistances.length : 0,
+        decisionSeries ? decisionSeries.length : 0,
+        startHeelSeries ? startHeelSeries.length : 0,
+        startHipSeries ? startHipSeries.length : 0,
+        startKneeSeries ? startKneeSeries.length : 0,
+        1
+    );
+}
+
+function createVisualGraph(values, contactIdx, selectedIdx = null, totalFrames = null) {
+    const canvas = ensureGraphCanvas("graph-canvas", "marker_status");
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const paddingLeft = 40;
+    const paddingRight = 20;
+    const paddingTop = 28;
+    const paddingBottom = 24;
+    const frameCount = Number.isFinite(totalFrames) ? totalFrames : Math.max(values.length, 1);
+    const plotWidth = width - paddingLeft - paddingRight;
+    const plotHeight = height - paddingTop - paddingBottom;
+    const xScale = plotWidth / Math.max(1, frameCount - 1);
+    const valid = (values || []).filter((v) => Number.isFinite(v));
+    if (!valid.length) return;
+    let minVal = Math.min(...valid);
+    let maxVal = Math.max(...valid);
+    if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
+    const yScale = plotHeight / (maxVal - minVal || 1);
+
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "#4a9eff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < values.length; i += 1) {
+        if (!Number.isFinite(values[i])) continue;
+        const x = paddingLeft + i * xScale;
+        const y = paddingTop + (maxVal - values[i]) * yScale;
+        if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+    }
+    ctx.stroke();
+
+    if (Number.isFinite(contactIdx)) {
+        const x = paddingLeft + contactIdx * xScale;
+        ctx.strokeStyle = "#4a9eff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x, paddingTop);
+        ctx.lineTo(x, height - paddingBottom);
+        ctx.stroke();
+    }
+    if (Number.isFinite(selectedIdx)) {
+        const x = paddingLeft + selectedIdx * xScale;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, paddingTop);
+        ctx.lineTo(x, height - paddingBottom);
+        ctx.stroke();
+    }
+    ctx.fillStyle = "#bbb";
+    ctx.font = "12px monospace";
+    ctx.fillText("Contact: Hip Distance (blue) | Contact (blue) | Selected (white)", 10, 18);
+}
+
+function createDecisionGraph(values, decisionIdx, selectedIdx = null, totalFrames = null) {
+    const canvas = ensureGraphCanvas("graph-canvas-decision", "graph-canvas");
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const paddingLeft = 40;
+    const paddingRight = 20;
+    const paddingTop = 28;
+    const paddingBottom = 24;
+    const frameCount = Number.isFinite(totalFrames) ? totalFrames : Math.max(values.length, 1);
+    const plotWidth = width - paddingLeft - paddingRight;
+    const plotHeight = height - paddingTop - paddingBottom;
+    const xScale = plotWidth / Math.max(1, frameCount - 1);
+    const valid = (values || []).filter((v) => Number.isFinite(v));
+    if (!valid.length) return;
+    let minVal = Math.min(...valid);
+    let maxVal = Math.max(...valid);
+    if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
+    const yScale = plotHeight / (maxVal - minVal || 1);
+
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "#ffdd00";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < values.length; i += 1) {
+        if (!Number.isFinite(values[i])) continue;
+        const x = paddingLeft + i * xScale;
+        const y = paddingTop + (maxVal - values[i]) * yScale;
+        if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+    }
+    ctx.stroke();
+
+    if (Number.isFinite(decisionIdx)) {
+        const x = paddingLeft + decisionIdx * xScale;
+        ctx.strokeStyle = "#44ff44";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x, paddingTop);
+        ctx.lineTo(x, height - paddingBottom);
+        ctx.stroke();
+    }
+    if (Number.isFinite(selectedIdx)) {
+        const x = paddingLeft + selectedIdx * xScale;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, paddingTop);
+        ctx.lineTo(x, height - paddingBottom);
+        ctx.stroke();
+    }
+    ctx.fillStyle = "#bbb";
+    ctx.font = "12px monospace";
+    ctx.fillText("Decision: Hand Speed (yellow) | Decision (green) | Selected (white)", 10, 18);
+}
+
+function createStartGraph(heelSeries, hipSeries, kneeSeries, startIdx, selectedIdx = null, totalFrames = null) {
+    const canvas = ensureGraphCanvas("graph-canvas-start", "graph-canvas-decision");
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const paddingLeft = 40;
+    const paddingRight = 20;
+    const paddingTop = 28;
+    const paddingBottom = 24;
+    const frameCount = Number.isFinite(totalFrames)
+        ? totalFrames
+        : Math.max(heelSeries.length, hipSeries.length, kneeSeries.length, 1);
+    const plotWidth = width - paddingLeft - paddingRight;
+    const plotHeight = height - paddingTop - paddingBottom;
+    const xScale = plotWidth / Math.max(1, frameCount - 1);
+    const valid = []
+        .concat((heelSeries || []).filter((v) => Number.isFinite(v)))
+        .concat((hipSeries || []).filter((v) => Number.isFinite(v)))
+        .concat((kneeSeries || []).filter((v) => Number.isFinite(v)));
+    if (!valid.length) return;
+    let minVal = Math.min(...valid);
+    let maxVal = Math.max(...valid);
+    if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
+    const yScale = plotHeight / (maxVal - minVal || 1);
+
+    const draw = (arr, color) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let started = false;
+        for (let i = 0; i < arr.length; i += 1) {
+            if (!Number.isFinite(arr[i])) continue;
+            const x = paddingLeft + i * xScale;
+            const y = paddingTop + (maxVal - arr[i]) * yScale;
+            if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+        }
+        ctx.stroke();
+    };
+
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, width, height);
+    draw(heelSeries || [], "#42d9ff");
+    draw(hipSeries || [], "#ff66cc");
+    draw(kneeSeries || [], "#ff9933");
+
+    if (Number.isFinite(startIdx)) {
+        const x = paddingLeft + startIdx * xScale;
+        ctx.strokeStyle = "#00e0ff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x, paddingTop);
+        ctx.lineTo(x, height - paddingBottom);
+        ctx.stroke();
+    }
+    if (Number.isFinite(selectedIdx)) {
+        const x = paddingLeft + selectedIdx * xScale;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, paddingTop);
+        ctx.lineTo(x, height - paddingBottom);
+        ctx.stroke();
+    }
+    ctx.fillStyle = "#bbb";
+    ctx.font = "12px monospace";
+    ctx.fillText("Start: Heel (cyan) Hip (magenta) Knee (orange) | Start (cyan) | Selected (white)", 10, 18);
+}
+
+function updateGraphLine(frameIdx) {
+    if (!graphDistances || !graphDistances.length) return;
+    const total = getGraphFrameCount();
+    createVisualGraph(graphDistances, contactFrame, frameIdx, total);
+    if (decisionSeries && decisionSeries.length) {
+        createDecisionGraph(decisionSeries, decisionFrame, frameIdx, total);
+    }
+    if (startHeelSeries && startHipSeries && startKneeSeries) {
+        createStartGraph(startHeelSeries, startHipSeries, startKneeSeries, startFrame, frameIdx, total);
+    }
+}
+
+////////////////////////////////////////////////////////////
+// LOAD + DECODE VIDEO
+////////////////////////////////////////////////////////////
+async function loadVideo() {
+    showProgress();
+    updateProgress(5, "Fetching video…");
+
+    const resp = await fetch(`/raw/swing?id=${TEMP_ID}`);
+    const buf  = await resp.arrayBuffer();
+
+    updateProgress(20, "Preparing video…");
+
+    const blob = new Blob([buf], { type: "video/mp4" });
+    const video = document.createElement("video");
+    video.src = URL.createObjectURL(blob);
+    video.muted = true;
+    video.playsInline = true;
+
+    await video.play().catch(() => {});
+    updateProgress(35, "Initializing decoder…");
+
+    const stream = video.captureStream();
+    const track  = stream.getVideoTracks()[0];
+    if (!track) {
+        info.textContent = "Cannot decode this MP4.";
+        return;
+    }
+
+    const processor = new MediaStreamTrackProcessor(track);
+    const reader    = processor.readable.getReader();
+
+    frames = [];
+    updateProgress(40, "Decoding frames…");
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const bmp = await createImageBitmap(value);
+        frames.push(bmp);
+        value.close();
+
+        if (frames.length % 20 === 0) {
+            updateProgress(
+                Math.min(40 + (frames.length / 5000) * 40, 80),
+                `Decoding… ${frames.length} frames`
+            );
+        }
+    }
+
+    updateProgress(90, "Building preview…");
+
+    slider.max = frames.length - 1;
+    drawFrame(0);
+
+    updateProgress(100, "Done!");
+    hideProgress();
+
+    info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
+}
+
+////////////////////////////////////////////////////////////
+// DRAW FRAME (SCALE SAFE)
+////////////////////////////////////////////////////////////
+function drawFrame(i) {
+    const f = frames[i];
+    if (!f) return;
+
+    const size = Math.round(BASE_SIZE * previewScale);
+
+    canvas.width  = size;
+    canvas.height = size;
+
+    const scale = Math.min(size / f.width, size / f.height);
+    const w = Math.round(f.width * scale);
+    const h = Math.round(f.height * scale);
+
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.drawImage(
+        f,
+        Math.round((size - w) / 2),
+        Math.round((size - h) / 2),
+        w, h
+    );
+    // Viewer HUD: selected frame index.
+    const hudText = `Frame ${i}`;
+    ctx.font = "14px monospace";
+    const textW = Math.ceil(ctx.measureText(hudText).width);
+    const boxX = 6;
+    const boxY = 6;
+    const boxW = textW + 12;
+    const boxH = 20;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(hudText, boxX + 6, boxY + boxH / 2);
+}
+
+////////////////////////////////////////////////////////////
+// SCRUBBING
+////////////////////////////////////////////////////////////
+slider.oninput = () => {
+    drawFrame(+slider.value);
+    updateGraphLine(+slider.value || 0);
+};
+
+document.getElementById("prev_btn").onclick = () => {
+    slider.value = Math.max(0, +slider.value - 1);
+    drawFrame(+slider.value);
+    updateGraphLine(+slider.value || 0);
+};
+
+document.getElementById("next_btn").onclick = () => {
+    slider.value = Math.min(frames.length - 1, +slider.value + 1);
+    drawFrame(+slider.value);
+    updateGraphLine(+slider.value || 0);
+};
+
+////////////////////////////////////////////////////////////
+// ZOOM CONTROLS
+////////////////////////////////////////////////////////////
+document.getElementById("zoom_in").onclick = () => {
+    previewScale = Math.min(previewScale + 0.25, 3.0);
+    drawFrame(+slider.value);
+};
+
+document.getElementById("zoom_out").onclick = () => {
+    previewScale = Math.max(previewScale - 0.25, 0.5);
+    drawFrame(+slider.value);
+};
+
+document.getElementById("zoom_reset").onclick = () => {
+    previewScale = 1.0;
+    drawFrame(+slider.value);
+};
+
+////////////////////////////////////////////////////////////
+// MARKERS
+////////////////////////////////////////////////////////////
+document.getElementById("set_start_btn").onclick = () => {
+    startFrame = +slider.value;
+    markerStatus.textContent = `Start = ${startFrame}`;
+    updateGraphLine(+slider.value || 0);
+};
+
+document.getElementById("set_decision_btn").onclick = () => {
+    decisionFrame = +slider.value;
+    markerStatus.textContent = `Decision = ${decisionFrame}`;
+    updateSwingTimeStatus();
+    updateGraphLine(+slider.value || 0);
+};
+
+document.getElementById("set_contact_btn").onclick = () => {
+    contactFrame = +slider.value;
+    markerStatus.textContent = `Contact = ${contactFrame}`;
+    updateSwingTimeStatus();
+    updateGraphLine(+slider.value || 0);
+};
+
+document.getElementById("auto_detect_btn").onclick = async () => {
+    if (!frames.length) return;
+    showProgress();
+    updateProgress(5, "Analyzing motion…");
+    let usedPose = false;
+    const pose = await ensurePose();
+    if (pose) {
+        const landmarks = [];
+        for (let i = 0; i < frames.length; i += 1) {
+            updateProgress(
+                Math.min(80, 5 + Math.round((i / frames.length) * 70)),
+                `Running pose… ${i + 1}/${frames.length}`
+            );
+            const lm = await runPoseOnBitmap(frames[i]);
+            landmarks.push(lm);
+        }
+        const validCount = landmarks.filter(Boolean).length;
+        if (validCount > Math.max(10, Math.round(frames.length * 0.4))) {
+            const signals = computePoseSignals(landmarks);
+            const sideGuess = pickStartFrameFromPose(signals).side;
+            contactFrame = pickContactFrameFromPose(signals, 1, 1);
+            decisionFrame = pickDecisionFrameFromPose(signals, 1, sideGuess, contactFrame);
+            startFrame = pickStartFrameFromPose(signals, decisionFrame).frame;
+            if (startFrame >= decisionFrame) {
+                startFrame = Math.max(0, decisionFrame - 1);
+            }
+            graphDistances = computeHipSeries(landmarks);
+            decisionSeries = sideGuess === "right"
+                ? signals.right.wrist.map((v) => v || 0)
+                : signals.left.wrist.map((v) => v || 0);
+            const startSeries = computeStartSeries(landmarks);
+            startHeelSeries = startSeries.heelSeries;
+            startHipSeries = startSeries.hipSeries;
+            startKneeSeries = startSeries.kneeSeries;
+            usedPose = true;
+        }
+    }
+    if (!usedPose) {
+        updateProgress(60, "Falling back to motion heuristics…");
+        const grayFrames = await ensureAnalysisFrames();
+        const scores = computeMotionScores(grayFrames);
+        contactFrame = pickContactFrame(scores, 1);
+        decisionFrame = pickDecisionFrame(scores, 1, contactFrame);
+        startFrame = pickStartFrame(scores, decisionFrame);
+        if (startFrame >= decisionFrame) {
+            startFrame = Math.max(0, decisionFrame - 1);
+        }
+        graphDistances = scores.global.slice();
+        decisionSeries = scores.upper.slice();
+        startHeelSeries = scores.lower.slice();
+        startHipSeries = scores.lower.slice();
+        startKneeSeries = scores.lower.slice();
+    }
+    slider.value = contactFrame;
+    drawFrame(contactFrame);
+    markerStatus.textContent =
+        `Auto: Start=${startFrame} | Decision=${decisionFrame} | Contact=${contactFrame}`;
+    updateSwingTimeStatus();
+    updateGraphLine(+slider.value || 0);
+    hideProgress();
+};
+
+////////////////////////////////////////////////////////////
+// TRIM + UPLOAD
+////////////////////////////////////////////////////////////
+const { createFFmpeg } = FFmpeg;
+
+async function bitmapToPNG(bitmap) {
+    const off = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = off.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0);
+    const blob = await off.convertToBlob({ type: "image/png" });
+    return new Uint8Array(await blob.arrayBuffer());
+}
+
+async function trimAndUpload() {
+    if (contactFrame <= startFrame) {
+        alert("Contact must be after start.");
+        return;
+    }
+
+    showProgress();
+    updateProgress(10, "Loading FFmpeg…");
+
+    const ffmpeg = createFFmpeg({
+        corePath: "/static/js/ffmpeg/ffmpeg-core.js",
+        log: true
+    });
+    await ffmpeg.load();
+
+    updateProgress(25, "Preparing frames…");
+
+    const selected = frames.slice(startFrame, contactFrame + 1);
+    const trimmedDecision = decisionFrame - startFrame;
+
+    for (let i = 0; i < selected.length; i++) {
+        ffmpeg.FS("writeFile", `f_${i}.png`,
+            await bitmapToPNG(selected[i]));
+        if (i % 5 === 0) {
+            updateProgress(25 + (i / selected.length) * 30,
+                `Preparing frame ${i}/${selected.length}`);
+        }
+    }
+
+    updateProgress(60, "Encoding MP4…");
+
+    await ffmpeg.run(
+        "-framerate", String(fps),
+        "-i", "f_%d.png",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-preset", "fast",
+        "-crf", "23",
+        "out.mp4"
+    );
+
+    updateProgress(90, "Uploading…");
+
+    const out = ffmpeg.FS("readFile", "out.mp4");
+    const blob = new Blob([out.buffer], { type: "video/mp4" });
+
+    const form = new FormData();
+    form.append("sid", SID);
+    form.append("team_id", TEAM_ID);
+    form.append("hitter_id", HITTER_ID);
+    form.append("description", DESCRIPTION);
+    form.append("fps", fps);
+    form.append("decision_frame", trimmedDecision);
+    form.append("file", blob, "trimmed_swing.mp4");
+
+    const r = await fetch(`/upload/swing/finalize`, {
+        method: "POST",
+        body: form
+    });
+
+    if (r.ok) {
+        updateProgress(100, "Saved!");
+        window.location.href = `/library?sid=${SID}&type=swing`;
+    } else {
+        alert("Upload failed.");
+    }
+}
+
+document.getElementById("finalize_btn").onclick = trimAndUpload;
+
+////////////////////////////////////////////////////////////
+// START
+////////////////////////////////////////////////////////////
+loadVideo();
+markerStatus.textContent = "Start/Decision/Contact not set";
+updateSwingTimeStatus();
+</script>
+
+{% endblock %}

@@ -3,6 +3,26 @@
 
 <h2>Library</h2>
 
+<style>
+.library-thumb-wrap {
+    width: 130px;
+    aspect-ratio: 9 / 16;
+    overflow: hidden;
+    border-radius: 4px;
+    border: 1px solid #444;
+    flex-shrink: 0;
+    background: #000;
+}
+.library-thumb-wrap .thumb {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: center center;
+    border: 0 !important;
+    display: block;
+}
+</style>
+
 <!-- FILTER BAR -->
 <div class="panel" style="margin-bottom:20px; display:flex; gap:20px; align-items:flex-end;">
 
@@ -179,7 +199,9 @@ function buildGrid(items) {
 
             <div class="library-item">
 
-                <img class="thumb" src="${c.thumbnail}">
+                <div class="library-thumb-wrap">
+                    <img class="thumb" src="${c.thumbnail}">
+                </div>
 
                 <div class="info">
                     ${renderInfo(c)}
@@ -190,6 +212,9 @@ function buildGrid(items) {
                     <a href="${c.play}">
                         <button>Play</button>
                     </a>
+                    ${c.type === "swing" && Number(c.has_pose_data || 0) > 0
+                        ? `<button type="button" onclick="copyPoseData(${c.id})">Copy Pose Data</button>`
+                        : ""}
 
                     <form method="post" action="${c.delete}"
                           onsubmit="return attachReturnURL(this);">
@@ -219,7 +244,10 @@ function renderInfo(c) {
     }
 
     if (c.type === "swing") {
-        return `<b>${c.hitter_name}</b> (${c.team_name})<br>${c.description || ""}<br><br>`;
+        const dur = (c.swing_duration_seconds != null && Number.isFinite(Number(c.swing_duration_seconds)))
+            ? `${Number(c.swing_duration_seconds).toFixed(3)}s`
+            : "n/a";
+        return `<b>${c.hitter_name}</b> (${c.team_name})<br>${c.description || ""}<br>Swing Duration: ${dur}<br><br>`;
     }
 
     if (c.type === "matchup") {
@@ -360,6 +388,21 @@ loadData(savedType);
 function attachReturnURL(form) {
     form.return.value = window.location.pathname + window.location.search;
     return true;
+}
+
+async function copyPoseData(swingId) {
+    try {
+        const r = await fetch(`/swing/pose-data?id=${swingId}`);
+        const data = await r.json();
+        if (!r.ok || !data.ok || !data.pose_data) {
+            alert(data && data.error ? data.error : "No pose data available for this swing.");
+            return;
+        }
+        await navigator.clipboard.writeText(data.pose_data);
+        alert("Pose data copied.");
+    } catch (e) {
+        alert("Failed to copy pose data.");
+    }
 }
 </script>
 

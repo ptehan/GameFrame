@@ -12,21 +12,27 @@
 
     <!-- TEAM -->
     <label>Team:</label>
-    <select id="team_select" name="team_id" required>
-        <option value="">Select Team</option>
-        {% for t in teams %}
-            <option value="{{ t[0] }}">{{ t[1] }}</option>
-        {% endfor %}
-    </select>
+    <div style="display:flex; gap:8px; align-items:center;">
+        <select id="team_select" name="team_id" required style="flex:1;">
+            <option value="">Select Team</option>
+            {% for t in teams %}
+                <option value="{{ t[0] }}">{{ t[1] }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" id="add_team_btn">Add Team</button>
+    </div>
 
     <!-- PITCHER -->
     <label>Pitcher:</label>
-    <select id="pitcher_select" name="pitcher_id" required>
-        <option value="">Select Pitcher</option>
-        {% for p in pitchers %}
-            <option value="{{ p[0] }}" data-team="{{ p[2] }}">{{ p[1] }}</option>
-        {% endfor %}
-    </select>
+    <div style="display:flex; gap:8px; align-items:center;">
+        <select id="pitcher_select" name="pitcher_id" required style="flex:1;">
+            <option value="">Select Pitcher</option>
+            {% for p in pitchers %}
+                <option value="{{ p[0] }}" data-team="{{ p[2] }}">{{ p[1] }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" id="add_pitcher_btn">Add Pitcher</button>
+    </div>
 
     <!-- DESCRIPTION -->
     <label>Description:</label>
@@ -52,15 +58,36 @@
 
 </form>
 
+<div id="entity_modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999;">
+    <div style="max-width:420px; margin:10vh auto; background:#181818; border:1px solid #444; border-radius:10px; padding:14px;">
+        <div id="entity_modal_title" style="font-weight:700; margin-bottom:10px;">Add</div>
+        <input id="entity_name_input" type="text" placeholder="Name" style="width:100%; padding:8px; margin-bottom:10px;">
+        <div id="entity_modal_error" style="color:#ff8a8a; min-height:18px; font-size:12px; margin-bottom:8px;"></div>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button type="button" id="entity_cancel_btn">Cancel</button>
+            <button type="button" id="entity_save_btn">Save</button>
+        </div>
+    </div>
+</div>
+
 <script>
 // Simple team -> pitcher filter
 const teamSel = document.getElementById("team_select");
 const pitcherSel = document.getElementById("pitcher_select");
 
 // Store all pitcher options
-const allPitchers = Array.from(pitcherSel.options);
+let allPitchers = Array.from(pitcherSel.options);
+const addTeamBtn = document.getElementById("add_team_btn");
+const addPitcherBtn = document.getElementById("add_pitcher_btn");
+const entityModal = document.getElementById("entity_modal");
+const entityTitle = document.getElementById("entity_modal_title");
+const entityInput = document.getElementById("entity_name_input");
+const entityError = document.getElementById("entity_modal_error");
+const entityCancel = document.getElementById("entity_cancel_btn");
+const entitySave = document.getElementById("entity_save_btn");
+let entityMode = null;
 
-teamSel.onchange = () => {
+function refreshPitchersForTeam() {
     const tid = teamSel.value;
     pitcherSel.innerHTML = '<option value="">Select Pitcher</option>';
 
@@ -69,7 +96,85 @@ teamSel.onchange = () => {
             pitcherSel.appendChild(opt.cloneNode(true));
         }
     });
-};
+}
+
+teamSel.onchange = refreshPitchersForTeam;
+
+function openEntityModal(mode) {
+    entityMode = mode;
+    entityTitle.textContent = mode === "team" ? "Add Team" : "Add Pitcher";
+    entityInput.value = "";
+    entityError.textContent = "";
+    entityModal.style.display = "block";
+    setTimeout(() => entityInput.focus(), 0);
+}
+
+function closeEntityModal() {
+    entityModal.style.display = "none";
+    entityMode = null;
+}
+
+async function submitEntityModal() {
+    const name = (entityInput.value || "").trim();
+    if (!name) {
+        entityError.textContent = "Name is required.";
+        return;
+    }
+    entityError.textContent = "";
+
+    try {
+        if (entityMode === "team") {
+            const fd = new FormData();
+            fd.append("name", name);
+            const r = await fetch("/upload/common/add-team", { method: "POST", body: fd });
+            const data = await r.json();
+            if (!r.ok || !data.ok) throw new Error(data.error || "Failed to add team.");
+            const opt = document.createElement("option");
+            opt.value = String(data.id);
+            opt.textContent = data.name;
+            teamSel.appendChild(opt);
+            teamSel.value = String(data.id);
+            refreshPitchersForTeam();
+            closeEntityModal();
+            return;
+        }
+
+        if (entityMode === "pitcher") {
+            const tid = teamSel.value;
+            if (!tid) {
+                entityError.textContent = "Select a team first.";
+                return;
+            }
+            const fd = new FormData();
+            fd.append("team_id", tid);
+            fd.append("name", name);
+            const r = await fetch("/upload/common/add-pitcher", { method: "POST", body: fd });
+            const data = await r.json();
+            if (!r.ok || !data.ok) throw new Error(data.error || "Failed to add pitcher.");
+            const opt = document.createElement("option");
+            opt.value = String(data.id);
+            opt.dataset.team = String(data.team_id);
+            opt.textContent = data.name;
+            allPitchers.push(opt);
+            refreshPitchersForTeam();
+            pitcherSel.value = String(data.id);
+            closeEntityModal();
+        }
+    } catch (e) {
+        entityError.textContent = e.message || "Save failed.";
+    }
+}
+
+addTeamBtn.onclick = () => openEntityModal("team");
+addPitcherBtn.onclick = () => openEntityModal("pitcher");
+entityCancel.onclick = closeEntityModal;
+entitySave.onclick = submitEntityModal;
+entityModal.addEventListener("click", (ev) => {
+    if (ev.target === entityModal) closeEntityModal();
+});
+entityInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") submitEntityModal();
+});
 </script>
 
 <!-- ============================================================= -->

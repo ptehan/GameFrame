@@ -15,46 +15,292 @@
 
 <p id="info">Loading video…</p>
 
-<!-- Preview -->
-<canvas id="preview" width="320" height="320"
-        style="border:1px solid #333; background:black;"></canvas>
+<style>
+.trim-workspace {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+.trim-preview-pane {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: max-content;
+}
+.trim-preview-canvas-wrap {
+    position: relative;
+    display: inline-block;
+    width: max-content;
+}
+.trim-controls-pane {
+    width: 380px;
+}
+.trim-preview-controls {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+.trim-small-btn {
+    padding: 2px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+.trim-expand-overlay-btn {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 12;
+    border: 1px solid #4a4a4a;
+    background: rgba(10, 10, 10, 0.72);
+    color: #f2f2f2;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.trim-expand-overlay-btn:hover {
+    background: rgba(24, 24, 24, 0.9);
+}
+.trim-icon-btn {
+    width: 34px;
+    height: 26px;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+}
+.trim-row-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.trim-smooth-scrub {
+    position: relative;
+    width: 320px;
+    height: 26px;
+    margin-top: 8px;
+    border: 1px solid #3a3a3a;
+    border-radius: 13px;
+    background: #121212;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    cursor: ew-resize;
+}
+.trim-smooth-scrub-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0%;
+    background: linear-gradient(90deg, #2f97ff 0%, #66e0ff 100%);
+    opacity: 0.35;
+}
+.trim-smooth-scrub-handle {
+    position: absolute;
+    top: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #d8f3ff;
+    box-shadow: 0 0 0 1px #4aa8cc inset;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+.trim-btn {
+    width: 100%;
+}
+.trim-help {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #aaa;
+}
+.trim-release-box {
+    margin-top: 10px;
+    padding: 8px;
+    border: 1px solid #333;
+    background: #141414;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+.frame-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10030;
+    background: rgba(0, 0, 0, 0.86);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+}
+.frame-modal-card {
+    width: min(1380px, calc(100vw - 12px));
+    height: calc(100vh - 12px);
+    overflow: hidden;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    background: #121212;
+    padding: 10px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 8px;
+}
+.frame-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.frame-modal-stage {
+    min-height: 0;
+    border: 1px solid #333;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.frame-modal-canvas {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+}
+.frame-modal-controls {
+    width: 100%;
+    margin: 0;
+}
+.frame-modal-controls input[type="range"].frame-modal-slider {
+    width: 100% !important;
+    height: 34px;
+    display: block;
+    box-sizing: border-box;
+    margin: 0;
+}
+</style>
 
-<!-- ZOOM CONTROLS -->
-<div style="margin-top:6px;">
-    <button id="zoom_out">Smaller</button>
-    <button id="zoom_reset">Reset  </button>
-    <button id="zoom_in">Larger </button>
+<div class="trim-workspace">
+<div class="trim-preview-pane">
+
+<!-- Preview -->
+<div class="trim-preview-canvas-wrap">
+    <canvas id="preview" width="320" height="320"
+            style="border:1px solid #333; background:black;"></canvas>
+    <button id="open_frame_modal_btn" class="trim-expand-overlay-btn">Full Screen</button>
 </div>
 
-<br>
+<div id="frame_status" class="trim-help">Frame: 0 / 0</div>
 
 <!-- Slider -->
 <input type="range" id="frame_slider" min="0" max="0" value="0"
        style="width:320px; margin-top:10px;">
-
-<div style="margin-top:10px;">
-    <button id="prev_btn">&laquo; Prev</button>
-    <button id="next_btn">Next &raquo;</button>
+<div id="smooth_scrub" class="trim-smooth-scrub" title="Drag to scrub frames smoothly">
+    <div id="smooth_scrub_fill" class="trim-smooth-scrub-fill"></div>
+    <div id="smooth_scrub_handle" class="trim-smooth-scrub-handle"></div>
 </div>
 
-<div style="margin-top:10px;">
-    <button id="set_contact_btn">Set Contact</button>
+<div class="trim-preview-controls">
+    <button id="prev_btn" class="trim-icon-btn" title="Previous Frame" aria-label="Previous Frame">&#9664;</button>
+    <button id="next_btn" class="trim-icon-btn" title="Next Frame" aria-label="Next Frame">&#9654;</button>
+</div>
+
+ </div>
+
+<div class="trim-controls-pane">
+<div class="trim-row-2">
+    <button id="pick_pitcher_btn" class="trim-btn">Pick Pitcher</button>
+    <button id="auto_plate_btn" class="trim-btn">Auto Detect Plate</button>
+</div>
+<div class="trim-row-2">
+    <button id="set_contact_btn" class="trim-btn">Set Contact Manually</button>
+    <div></div>
+</div>
+<div class="trim-row-2">
+    <button id="toggle_pose_btn" class="trim-btn">Show Pose Landmarks</button>
+</div>
+
+<div style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <label for="pitch_level">Pitch Type</label>
+    <select id="pitch_level">
+        <option value="softball35">Softball Youth (35 ft)</option>
+        <option value="softball43">Softball HS/College (43 ft)</option>
+        <option value="ll46">Little League (46 ft)</option>
+        <option value="ll50">Little League 50/70 or 50/90 (50 ft)</option>
+        <option value="baseball60" selected>Baseball Full Field (60 ft 6 in)</option>
+    </select>
+    <label for="speed_guess_mph">Speed Guess (mph)</label>
+    <input id="speed_guess_mph" type="number" min="20" max="105" step="1" value="55" style="width:74px;">
+</div>
+<div class="trim-help">
+    Contact estimate uses: frames = (58 x fps) / (mph x 1.46667), then release + frames.
+</div>
+<div class="trim-help">
+    Release detection uses: throwing-hand wrist-speed spike + arm-extension threshold.
 </div>
 
 <div id="marker_status"
      style="margin-top:10px;font-weight:bold;"></div>
 
+<div id="release_status" class="trim-release-box">Release debug: n/a</div>
+
 <button id="finalize_btn"
-        style="margin-top:20px;font-size:18px;">
+        class="trim-btn"
+        style="margin-top:16px;font-size:18px;">
     Finalize Pitch
 </button>
 
 <div id="upload_status"
      style="margin-top:10px;font-weight:bold;"></div>
 
+</div>
+</div>
+
+<div id="frame_modal" class="frame-modal">
+  <div class="frame-modal-card">
+    <div class="frame-modal-header">
+      <h3 style="margin:0;">Full Screen Frame Controls</h3>
+      <button id="close_frame_modal_btn" class="trim-small-btn">Close</button>
+    </div>
+    <div class="frame-modal-stage">
+      <canvas id="frame_modal_canvas" class="frame-modal-canvas" width="920" height="920"></canvas>
+    </div>
+    <div class="frame-modal-controls">
+      <input id="frame_modal_slider" class="frame-modal-slider" type="range" min="0" max="0" value="0">
+      <div class="trim-preview-controls">
+        <button id="frame_modal_prev_btn" class="trim-icon-btn" title="Previous Frame" aria-label="Previous Frame">&#9664;</button>
+        <button id="frame_modal_next_btn" class="trim-icon-btn" title="Next Frame" aria-label="Next Frame">&#9654;</button>
+      </div>
+      <div class="trim-row-2" style="margin-top:8px;">
+        <button id="frame_modal_set_contact_btn" class="trim-btn">Set Contact</button>
+        <button id="frame_modal_goto_contact_btn" class="trim-btn">Go to Contact</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
 
 <script>
+/*
+ * Pitch Trim Page - Developer Documentation
+ * -----------------------------------------
+ * Workflow:
+ * 1) Decode source MP4 into `frames`.
+ * 2) Auto-detect contact candidate via ball-motion trajectory analysis.
+ * 3) Allow manual frame adjustments.
+ * 4) Finalize clip from frame 0..contactFrame and upload.
+ *
+ * Detection summary:
+ * - Build motion blobs from frame differences.
+ * - Link blobs into trajectories across time.
+ * - Select ball-like track, then infer best contact frame.
+ */
 ////////////////////////////////////////////////////////////
 // VARS
 ////////////////////////////////////////////////////////////
@@ -75,29 +321,751 @@ const slider       = document.getElementById("frame_slider");
 const canvas       = document.getElementById("preview");
 const ctx          = canvas.getContext("2d");
 const info         = document.getElementById("info");
+const frameStatus  = document.getElementById("frame_status");
 const prevBtn      = document.getElementById("prev_btn");
 const nextBtn      = document.getElementById("next_btn");
+const autoPlateBtn = document.getElementById("auto_plate_btn");
 const contactBtn   = document.getElementById("set_contact_btn");
+const pickPitcherBtn = document.getElementById("pick_pitcher_btn");
+const togglePoseBtn = document.getElementById("toggle_pose_btn");
+const pitchLevelEl = document.getElementById("pitch_level");
+const speedGuessEl = document.getElementById("speed_guess_mph");
 const markerStatus = document.getElementById("marker_status");
+const releaseStatus = document.getElementById("release_status");
 const uploadStatus = document.getElementById("upload_status");
+const smoothScrub = document.getElementById("smooth_scrub");
+const smoothScrubFill = document.getElementById("smooth_scrub_fill");
+const smoothScrubHandle = document.getElementById("smooth_scrub_handle");
+const openFrameModalBtn = document.getElementById("open_frame_modal_btn");
+const frameModal = document.getElementById("frame_modal");
+const closeFrameModalBtn = document.getElementById("close_frame_modal_btn");
+const frameModalCanvas = document.getElementById("frame_modal_canvas");
+const frameModalSlider = document.getElementById("frame_modal_slider");
+const frameModalPrevBtn = document.getElementById("frame_modal_prev_btn");
+const frameModalNextBtn = document.getElementById("frame_modal_next_btn");
+const frameModalSetContactBtn = document.getElementById("frame_modal_set_contact_btn");
+const frameModalGotoContactBtn = document.getElementById("frame_modal_goto_contact_btn");
+let autoDetectBusy = false;
+let releaseFrame = null;
+let manualPitcherSeed = null;
+let awaitingPitcherPick = false;
+let showPoseOverlay = false;
+let poseOverlayLandmarks = null;
+let poseOverlayThrowSide = null;
+
+const POSE_CONNECTIONS = [
+    [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
+    [11, 23], [12, 24], [23, 24], [23, 25], [25, 27],
+    [24, 26], [26, 28], [27, 31], [28, 32], [27, 29], [28, 30],
+];
+let poseInstance = null;
+let poseInitPromise = null;
+let poseResolver = null;
+let scrubActive = false;
+let scrubLastX = 0;
+let scrubFrameFloat = 0;
+let frameModalOpen = false;
+
+const PITCH_PROFILES = {
+    softball35: { label: "Softball Youth", moundFt: 35.0, extensionFt: 3.0, defaultMph: 42 },
+    softball43: { label: "Softball HS/College", moundFt: 43.0, extensionFt: 4.0, defaultMph: 55 },
+    ll46:       { label: "Little League 46", moundFt: 46.0, extensionFt: 4.5, defaultMph: 52 },
+    ll50:       { label: "Little League 50", moundFt: 50.0, extensionFt: 5.0, defaultMph: 60 },
+    baseball60: { label: "Baseball 60'6\"", moundFt: 60.5, extensionFt: 6.0, defaultMph: 80 },
+};
+
+function clamp(v, lo, hi) {
+    return Math.max(lo, Math.min(hi, v));
+}
+
+function getPitchProfile() {
+    const key = (pitchLevelEl && pitchLevelEl.value) || "baseball60";
+    const base = PITCH_PROFILES[key] || PITCH_PROFILES.baseball60;
+    let mph = Number(speedGuessEl && speedGuessEl.value);
+    if (!Number.isFinite(mph)) mph = base.defaultMph;
+    mph = clamp(mph, 20, 105);
+    return {
+        ...base,
+        mph,
+    };
+}
+
+function estimatePlateFrameFromRelease(releaseFrame, fpsVal) {
+    if (!Number.isFinite(releaseFrame) || !Number.isFinite(fpsVal) || fpsVal <= 0) return null;
+    const profile = getPitchProfile();
+    const adjustedMph = Math.max(20, profile.mph - 7);
+    // User-requested formula:
+    // frames = (58 * fps) / (mph * 1.46667)
+    const framesToPlate = (58.0 * fpsVal) / Math.max(1e-6, adjustedMph * 1.46667);
+    return {
+        frame: Math.round(releaseFrame + framesToPlate),
+        framesToPlate,
+        adjustedMph,
+        profile,
+    };
+}
 
 function showProgress() {
+    // Display shared progress widget.
     document.getElementById("progress-container").style.display = "block";
 }
 
 function hideProgress() {
+    // Hide shared progress widget.
     document.getElementById("progress-container").style.display = "none";
 }
 
 function updateProgress(pct, msg = "") {
+    // Update progress bar percent and optional text.
     document.getElementById("progress-bar").style.width = pct + "%";
     if (msg) document.getElementById("progress-label").innerText = msg;
+}
+
+async function ensurePose() {
+    if (poseInstance) return poseInstance;
+    if (poseInitPromise) return poseInitPromise;
+    if (typeof Pose === "undefined") return null;
+    poseInitPromise = new Promise((resolve) => {
+        const pose = new Pose({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+        });
+        pose.setOptions({
+            modelComplexity: 1,
+            staticImageMode: true,
+            smoothLandmarks: false,
+            enableSegmentation: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+        });
+        pose.onResults((results) => {
+            if (poseResolver) {
+                poseResolver(results.poseLandmarks || null);
+                poseResolver = null;
+            }
+        });
+        poseInstance = pose;
+        resolve(pose);
+    });
+    return poseInitPromise;
+}
+
+async function runPoseOnBitmap(bitmap) {
+    const pose = await ensurePose();
+    if (!pose) return null;
+    return new Promise(async (resolve) => {
+        poseResolver = resolve;
+        const off = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const offCtx = off.getContext("2d");
+        offCtx.drawImage(bitmap, 0, 0);
+        await pose.send({ image: off });
+    });
+}
+
+async function runPoseOnBitmapCrop(bitmap, crop) {
+    const pose = await ensurePose();
+    if (!pose) return null;
+    return new Promise(async (resolve) => {
+        poseResolver = (lm) => {
+            if (!lm) {
+                resolve(null);
+                return;
+            }
+            const mapped = lm.map((p) => ({
+                ...p,
+                x: crop.x + p.x * crop.w,
+                y: crop.y + p.y * crop.h,
+            }));
+            resolve(mapped);
+        };
+        const off = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const offCtx = off.getContext("2d");
+        const sx = Math.max(0, Math.floor(crop.x * bitmap.width));
+        const sy = Math.max(0, Math.floor(crop.y * bitmap.height));
+        const sw = Math.max(1, Math.floor(crop.w * bitmap.width));
+        const sh = Math.max(1, Math.floor(crop.h * bitmap.height));
+        offCtx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, bitmap.width, bitmap.height);
+        await pose.send({ image: off });
+    });
+}
+
+function centerOfPerson(lm) {
+    const ls = lm && lm[11];
+    const rs = lm && lm[12];
+    if (!ls || !rs) return null;
+    return { x: (ls.x + rs.x) * 0.5, y: (ls.y + rs.y) * 0.5 };
+}
+
+async function detectAllPoseCandidatesForFrame(bitmap) {
+    const candidates = [];
+    const full = await runPoseOnBitmap(bitmap);
+    if (full) candidates.push(full);
+
+    const crops = [
+        { x: 0.00, y: 0.00, w: 0.60, h: 0.82 },
+        { x: 0.40, y: 0.00, w: 0.60, h: 0.82 },
+        { x: 0.18, y: 0.00, w: 0.64, h: 0.90 },
+    ];
+    for (const crop of crops) {
+        const lm = await runPoseOnBitmapCrop(bitmap, crop);
+        if (lm) candidates.push(lm);
+    }
+
+    const uniq = [];
+    for (const lm of candidates) {
+        const c = centerOfPerson(lm);
+        if (!c) continue;
+        let dup = false;
+        for (const u of uniq) {
+            if (Math.hypot(c.x - u.c.x, c.y - u.c.y) < 0.06) {
+                dup = true;
+                break;
+            }
+        }
+        if (!dup) uniq.push({ lm, c });
+    }
+    return uniq.map((u) => u.lm);
+}
+
+async function trackPitcherFromManualSeed(seed) {
+    if (!seed || !Number.isFinite(seed.frame) || !frames.length) return null;
+    const n = frames.length;
+    if (seed.frame < 0 || seed.frame >= n) return null;
+
+    const seedCands = await detectAllPoseCandidatesForFrame(frames[seed.frame]);
+    let seedLm = null;
+    let seedDist = Infinity;
+    for (const lm of seedCands) {
+        const c = centerOfPerson(lm);
+        if (!c) continue;
+        const d = Math.hypot(c.x - seed.x, c.y - seed.y);
+        if (d < seedDist) {
+            seedDist = d;
+            seedLm = lm;
+        }
+    }
+    if (!seedLm || seedDist > 0.32) return null;
+
+    const chosen = new Array(n).fill(null);
+    chosen[seed.frame] = seedLm;
+    const seedCenter = centerOfPerson(seedLm);
+    let prevCenter = seedCenter;
+    let holdLm = seedLm;
+    let misses = 0;
+
+    const chooseNearest = async (fi, targetCenter) => {
+        const cands = await detectAllPoseCandidatesForFrame(frames[fi]);
+        let best = null;
+        let bestObj = Infinity;
+        for (const lm of cands) {
+            const c = centerOfPerson(lm);
+            if (!c) continue;
+            const dPrev = targetCenter ? Math.hypot(c.x - targetCenter.x, c.y - targetCenter.y) : 0;
+            const dSeed = seedCenter ? Math.hypot(c.x - seedCenter.x, c.y - seedCenter.y) : 0;
+            if (dPrev > 0.14) continue;
+            if (dSeed > 0.24) continue;
+            const obj = dPrev * 0.7 + dSeed * 0.3;
+            if (obj < bestObj) {
+                bestObj = obj;
+                best = lm;
+            }
+        }
+        return best;
+    };
+
+    for (let i = seed.frame + 1; i < n; i += 1) {
+        const lm = await chooseNearest(i, prevCenter);
+        if (lm) {
+            chosen[i] = lm;
+            prevCenter = centerOfPerson(lm) || prevCenter;
+            holdLm = lm;
+            misses = 0;
+        } else if (holdLm && misses < 2) {
+            chosen[i] = holdLm;
+            misses += 1;
+        } else {
+            misses += 1;
+        }
+    }
+
+    prevCenter = seedCenter;
+    holdLm = seedLm;
+    misses = 0;
+    for (let i = seed.frame - 1; i >= 0; i -= 1) {
+        const lm = await chooseNearest(i, prevCenter);
+        if (lm) {
+            chosen[i] = lm;
+            prevCenter = centerOfPerson(lm) || prevCenter;
+            holdLm = lm;
+            misses = 0;
+        } else if (holdLm && misses < 2) {
+            chosen[i] = holdLm;
+            misses += 1;
+        } else {
+            misses += 1;
+        }
+    }
+
+    return chosen;
 }
 
 ////////////////////////////////////////////////////////////
 // FRAME DECODE — WITH FULL DIAGNOSTICS
 ////////////////////////////////////////////////////////////
+function angleDeltaDeg(a, b) {
+    let d = Math.abs(a - b);
+    while (d > Math.PI) d = Math.abs(d - 2 * Math.PI);
+    return d * (180 / Math.PI);
+}
+
+function median(vals) {
+    if (!vals || !vals.length) return null;
+    const s = vals.slice().sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    if (s.length % 2) return s[m];
+    return (s[m - 1] + s[m]) * 0.5;
+}
+
+function smoothSeries(series, radius = 1) {
+    if (!series || !series.length) return [];
+    const out = new Array(series.length).fill(null);
+    for (let i = 0; i < series.length; i += 1) {
+        let sum = 0;
+        let cnt = 0;
+        for (let k = -radius; k <= radius; k += 1) {
+            const j = i + k;
+            if (j < 0 || j >= series.length) continue;
+            const v = series[j];
+            if (!Number.isFinite(v)) continue;
+            sum += v;
+            cnt += 1;
+        }
+        out[i] = cnt ? (sum / cnt) : null;
+    }
+    return out;
+}
+
+function buildMotionCandidates(prevGray, currGray, w, h) {
+    // Segment frame-difference blobs and output candidate motion objects.
+    const diffs = new Uint8Array(w * h);
+    let sum = 0;
+    for (let i = 0; i < diffs.length; i += 1) {
+        const d = Math.abs(currGray[i] - prevGray[i]);
+        diffs[i] = d;
+        sum += d;
+    }
+    const mean = sum / Math.max(1, diffs.length);
+    const thresh = Math.max(14, mean * 2.6);
+    const visited = new Uint8Array(diffs.length);
+    const out = [];
+    const qx = new Int32Array(diffs.length);
+    const qy = new Int32Array(diffs.length);
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+    for (let y = 1; y < h - 1; y += 1) {
+        for (let x = 1; x < w - 1; x += 1) {
+            const idx = y * w + x;
+            if (visited[idx] || diffs[idx] < thresh) continue;
+            let head = 0;
+            let tail = 0;
+            qx[tail] = x;
+            qy[tail] = y;
+            tail += 1;
+            visited[idx] = 1;
+
+            let area = 0;
+            let diffSum = 0;
+            let xSum = 0;
+            let ySum = 0;
+            let minX = x;
+            let maxX = x;
+            let minY = y;
+            let maxY = y;
+
+            while (head < tail) {
+                const cx = qx[head];
+                const cy = qy[head];
+                head += 1;
+                const cidx = cy * w + cx;
+                const d = diffs[cidx];
+                area += 1;
+                diffSum += d;
+                xSum += cx;
+                ySum += cy;
+                if (cx < minX) minX = cx;
+                if (cx > maxX) maxX = cx;
+                if (cy < minY) minY = cy;
+                if (cy > maxY) maxY = cy;
+
+                for (const [dx, dy] of dirs) {
+                    const nx = cx + dx;
+                    const ny = cy + dy;
+                    const nidx = ny * w + nx;
+                    if (visited[nidx]) continue;
+                    if (diffs[nidx] < thresh) continue;
+                    visited[nidx] = 1;
+                    qx[tail] = nx;
+                    qy[tail] = ny;
+                    tail += 1;
+                }
+            }
+
+            const bw = maxX - minX + 1;
+            const bh = maxY - minY + 1;
+            const compactness = area / Math.max(1, bw * bh);
+            if (area < 2 || area > 90) continue;
+            if (compactness < 0.16) continue;
+            out.push({
+                x: xSum / area,
+                y: ySum / area,
+                area,
+                strength: diffSum / area,
+                compactness,
+            });
+        }
+    }
+    out.sort((a, b) => (b.strength - a.strength) || (a.area - b.area));
+    return out.slice(0, 12);
+}
+
+function pickBestTrajectory(candidatesByFrame, frameCount) {
+    // Link per-frame candidates into tracks and choose the most ball-like trajectory.
+    const n = Math.min(frameCount, candidatesByFrame.length);
+    if (n < 8) return null;
+    const tracks = [];
+
+    for (let i = 1; i < n; i += 1) {
+        const curr = candidatesByFrame[i] || [];
+        const prev = candidatesByFrame[i - 1] || [];
+        const updated = new Set();
+
+        for (const t of tracks) {
+            const stepsAway = i - t.lastFrame;
+            if (stepsAway > 2) continue;
+            const predX = t.lastX + t.vx * stepsAway;
+            const predY = t.lastY + t.vy * stepsAway;
+            let best = null;
+            let bestCost = Infinity;
+            let bestIdx = -1;
+            for (let ci = 0; ci < curr.length; ci += 1) {
+                if (updated.has(ci)) continue;
+                const c = curr[ci];
+                const d = Math.hypot(c.x - predX, c.y - predY);
+                if (d > 16) continue;
+                const areaPenalty = Math.abs((c.area || 0) - (t.lastArea || c.area || 0)) * 0.12;
+                const cost = d + areaPenalty - c.strength * 0.05;
+                if (cost < bestCost) {
+                    bestCost = cost;
+                    best = c;
+                    bestIdx = ci;
+                }
+            }
+            if (!best) continue;
+            const dt = Math.max(1, i - t.lastFrame);
+            const vxNew = (best.x - t.lastX) / dt;
+            const vyNew = (best.y - t.lastY) / dt;
+            t.vx = t.vx * 0.5 + vxNew * 0.5;
+            t.vy = t.vy * 0.5 + vyNew * 0.5;
+            t.lastX = best.x;
+            t.lastY = best.y;
+            t.lastArea = best.area;
+            t.lastFrame = i;
+            t.points.push({ frame: i, x: best.x, y: best.y, strength: best.strength });
+            updated.add(bestIdx);
+        }
+
+        for (let ci = 0; ci < curr.length; ci += 1) {
+            if (updated.has(ci)) continue;
+            const c = curr[ci];
+            let initVx = 0;
+            let initVy = 0;
+            let seedBoost = 0;
+            if (prev.length) {
+                let bestPrev = null;
+                let bestD = Infinity;
+                for (const p of prev) {
+                    const d = Math.hypot(c.x - p.x, c.y - p.y);
+                    if (d < bestD && d <= 14) {
+                        bestD = d;
+                        bestPrev = p;
+                    }
+                }
+                if (bestPrev) {
+                    initVx = c.x - bestPrev.x;
+                    initVy = c.y - bestPrev.y;
+                    seedBoost = 1;
+                }
+            }
+            tracks.push({
+                points: [{ frame: i, x: c.x, y: c.y, strength: c.strength }],
+                lastX: c.x,
+                lastY: c.y,
+                lastArea: c.area,
+                lastFrame: i,
+                vx: initVx,
+                vy: initVy,
+                seedBoost,
+            });
+        }
+    }
+
+    let bestTrack = null;
+    let bestScore = -Infinity;
+    for (const t of tracks) {
+        if (t.points.length < 7) continue;
+        let totalDist = 0;
+        let directionChanges = 0;
+        let prevAngle = null;
+        let strengthSum = 0;
+        for (let i = 1; i < t.points.length; i += 1) {
+            const a = t.points[i - 1];
+            const b = t.points[i];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const step = Math.hypot(dx, dy);
+            totalDist += step;
+            strengthSum += b.strength || 0;
+            if (step > 0.001) {
+                const ang = Math.atan2(dy, dx);
+                if (prevAngle != null && angleDeltaDeg(prevAngle, ang) > 26) directionChanges += 1;
+                prevAngle = ang;
+            }
+        }
+        const meanStrength = strengthSum / Math.max(1, t.points.length - 1);
+        const score =
+            totalDist * 1.0 +
+            t.points.length * 1.5 +
+            meanStrength * 0.35 +
+            t.seedBoost * 8.0 -
+            directionChanges * 3.2;
+        if (score > bestScore) {
+            bestScore = score;
+            bestTrack = t;
+        }
+    }
+    return bestTrack;
+}
+
+function detectPlateFromTrack(track) {
+    // Estimate contact/plate frame from trajectory motion characteristics.
+    if (!track || !track.points || track.points.length < 8) return null;
+    const points = track.points.slice().sort((a, b) => a.frame - b.frame);
+    const n = points.length;
+    const speeds = new Array(n).fill(null);
+    const angles = new Array(n).fill(null);
+    for (let i = 1; i < n; i += 1) {
+        const a = points[i - 1];
+        const b = points[i];
+        const dt = Math.max(1, b.frame - a.frame);
+        const dx = (b.x - a.x) / dt;
+        const dy = (b.y - a.y) / dt;
+        speeds[i] = Math.hypot(dx, dy);
+        if (speeds[i] > 1e-4) angles[i] = Math.atan2(dy, dx);
+    }
+    const validSpeeds = speeds.filter((v) => Number.isFinite(v) && v > 0);
+    if (!validSpeeds.length) return null;
+    const speedMed = median(validSpeeds) || 0;
+    const minFlightSpeed = Math.max(1.1, speedMed * 0.55);
+
+    for (let i = 4; i < n - 2; i += 1) {
+        const sPrev = [speeds[i - 3], speeds[i - 2], speeds[i - 1]].filter((v) => Number.isFinite(v));
+        const sNow1 = speeds[i];
+        const sNow2 = speeds[i + 1];
+        if (sPrev.length < 3 || !Number.isFinite(sNow1) || !Number.isFinite(sNow2)) continue;
+        const prevMed = median(sPrev) || 0;
+        if (prevMed < minFlightSpeed) continue;
+
+        const turn1 = (angles[i - 1] != null && angles[i] != null) ? angleDeltaDeg(angles[i - 1], angles[i]) : 0;
+        const turn2 = (angles[i] != null && angles[i + 1] != null) ? angleDeltaDeg(angles[i], angles[i + 1]) : 0;
+        const speedDrop1 = sNow1 < prevMed * 0.62;
+        const speedDrop2 = sNow2 < prevMed * 0.70;
+        const turnChange1 = turn1 >= 24;
+        const turnChange2 = turn2 >= 24;
+        const confirm1 = speedDrop1 || turnChange1;
+        const confirm2 = speedDrop2 || turnChange2;
+        if (!(confirm1 && confirm2)) continue;
+
+        const platePointIdx = i - 1;
+        if (platePointIdx < 0 || platePointIdx >= n) continue;
+        return points[platePointIdx].frame;
+    }
+    return null;
+}
+
+async function detectReleaseFrameFromPitcherPose() {
+    // Detect pitcher release using wrist-speed + arm-extension spike.
+    if (!frames.length) return null;
+    const n = frames.length;
+    let landmarksSeq = null;
+    if (manualPitcherSeed) {
+        updateProgress(14, "Tracking selected pitcher...");
+        landmarksSeq = await trackPitcherFromManualSeed(manualPitcherSeed);
+        if (!landmarksSeq) return null;
+    } else {
+        landmarksSeq = new Array(n).fill(null);
+        for (let i = 0; i < n; i += 1) {
+            landmarksSeq[i] = await runPoseOnBitmap(frames[i]);
+            if (i % 4 === 0) {
+                updateProgress(14 + Math.min(56, (i / Math.max(1, n - 1)) * 56), `Pose pass ${i}/${n}`);
+                // Yield to UI thread so the page does not appear frozen.
+                await new Promise((r) => setTimeout(r, 0));
+            }
+        }
+    }
+
+    const motionBySide = { left: 0, right: 0 };
+    for (let i = 1; i < n; i += 1) {
+        const prev = landmarksSeq[i - 1];
+        const curr = landmarksSeq[i];
+        if (!prev || !curr) continue;
+        const lw0 = prev[15], lw1 = curr[15];
+        const rw0 = prev[16], rw1 = curr[16];
+        if (lw0 && lw1) motionBySide.left += Math.hypot(lw1.x - lw0.x, lw1.y - lw0.y);
+        if (rw0 && rw1) motionBySide.right += Math.hypot(rw1.x - rw0.x, rw1.y - rw0.y);
+    }
+    const throwSide = motionBySide.right >= motionBySide.left ? "right" : "left";
+    const idx = throwSide === "right"
+        ? { wrist: 16, elbow: 14, shoulderA: 11, shoulderB: 12 }
+        : { wrist: 15, elbow: 13, shoulderA: 11, shoulderB: 12 };
+
+    const wristSpeed = new Array(n).fill(null);
+    const armExt = new Array(n).fill(null);
+    for (let i = 1; i < n; i += 1) {
+        const prev = landmarksSeq[i - 1];
+        const curr = landmarksSeq[i];
+        if (!prev || !curr) continue;
+        const w0 = prev[idx.wrist], w1 = curr[idx.wrist];
+        if (w0 && w1) wristSpeed[i] = Math.hypot(w1.x - w0.x, w1.y - w0.y);
+        const w = curr[idx.wrist], e = curr[idx.elbow], s1 = curr[idx.shoulderA], s2 = curr[idx.shoulderB];
+        if (w && e && s1 && s2) {
+            const shoulderW = Math.max(0.04, Math.hypot(s1.x - s2.x, s1.y - s2.y));
+            armExt[i] = Math.hypot(w.x - e.x, w.y - e.y) / shoulderW;
+        }
+    }
+
+    const ws = smoothSeries(wristSpeed, 1).map((v) => Number.isFinite(v) ? v : 0);
+    const ex = smoothSeries(armExt, 1).map((v) => Number.isFinite(v) ? v : 0);
+    const wsVals = ws.filter((v) => Number.isFinite(v) && v > 0);
+    const exVals = ex.filter((v) => Number.isFinite(v) && v > 0);
+    if (!wsVals.length) return null;
+
+    const wsBase = median(wsVals) || 0;
+    const wsPeak = Math.max(...wsVals);
+    const exBase = exVals.length ? (median(exVals) || 0) : 0;
+    const wsThresh = Math.max(wsBase * 1.9, wsPeak * 0.56);
+    const exThresh = Math.max(exBase * 1.12, 0.95);
+
+    const searchStart = Math.max(2, Math.floor(n * 0.08));
+    const searchEnd = Math.max(searchStart + 1, Math.floor(n * 0.80));
+    let bestIdx = -1;
+    let bestScore = -Infinity;
+    for (let i = searchStart; i <= searchEnd; i += 1) {
+        const v = ws[i];
+        const p = ws[i - 1];
+        const q = ws[Math.min(n - 1, i + 1)];
+        if (!(v >= wsThresh && v >= p && v >= q)) continue;
+        if (ex[i] < exThresh) continue;
+        const score = (v * 1.2) + (ex[i] * 0.6) - (i * 0.001);
+        if (score > bestScore) {
+            bestScore = score;
+            bestIdx = i;
+        }
+    }
+
+    if (bestIdx < 0) {
+        // Fallback: strongest wrist-speed local max in early/mid pitch window.
+        for (let i = searchStart; i <= searchEnd; i += 1) {
+            const v = ws[i];
+            const p = ws[i - 1];
+            const q = ws[Math.min(n - 1, i + 1)];
+            if (!(v >= wsThresh && v >= p && v >= q)) continue;
+            if (v > bestScore) {
+                bestScore = v;
+                bestIdx = i;
+            }
+        }
+    }
+
+    if (bestIdx < 0) return null;
+    return {
+        frame: bestIdx,
+        throwSide,
+        landmarksSeq,
+        wsBase,
+        wsPeak,
+        wsThresh,
+        exBase,
+        exThresh,
+        score: bestScore,
+    };
+}
+
+async function autoDetectPlateFrame() {
+    // Release-first autodetect:
+    // 1) detect release frame from pitcher pose
+    // 2) add travel frames from distance/mph model
+    if (autoDetectBusy) return;
+    if (!frames.length) return;
+    autoDetectBusy = true;
+    showProgress();
+    updateProgress(8, "Detecting pitcher release...");
+    markerStatus.textContent = "Detecting release frame...";
+    if (releaseStatus) releaseStatus.textContent = "Release debug: running pose-based release detector...";
+    try {
+        const release = await detectReleaseFrameFromPitcherPose();
+        if (!release || !Number.isFinite(release.frame)) {
+            markerStatus.textContent = "Autodetect failed: could not find release frame. Set contact manually.";
+            if (releaseStatus) releaseStatus.textContent = "Release debug: no valid release spike found.";
+            return;
+        }
+
+        updateProgress(84, "Estimating contact from release + speed...");
+        releaseFrame = release.frame;
+        poseOverlayLandmarks = release.landmarksSeq || null;
+        poseOverlayThrowSide = release.throwSide || null;
+        const est = estimatePlateFrameFromRelease(releaseFrame, fps);
+        if (!Number.isFinite(releaseFrame) || !est || !Number.isFinite(est.frame)) {
+            markerStatus.textContent = "Autodetect failed: no release point. Set contact manually.";
+            if (releaseStatus) releaseStatus.textContent = "Release debug: release found, but contact estimate failed.";
+            return;
+        }
+
+        contactFrame = Math.max(0, Math.min(frames.length - 1, Math.round(est.frame)));
+        slider.value = contactFrame;
+        drawFrame(contactFrame);
+        markerStatus.textContent =
+            `Auto plate frame = ${contactFrame} (release=${Math.round(releaseFrame)} ${release.throwSide}, +${Math.round(est.framesToPlate)}f @ ${Math.round(est.profile.mph)} mph input, ${Math.round(est.adjustedMph)} mph internal)`;
+        if (releaseStatus) {
+            releaseStatus.textContent =
+                `Release frame: ${Math.round(releaseFrame)}\n` +
+                `Throw side: ${release.throwSide}\n` +
+                `Wrist speed base/peak/thresh: ${release.wsBase.toFixed(4)} / ${release.wsPeak.toFixed(4)} / ${release.wsThresh.toFixed(4)}\n` +
+                `Arm extension base/thresh: ${release.exBase.toFixed(3)} / ${release.exThresh.toFixed(3)}\n` +
+                `Detector score: ${Number.isFinite(release.score) ? release.score.toFixed(4) : "n/a"}`;
+        }
+        updateProgress(100, "Done!");
+        drawFrame(+slider.value || contactFrame);
+    } catch (e) {
+        console.error("Auto plate detect failed", e);
+        markerStatus.textContent = "Autodetect error. Set contact manually.";
+        if (releaseStatus) releaseStatus.textContent = `Release debug: error (${e && e.message ? e.message : "unknown"})`;
+    } finally {
+        hideProgress();
+        autoDetectBusy = false;
+    }
+}
+
+if (pitchLevelEl && speedGuessEl) {
+    pitchLevelEl.onchange = () => {
+        const p = getPitchProfile();
+        const current = Number(speedGuessEl.value);
+        if (!Number.isFinite(current) || current <= 0) {
+            speedGuessEl.value = String(p.defaultMph);
+        }
+    };
+}
+
 async function loadVideo() {
+    // Decode source MP4 to per-frame ImageBitmaps for scrubbing and analysis.
     info.textContent = "Fetching video…";
     showProgress();
     updateProgress(5, "Fetching video…");
@@ -161,6 +1129,7 @@ async function loadVideo() {
 // DRAW FRAME (SCALE SAFE)
 ////////////////////////////////////////////////////////////
 function drawFrame(i) {
+    // Draw selected preview frame with current zoom and marker overlay.
     const f = frames[i];
     if (!f) return;
 
@@ -182,6 +1151,239 @@ function drawFrame(i) {
         Math.round((size - h) / 2),
         w, h
     );
+
+    if (showPoseOverlay && poseOverlayLandmarks && poseOverlayLandmarks[i]) {
+        const lm = poseOverlayLandmarks[i];
+        const toCanvas = (p) => ({
+            x: Math.round((size - w) / 2) + p.x * w,
+            y: Math.round((size - h) / 2) + p.y * h,
+        });
+        const isVis = (p) => !!p;
+        ctx.strokeStyle = "rgba(180,180,180,0.65)";
+        ctx.lineWidth = 1.4;
+        for (const [aIdx, bIdx] of POSE_CONNECTIONS) {
+            const a = lm[aIdx];
+            const b = lm[bIdx];
+            if (!isVis(a) || !isVis(b)) continue;
+            const ca = toCanvas(a);
+            const cb = toCanvas(b);
+            ctx.beginPath();
+            ctx.moveTo(ca.x, ca.y);
+            ctx.lineTo(cb.x, cb.y);
+            ctx.stroke();
+        }
+
+        const drawDot = (idx, color, r = 4) => {
+            const p = lm[idx];
+            if (!isVis(p)) return;
+            const c = toCanvas(p);
+            ctx.beginPath();
+            ctx.fillStyle = color;
+            ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+            ctx.fill();
+        };
+
+        drawDot(11, "#66e0ff", 4.2);
+        drawDot(12, "#ffd066", 4.2);
+        drawDot(13, "#66e0ff", 3.8);
+        drawDot(14, "#ffd066", 3.8);
+        drawDot(15, "#00e5ff", 4.8);
+        drawDot(16, "#ff8a00", 4.8);
+
+        if (poseOverlayThrowSide === "left") drawDot(15, "#00ff7f", 5.4);
+        if (poseOverlayThrowSide === "right") drawDot(16, "#00ff7f", 5.4);
+    }
+
+    // HUD labels for quick frame auditing.
+    const lines = [
+        `Frame: ${i} / ${Math.max(0, frames.length - 1)}`,
+        `Release: ${Number.isFinite(releaseFrame) ? releaseFrame : "-"}`,
+        `Contact: ${Number.isFinite(contactFrame) ? contactFrame : "-"}`,
+    ];
+    const boxX = 8;
+    const boxY = 8;
+    const lineH = 16;
+    const boxW = 230;
+    const boxH = 10 + lines.length * lineH;
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.font = "12px monospace";
+    for (let li = 0; li < lines.length; li += 1) {
+        const textY = boxY + 14 + li * lineH;
+        if (li === 1) ctx.fillStyle = i === releaseFrame ? "#66e0ff" : "#a8ecff";
+        else if (li === 2) ctx.fillStyle = i === contactFrame ? "#33ff66" : "#b0ffb8";
+        else ctx.fillStyle = "#ffffff";
+        ctx.fillText(lines[li], boxX + 8, textY);
+    }
+
+    if (frameStatus) {
+        frameStatus.textContent = `Frame: ${i} / ${Math.max(0, frames.length - 1)} | Release: ${Number.isFinite(releaseFrame) ? releaseFrame : "-"} | Contact: ${Number.isFinite(contactFrame) ? contactFrame : "-"}`;
+    }
+    updateSmoothScrubUI(i);
+    updateFrameModalUI(i);
+}
+
+function setFrameClamped(i) {
+    const maxIdx = Math.max(0, frames.length - 1);
+    const next = Math.max(0, Math.min(maxIdx, Math.round(i)));
+    slider.value = next;
+    drawFrame(next);
+}
+
+function updateSmoothScrubUI(i) {
+    if (!smoothScrub || !smoothScrubFill || !smoothScrubHandle) return;
+    const maxIdx = Math.max(1, frames.length - 1);
+    const ratio = Math.max(0, Math.min(1, (Number(i) || 0) / maxIdx));
+    smoothScrubFill.style.width = `${ratio * 100}%`;
+    const w = smoothScrub.clientWidth || 320;
+    smoothScrubHandle.style.left = `${ratio * w}px`;
+}
+
+function setupSmoothScrub() {
+    if (!smoothScrub) return;
+    const maxIdx = () => Math.max(0, frames.length - 1);
+    const posToFrame = (clientX) => {
+        const rect = smoothScrub.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+        const ratio = rect.width > 0 ? (x / rect.width) : 0;
+        return ratio * maxIdx();
+    };
+
+    smoothScrub.addEventListener("pointerdown", (ev) => {
+        if (!frames.length) return;
+        scrubActive = true;
+        scrubLastX = ev.clientX;
+        scrubFrameFloat = posToFrame(ev.clientX);
+        smoothScrub.setPointerCapture(ev.pointerId);
+        setFrameClamped(scrubFrameFloat);
+    });
+    smoothScrub.addEventListener("pointermove", (ev) => {
+        if (!scrubActive || !frames.length) return;
+        const dx = ev.clientX - scrubLastX;
+        scrubLastX = ev.clientX;
+        // Lower gain for precise frame control like mobile scrub bars.
+        const gain = ev.shiftKey ? 0.07 : 0.14;
+        scrubFrameFloat += dx * gain;
+        scrubFrameFloat = Math.max(0, Math.min(maxIdx(), scrubFrameFloat));
+        setFrameClamped(scrubFrameFloat);
+    });
+    const endDrag = (ev) => {
+        if (!scrubActive) return;
+        scrubActive = false;
+        try { smoothScrub.releasePointerCapture(ev.pointerId); } catch (_) {}
+    };
+    smoothScrub.addEventListener("pointerup", endDrag);
+    smoothScrub.addEventListener("pointercancel", endDrag);
+    smoothScrub.addEventListener("wheel", (ev) => {
+        if (!frames.length) return;
+        ev.preventDefault();
+        const dir = ev.deltaY > 0 ? 1 : -1;
+        const step = ev.shiftKey ? 0.5 : 1;
+        scrubFrameFloat = (Number(slider.value) || 0) + (dir * step);
+        scrubFrameFloat = Math.max(0, Math.min(maxIdx(), scrubFrameFloat));
+        setFrameClamped(scrubFrameFloat);
+    }, { passive: false });
+}
+
+function updateFrameModalUI(i) {
+    if (!frameModal || !frameModalCanvas || !frameModalSlider) return;
+    frameModalSlider.max = Math.max(0, frames.length - 1);
+    frameModalSlider.value = i;
+    if (!frameModalOpen) return;
+    const f = frames[i];
+    if (!f) return;
+    if (frameModalCanvas.width !== f.width || frameModalCanvas.height !== f.height) {
+        frameModalCanvas.width = f.width;
+        frameModalCanvas.height = f.height;
+    }
+    const modalCtx = frameModalCanvas.getContext("2d");
+    if (!modalCtx) return;
+    const dstW = frameModalCanvas.width || 1;
+    const dstH = frameModalCanvas.height || 1;
+    modalCtx.fillStyle = "black";
+    modalCtx.fillRect(0, 0, dstW, dstH);
+    modalCtx.drawImage(f, 0, 0, dstW, dstH);
+
+    // Keep frame/marker context visible in modal view.
+    const lines = [
+        `Frame: ${i} / ${Math.max(0, frames.length - 1)}`,
+        `Release: ${Number.isFinite(releaseFrame) ? releaseFrame : "-"}`,
+        `Contact: ${Number.isFinite(contactFrame) ? contactFrame : "-"}`,
+    ];
+    const boxX = 8;
+    const boxY = 8;
+    const lineH = 18;
+    const boxW = 250;
+    const boxH = 10 + lines.length * lineH;
+    modalCtx.fillStyle = "rgba(0,0,0,0.65)";
+    modalCtx.fillRect(boxX, boxY, boxW, boxH);
+    modalCtx.font = "14px monospace";
+    for (let li = 0; li < lines.length; li += 1) {
+        const textY = boxY + 15 + li * lineH;
+        if (li === 1) modalCtx.fillStyle = i === releaseFrame ? "#66e0ff" : "#a8ecff";
+        else if (li === 2) modalCtx.fillStyle = i === contactFrame ? "#33ff66" : "#b0ffb8";
+        else modalCtx.fillStyle = "#ffffff";
+        modalCtx.fillText(lines[li], boxX + 8, textY);
+    }
+}
+
+function setupFrameModal() {
+    if (!frameModal || !openFrameModalBtn) return;
+    const open = () => {
+        frameModalOpen = true;
+        frameModal.style.display = "flex";
+        updateFrameModalUI(+slider.value || 0);
+    };
+    const close = () => {
+        frameModalOpen = false;
+        frameModal.style.display = "none";
+    };
+
+    openFrameModalBtn.onclick = open;
+    if (closeFrameModalBtn) closeFrameModalBtn.onclick = close;
+    frameModal.addEventListener("click", (ev) => {
+        if (ev.target === frameModal) close();
+    });
+
+    if (frameModalSlider) {
+        frameModalSlider.oninput = () => {
+            slider.value = frameModalSlider.value;
+            drawFrame(+slider.value || 0);
+        };
+    }
+    if (frameModalPrevBtn) {
+        frameModalPrevBtn.onclick = () => {
+            slider.value = Math.max(0, (+slider.value || 0) - 1);
+            drawFrame(+slider.value || 0);
+        };
+    }
+    if (frameModalNextBtn) {
+        frameModalNextBtn.onclick = () => {
+            const maxIdx = Math.max(0, frames.length - 1);
+            slider.value = Math.min(maxIdx, (+slider.value || 0) + 1);
+            drawFrame(+slider.value || 0);
+        };
+    }
+    if (frameModalSetContactBtn) {
+        frameModalSetContactBtn.onclick = () => {
+            if (contactBtn && typeof contactBtn.onclick === "function") contactBtn.onclick();
+        };
+    }
+    if (frameModalGotoContactBtn) {
+        frameModalGotoContactBtn.onclick = () => {
+            const maxIdx = Math.max(0, frames.length - 1);
+            slider.value = Math.max(0, Math.min(maxIdx, Number.isFinite(contactFrame) ? contactFrame : 0));
+            drawFrame(+slider.value || 0);
+        };
+    }
+}
+
+if (togglePoseBtn) {
+    togglePoseBtn.onclick = () => {
+        showPoseOverlay = !showPoseOverlay;
+        togglePoseBtn.textContent = showPoseOverlay ? "Hide Pose Landmarks" : "Show Pose Landmarks";
+        drawFrame(+slider.value || 0);
+    };
 }
 
 ////////////////////////////////////////////////////////////
@@ -199,35 +1401,53 @@ nextBtn.onclick = () => {
     drawFrame(+slider.value);
 };
 
+autoPlateBtn.onclick = autoDetectPlateFrame;
+
+if (pickPitcherBtn) {
+    pickPitcherBtn.onclick = () => {
+        if (!frames.length || autoDetectBusy) return;
+        awaitingPitcherPick = true;
+        markerStatus.textContent = "Click the pitcher on the preview to lock subject.";
+    };
+}
+
+canvas.addEventListener("click", (ev) => {
+    if (!awaitingPitcherPick || !frames.length || autoDetectBusy) return;
+    const i = +slider.value || 0;
+    const f = frames[i];
+    if (!f) return;
+    const size = canvas.width;
+    const scale = Math.min(size / f.width, size / f.height);
+    const w = Math.round(f.width * scale);
+    const h = Math.round(f.height * scale);
+    const drawX = Math.round((size - w) / 2);
+    const drawY = Math.round((size - h) / 2);
+    const nx = (ev.offsetX - drawX) / Math.max(1, w);
+    const ny = (ev.offsetY - drawY) / Math.max(1, h);
+    manualPitcherSeed = {
+        frame: i,
+        x: clamp(nx, 0, 1),
+        y: clamp(ny, 0, 1),
+    };
+    awaitingPitcherPick = false;
+    markerStatus.textContent = `Pitcher locked at frame ${i}. Click Auto Detect Plate.`;
+});
+
 contactBtn.onclick = () => {
     contactFrame = +slider.value;
     markerStatus.textContent = `Contact Frame = ${contactFrame}`;
 };
 
 ////////////////////////////////////////////////////////////
-// ZOOM CONTROLS
-////////////////////////////////////////////////////////////
-document.getElementById("zoom_in").onclick = () => {
-    previewScale = Math.min(previewScale + 0.25, 3.0);
-    drawFrame(+slider.value);
-};
-
-document.getElementById("zoom_out").onclick = () => {
-    previewScale = Math.max(previewScale - 0.25, 0.5);
-    drawFrame(+slider.value);
-};
-
-document.getElementById("zoom_reset").onclick = () => {
-    previewScale = 1.0;
-    drawFrame(+slider.value);
-};
-
-////////////////////////////////////////////////////////////
-// TRIM & UPLOAD (UNCHANGED)
+// TRIM & UPLOAD
 ////////////////////////////////////////////////////////////
 const { createFFmpeg } = FFmpeg;
+const LANDSCAPE_OUT_W = 1280;
+const LANDSCAPE_OUT_H = 720;
+const LANDSCAPE_ASPECT = LANDSCAPE_OUT_W / LANDSCAPE_OUT_H;
 
 async function bitmapToPNG(bitmap) {
+    // Convert bitmap to PNG bytes for ffmpeg.wasm input.
     const off = new OffscreenCanvas(bitmap.width, bitmap.height);
     const ctx = off.getContext("2d");
     ctx.drawImage(bitmap, 0, 0);
@@ -235,7 +1455,137 @@ async function bitmapToPNG(bitmap) {
     return new Uint8Array(await blob.arrayBuffer());
 }
 
+function computePitcherLandscapeCropFromLandmarks(lm, fallback = null) {
+    if (!lm || !lm.length) return fallback;
+    const idxs = [0, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+    const pts = [];
+    for (const idx of idxs) {
+        const p = lm[idx];
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+        pts.push({ x: p.x, y: p.y });
+    }
+    if (pts.length < 5) return fallback;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of pts) {
+        minX = Math.min(minX, p.x);
+        maxX = Math.max(maxX, p.x);
+        minY = Math.min(minY, p.y);
+        maxY = Math.max(maxY, p.y);
+    }
+
+    const boxW = Math.max(0.001, maxX - minX);
+    const boxH = Math.max(0.001, maxY - minY);
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+
+    // Keep landscape framing around the full pitcher body with stable margin.
+    let cropW = Math.max(boxW * 2.1, 0.46);
+    let cropH = cropW / LANDSCAPE_ASPECT;
+    cropH = Math.max(cropH, boxH * 1.4);
+    cropW = cropH * LANDSCAPE_ASPECT;
+    cropW = Math.min(cropW, 0.96);
+    cropH = Math.min(cropH, 0.96);
+
+    let x = cx - cropW * 0.5;
+    let y = cy - cropH * 0.52;
+    x = clamp(x, 0, 1 - cropW);
+    y = clamp(y, 0, 1 - cropH);
+    return { x, y, w: cropW, h: cropH };
+}
+
+function smoothCropSeries(crops, radius = 2) {
+    if (!crops || !crops.length) return [];
+    const out = new Array(crops.length).fill(null);
+    for (let i = 0; i < crops.length; i += 1) {
+        let sx = 0;
+        let sy = 0;
+        let sw = 0;
+        let sh = 0;
+        let count = 0;
+        for (let k = -radius; k <= radius; k += 1) {
+            const j = i + k;
+            if (j < 0 || j >= crops.length) continue;
+            const c = crops[j];
+            if (!c) continue;
+            sx += c.x;
+            sy += c.y;
+            sw += c.w;
+            sh += c.h;
+            count += 1;
+        }
+        if (count > 0) {
+            out[i] = {
+                x: sx / count,
+                y: sy / count,
+                w: sw / count,
+                h: sh / count,
+            };
+        }
+    }
+    return out;
+}
+
+async function buildPitcherCropSeries(framesToProcess) {
+    const landmarks = new Array(framesToProcess.length).fill(null);
+    for (let i = 0; i < framesToProcess.length; i += 1) {
+        landmarks[i] = await runPoseOnBitmap(framesToProcess[i]);
+    }
+
+    const rawCrops = new Array(landmarks.length).fill(null);
+    let prev = null;
+    for (let i = 0; i < landmarks.length; i += 1) {
+        const c = computePitcherLandscapeCropFromLandmarks(landmarks[i], prev);
+        rawCrops[i] = c;
+        if (c) prev = c;
+    }
+    const smoothed = smoothCropSeries(rawCrops, 2);
+    let last = null;
+    for (let i = 0; i < smoothed.length; i += 1) {
+        if (smoothed[i]) last = smoothed[i];
+        else if (last) smoothed[i] = last;
+    }
+    return smoothed;
+}
+
+async function bitmapToLandscapePNG(bitmap, crop) {
+    const out = new OffscreenCanvas(LANDSCAPE_OUT_W, LANDSCAPE_OUT_H);
+    const outCtx = out.getContext("2d");
+    outCtx.fillStyle = "black";
+    outCtx.fillRect(0, 0, LANDSCAPE_OUT_W, LANDSCAPE_OUT_H);
+
+    let sx = 0;
+    let sy = 0;
+    let sw = bitmap.width;
+    let sh = bitmap.height;
+    if (crop) {
+        sx = Math.max(0, Math.floor(crop.x * bitmap.width));
+        sy = Math.max(0, Math.floor(crop.y * bitmap.height));
+        sw = Math.max(1, Math.floor(crop.w * bitmap.width));
+        sh = Math.max(1, Math.floor(crop.h * bitmap.height));
+        if (sx + sw > bitmap.width) sw = bitmap.width - sx;
+        if (sy + sh > bitmap.height) sh = bitmap.height - sy;
+    } else {
+        const srcAspect = bitmap.width / bitmap.height;
+        if (srcAspect > LANDSCAPE_ASPECT) {
+            sw = Math.max(1, Math.floor(bitmap.height * LANDSCAPE_ASPECT));
+            sx = Math.floor((bitmap.width - sw) * 0.5);
+        } else {
+            sh = Math.max(1, Math.floor(bitmap.width / LANDSCAPE_ASPECT));
+            sy = Math.floor((bitmap.height - sh) * 0.5);
+        }
+    }
+
+    outCtx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, LANDSCAPE_OUT_W, LANDSCAPE_OUT_H);
+    const blob = await out.convertToBlob({ type: "image/png" });
+    return new Uint8Array(await blob.arrayBuffer());
+}
+
 async function trimAndUpload() {
+    // Finalization pipeline: trim -> encode MP4 -> upload endpoint.
     if (contactFrame <= 0) {
         alert("Set contact frame first.");
         return;
@@ -310,6 +1660,8 @@ document.getElementById("finalize_btn").onclick = trimAndUpload;
 // START
 ////////////////////////////////////////////////////////////
 loadVideo();
+setupSmoothScrub();
+setupFrameModal();
 </script>
 
 {% endblock %}

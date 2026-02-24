@@ -1,30 +1,43 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+.manage-actions { display: inline-flex; gap: 6px; }
+.manage-edit-btn {
+  background: #1f6aa5; color: #fff; border: 1px solid #195584;
+  border-radius: 6px; padding: 4px 8px; cursor: pointer;
+}
+.manage-delete-btn {
+  background: #a12828; color: #fff; border: 1px solid #7a1f1f;
+  border-radius: 6px; padding: 4px 8px; cursor: pointer;
+}
+.manage-modal {
+  position: fixed; inset: 0; z-index: 10020; background: rgba(0,0,0,0.78);
+  display: none; align-items: center; justify-content: center; padding: 14px;
+}
+.manage-modal-card {
+  width: min(520px, 96vw); border: 1px solid #3a3a3a; border-radius: 10px;
+  background: #141414; padding: 14px;
+}
+.manage-modal-row {
+  display: grid; grid-template-columns: 120px 1fr; gap: 10px;
+  align-items: center; margin-bottom: 10px;
+}
+.manage-modal-row input, .manage-modal-row select { width: 100%; }
+.manage-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+</style>
 
-<!-- ========================= -->
-<!-- 1. TEAMS (FIRST)          -->
-<!-- ========================= -->
 {% if view == "teams" %}
 <h1>Teams</h1>
 
-
 <h3>Add Team</h3>
 <form method="post" action="/teams/add">
+    <input type="hidden" name="sid" value="{{ sid }}">
     <input type="text" name="name" placeholder="Team name">
     <input type="text" name="description" placeholder="Description">
     <button type="submit">Add</button>
 </form>
 
-<input
-  type="text"
-  class="filter-box"
-  placeholder="Filter teams"
-  aria-label="Filter teams"
-  data-table="teamsTable"
-  data-cols="0,1"
-/>
-
-
+<input type="text" class="filter-box" placeholder="Filter teams" aria-label="Filter teams" data-table="teamsTable" data-cols="0,1" />
 
 <table id="teamsTable" class="compact">
   <thead>
@@ -40,28 +53,49 @@
       <td>{{ t[1] }}</td>
       <td>{{ t[2] }}</td>
       <td class="actions">
-        <form method="post" action="/teams/delete">
-          <input type="hidden" name="item_id" value="{{ t[0] }}">
-          <button type="submit">✕</button>
-        </form>
+        <div class="manage-actions">
+          <button type="button" class="manage-edit-btn js-team-edit" data-id="{{ t[0] }}" data-name="{{ t[1] }}" data-description="{{ t[2] or '' }}">Edit</button>
+          <form method="post" action="/teams/delete">
+            <input type="hidden" name="sid" value="{{ sid }}">
+            <input type="hidden" name="item_id" value="{{ t[0] }}">
+            <button type="submit" class="manage-delete-btn">Delete</button>
+          </form>
+        </div>
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 
-
+<div id="teamEditModal" class="manage-modal">
+  <div class="manage-modal-card">
+    <h3 style="margin-top:0;">Edit Team</h3>
+    <form method="post" action="/teams/edit">
+      <input type="hidden" name="sid" value="{{ sid }}">
+      <input type="hidden" name="item_id" id="team_edit_id">
+      <div class="manage-modal-row">
+        <label for="team_edit_name">Name</label>
+        <input id="team_edit_name" name="name" required>
+      </div>
+      <div class="manage-modal-row">
+        <label for="team_edit_description">Description</label>
+        <input id="team_edit_description" name="description">
+      </div>
+      <div class="manage-modal-actions">
+        <button type="button" onclick="closeManageModal('teamEditModal')">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endif %}
 
-
-<!-- ========================= -->
-<!-- 2. HITTERS (SECOND)       -->
-<!-- ========================= -->
 {% if view == "hitters" %}
 <h1>Hitters</h1>
 
 <h3>Add Hitter</h3>
 <form method="post" action="/hitters/add">
+    <input type="hidden" name="sid" value="{{ sid }}">
     <select name="team_id">
         {% for t in teams %}
             <option value="{{ t[0] }}">{{ t[1] }}</option>
@@ -72,16 +106,7 @@
     <button type="submit">Add</button>
 </form>
 
-<input
-  type="text"
-  class="filter-box"
-  placeholder="Filter hitters (team, name, description)"
-  aria-label="Filter hitters"
-  data-table="hittersTable"
-  data-cols="0,1,2"
-/>
-
-
+<input type="text" class="filter-box" placeholder="Filter hitters (team, name, description)" aria-label="Filter hitters" data-table="hittersTable" data-cols="0,1,2" />
 
 <table id="hittersTable" class="compact">
   <thead>
@@ -99,29 +124,57 @@
       <td>{{ h[1] }}</td>
       <td>{{ h[2] }}</td>
       <td class="actions">
-        <form method="post" action="/hitters/delete">
-          <input type="hidden" name="item_id" value="{{ h[0] }}">
-          <button type="submit">✕</button>
-        </form>
+        <div class="manage-actions">
+          <button type="button" class="manage-edit-btn js-hitter-edit" data-id="{{ h[0] }}" data-name="{{ h[1] }}" data-description="{{ h[2] or '' }}" data-team-id="{{ h[4] }}">Edit</button>
+          <form method="post" action="/hitters/delete">
+            <input type="hidden" name="sid" value="{{ sid }}">
+            <input type="hidden" name="item_id" value="{{ h[0] }}">
+            <button type="submit" class="manage-delete-btn">Delete</button>
+          </form>
+        </div>
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 
-
+<div id="hitterEditModal" class="manage-modal">
+  <div class="manage-modal-card">
+    <h3 style="margin-top:0;">Edit Hitter</h3>
+    <form method="post" action="/hitters/edit">
+      <input type="hidden" name="sid" value="{{ sid }}">
+      <input type="hidden" name="item_id" id="hitter_edit_id">
+      <div class="manage-modal-row">
+        <label for="hitter_edit_team_id">Team</label>
+        <select id="hitter_edit_team_id" name="team_id" required>
+          {% for t in teams %}
+          <option value="{{ t[0] }}">{{ t[1] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="manage-modal-row">
+        <label for="hitter_edit_name">Name</label>
+        <input id="hitter_edit_name" name="name" required>
+      </div>
+      <div class="manage-modal-row">
+        <label for="hitter_edit_description">Description</label>
+        <input id="hitter_edit_description" name="description">
+      </div>
+      <div class="manage-modal-actions">
+        <button type="button" onclick="closeManageModal('hitterEditModal')">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endif %}
 
-
-
-<!-- ========================= -->
-<!-- 3. PITCHERS (THIRD)       -->
-<!-- ========================= -->
 {% if view == "pitchers" %}
 <h1>Pitchers</h1>
 
 <h3>Add Pitcher</h3>
 <form method="post" action="/pitchers/add">
+    <input type="hidden" name="sid" value="{{ sid }}">
     <select name="team_id">
         {% for t in teams %}
             <option value="{{ t[0] }}">{{ t[1] }}</option>
@@ -132,15 +185,7 @@
     <button type="submit">Add</button>
 </form>
 
-<input
-  type="text"
-  class="filter-box"
-  placeholder="Filter pitchers (team, name, description)"
-  aria-label="Filter pitchers"
-  data-table="pitchersTable"
-  data-cols="0,1,2"
-/>
-
+<input type="text" class="filter-box" placeholder="Filter pitchers (team, name, description)" aria-label="Filter pitchers" data-table="pitchersTable" data-cols="0,1,2" />
 
 <table id="pitchersTable" class="compact">
   <thead>
@@ -158,17 +203,95 @@
       <td>{{ p[1] }}</td>
       <td>{{ p[2] }}</td>
       <td class="actions">
-        <form method="post" action="/pitchers/delete">
-          <input type="hidden" name="item_id" value="{{ p[0] }}">
-          <button type="submit">✕</button>
-        </form>
+        <div class="manage-actions">
+          <button type="button" class="manage-edit-btn js-pitcher-edit" data-id="{{ p[0] }}" data-name="{{ p[1] }}" data-description="{{ p[2] or '' }}" data-team-id="{{ p[4] }}">Edit</button>
+          <form method="post" action="/pitchers/delete">
+            <input type="hidden" name="sid" value="{{ sid }}">
+            <input type="hidden" name="item_id" value="{{ p[0] }}">
+            <button type="submit" class="manage-delete-btn">Delete</button>
+          </form>
+        </div>
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 
-
+<div id="pitcherEditModal" class="manage-modal">
+  <div class="manage-modal-card">
+    <h3 style="margin-top:0;">Edit Pitcher</h3>
+    <form method="post" action="/pitchers/edit">
+      <input type="hidden" name="sid" value="{{ sid }}">
+      <input type="hidden" name="item_id" id="pitcher_edit_id">
+      <div class="manage-modal-row">
+        <label for="pitcher_edit_team_id">Team</label>
+        <select id="pitcher_edit_team_id" name="team_id" required>
+          {% for t in teams %}
+          <option value="{{ t[0] }}">{{ t[1] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="manage-modal-row">
+        <label for="pitcher_edit_name">Name</label>
+        <input id="pitcher_edit_name" name="name" required>
+      </div>
+      <div class="manage-modal-row">
+        <label for="pitcher_edit_description">Description</label>
+        <input id="pitcher_edit_description" name="description">
+      </div>
+      <div class="manage-modal-actions">
+        <button type="button" onclick="closeManageModal('pitcherEditModal')">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endif %}
+
+<script>
+function closeManageModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = "none";
+}
+function openManageModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = "flex";
+}
+
+document.querySelectorAll(".js-team-edit").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.getElementById("team_edit_id").value = btn.dataset.id || "";
+    document.getElementById("team_edit_name").value = btn.dataset.name || "";
+    document.getElementById("team_edit_description").value = btn.dataset.description || "";
+    openManageModal("teamEditModal");
+  });
+});
+
+document.querySelectorAll(".js-hitter-edit").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.getElementById("hitter_edit_id").value = btn.dataset.id || "";
+    document.getElementById("hitter_edit_name").value = btn.dataset.name || "";
+    document.getElementById("hitter_edit_description").value = btn.dataset.description || "";
+    document.getElementById("hitter_edit_team_id").value = btn.dataset.teamId || "";
+    openManageModal("hitterEditModal");
+  });
+});
+
+document.querySelectorAll(".js-pitcher-edit").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.getElementById("pitcher_edit_id").value = btn.dataset.id || "";
+    document.getElementById("pitcher_edit_name").value = btn.dataset.name || "";
+    document.getElementById("pitcher_edit_description").value = btn.dataset.description || "";
+    document.getElementById("pitcher_edit_team_id").value = btn.dataset.teamId || "";
+    openManageModal("pitcherEditModal");
+  });
+});
+
+document.querySelectorAll(".manage-modal").forEach((modal) => {
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.style.display = "none";
+  });
+});
+</script>
 
 {% endblock %}

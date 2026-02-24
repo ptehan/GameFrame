@@ -43,8 +43,14 @@
     align-items: stretch;
     width: max-content;
 }
+.trim-preview-canvas-wrap {
+    position: relative;
+    display: inline-block;
+    width: max-content;
+}
 .trim-controls-pane {
-    width: 360px;
+    width: 560px;
+    max-width: 100%;
 }
 .trim-preview-controls {
     display: flex;
@@ -56,6 +62,24 @@
     padding: 2px 8px;
     font-size: 12px;
     line-height: 1.2;
+}
+.trim-expand-overlay-btn {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 12;
+    border: 1px solid #4a4a4a;
+    background: rgba(10, 10, 10, 0.72);
+    color: #f2f2f2;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.trim-expand-overlay-btn:hover {
+    background: rgba(24, 24, 24, 0.9);
 }
 .trim-icon-btn {
     width: 34px;
@@ -72,12 +96,47 @@
 }
 .trim-row-3 {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(170px, 1fr));
     gap: 8px;
     margin-top: 8px;
 }
+.trim-smooth-scrub {
+    position: relative;
+    width: 100%;
+    height: 26px;
+    margin-top: 8px;
+    border: 1px solid #3a3a3a;
+    border-radius: 13px;
+    background: #121212;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    cursor: ew-resize;
+}
+.trim-smooth-scrub-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0%;
+    background: linear-gradient(90deg, #2f97ff 0%, #66e0ff 100%);
+    opacity: 0.35;
+}
+.trim-smooth-scrub-handle {
+    position: absolute;
+    top: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #d8f3ff;
+    box-shadow: 0 0 0 1px #4aa8cc inset;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
 .trim-btn {
     width: 100%;
+    white-space: nowrap;
+    padding: 8px 10px;
 }
 .trim-analytics-panel {
     margin-top: 10px;
@@ -90,6 +149,107 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin-top: 8px;
+}
+.trim-contact-candidates {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.86);
+    padding: 18px;
+    display: none;
+    grid-template-columns: repeat(3, minmax(260px, 360px));
+    justify-content: center;
+    align-content: center;
+    gap: 8px;
+}
+.trim-contact-candidates-header {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #f2f2f2;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+.trim-contact-candidates-sub {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #d0d7de;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+.trim-contact-candidate {
+    border: 1px solid #666;
+    border-radius: 6px;
+    padding: 8px;
+    background: #111;
+    box-shadow: 0 0 18px rgba(0, 0, 0, 0.45);
+}
+.trim-contact-candidate canvas {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #000;
+    border: 1px solid #333;
+    cursor: pointer;
+}
+.trim-contact-candidate-label {
+    margin: 6px 0 6px 0;
+    font-size: 12px;
+    color: #cfd8dc;
+    text-align: center;
+}
+.frame-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10030;
+    background: rgba(0, 0, 0, 0.86);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+}
+.frame-modal-card {
+    width: min(1380px, calc(100vw - 12px));
+    height: calc(100vh - 12px);
+    overflow: hidden;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    background: #121212;
+    padding: 10px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 8px;
+}
+.frame-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.frame-modal-stage {
+    min-height: 0;
+    border: 1px solid #333;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.frame-modal-canvas {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+}
+.frame-modal-controls {
+    width: 100%;
+    margin: 0;
+}
+.frame-modal-controls input[type="range"].frame-modal-slider {
+    width: 100% !important;
+    height: 34px;
+    display: block;
+    box-sizing: border-box;
+    margin: 0;
 }
 
 .trim-splash {
@@ -111,23 +271,36 @@
     padding: 16px;
     box-shadow: 0 0 24px rgba(255, 221, 0, 0.25);
 }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
     .trim-controls-pane {
-        width: 320px;
+        width: 100%;
+    }
+    .trim-row-3 {
+        grid-template-columns: repeat(2, minmax(170px, 1fr));
+    }
+}
+@media (max-width: 760px) {
+    .trim-row-2,
+    .trim-row-3,
+    .trim-analytics-row {
+        grid-template-columns: 1fr;
+    }
+    .trim-contact-candidates {
+        grid-template-columns: 1fr;
+        align-content: start;
+        overflow-y: auto;
+        padding: 12px;
     }
 }
 </style>
 
-<div class="trim-workspace">
+    <div class="trim-workspace">
     <div class="trim-preview-pane">
         <!-- PREVIEW -->
-        <canvas id="preview" width="320" height="320"
-                style="border:1px solid #333; background:black;"></canvas>
-
-        <div class="trim-preview-controls">
-            <button id="zoom_out" class="trim-small-btn">Smaller</button>
-            <button id="zoom_reset" class="trim-small-btn">Reset</button>
-            <button id="zoom_in" class="trim-small-btn">Larger</button>
+        <div class="trim-preview-canvas-wrap">
+            <canvas id="preview" width="320" height="320"
+                    style="border:1px solid #333; background:black;"></canvas>
+            <button id="open_frame_modal_btn" class="trim-expand-overlay-btn">Full Screen</button>
         </div>
 
         <div class="trim-preview-controls">
@@ -138,6 +311,10 @@
         <!-- SLIDER -->
         <input type="range" id="frame_slider" min="0" max="0" value="0"
                style="width:100%; margin-top:10px;">
+        <div id="smooth_scrub" class="trim-smooth-scrub" title="Drag to scrub frames smoothly">
+            <div id="smooth_scrub_fill" class="trim-smooth-scrub-fill"></div>
+            <div id="smooth_scrub_handle" class="trim-smooth-scrub-handle"></div>
+        </div>
 
         <div class="trim-preview-controls">
             <button id="toggle_analytics_btn" class="trim-small-btn">Show Graphs + CSV</button>
@@ -167,6 +344,26 @@
             <button id="set_decision_btn" class="trim-btn">Set Decision Manually</button>
             <button id="set_contact_btn" class="trim-btn">Set Contact Manually</button>
         </div>
+        <div id="contact_candidates_panel" class="trim-contact-candidates">
+            <div class="trim-contact-candidates-header">Choose Contact Frame</div>
+            <div class="trim-contact-candidates-sub">Click the preview that best matches contact. Decision/start will be set from your choice.</div>
+            <div class="trim-contact-candidate">
+                <canvas id="contact_candidate_canvas_1" width="360" height="360"></canvas>
+                <div id="contact_candidate_label_1" class="trim-contact-candidate-label">Contact A</div>
+                <button id="contact_candidate_1" class="trim-btn">Use Contact A</button>
+            </div>
+            <div class="trim-contact-candidate">
+                <canvas id="contact_candidate_canvas_2" width="360" height="360"></canvas>
+                <div id="contact_candidate_label_2" class="trim-contact-candidate-label">Contact B</div>
+                <button id="contact_candidate_2" class="trim-btn">Use Contact B</button>
+            </div>
+            <div class="trim-contact-candidate">
+                <canvas id="contact_candidate_canvas_3" width="360" height="360"></canvas>
+                <div id="contact_candidate_label_3" class="trim-contact-candidate-label">Contact C</div>
+                <button id="contact_candidate_3" class="trim-btn">Use Contact C</button>
+            </div>
+            <button id="contact_candidates_repick_btn" class="trim-btn" style="grid-column:1 / -1; max-width:280px; justify-self:center; margin-top:6px;">Re-pick Batter</button>
+        </div>
 
         <div id="marker_status"
              style="margin-top:10px;font-weight:bold;"></div>
@@ -182,6 +379,35 @@
         <div id="upload_status"
              style="margin-top:10px;font-weight:bold;"></div>
 
+    </div>
+</div>
+
+<div id="frame_modal" class="frame-modal">
+    <div class="frame-modal-card">
+        <div class="frame-modal-header">
+            <h3 style="margin:0;">Full Screen Frame Controls</h3>
+            <button id="close_frame_modal_btn" class="trim-small-btn">Close</button>
+        </div>
+        <div class="frame-modal-stage">
+            <canvas id="frame_modal_canvas" class="frame-modal-canvas" width="920" height="920"></canvas>
+        </div>
+        <div class="frame-modal-controls">
+            <input id="frame_modal_slider" class="frame-modal-slider" type="range" min="0" max="0" value="0">
+            <div class="trim-preview-controls">
+                <button id="frame_modal_prev_btn" class="trim-icon-btn" title="Previous Frame" aria-label="Previous Frame">&#9664;</button>
+                <button id="frame_modal_next_btn" class="trim-icon-btn" title="Next Frame" aria-label="Next Frame">&#9654;</button>
+            </div>
+            <div class="trim-row-3" style="margin-top:8px;">
+                <button id="frame_modal_goto_start_btn" class="trim-btn">Go to Start</button>
+                <button id="frame_modal_goto_decision_btn" class="trim-btn">Go to Decision</button>
+                <button id="frame_modal_goto_contact_btn" class="trim-btn">Go to Contact</button>
+            </div>
+            <div class="trim-row-3" style="margin-top:8px;">
+                <button id="frame_modal_set_start_btn" class="trim-btn">Set Start</button>
+                <button id="frame_modal_set_decision_btn" class="trim-btn">Set Decision</button>
+                <button id="frame_modal_set_contact_btn" class="trim-btn">Set Contact</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -260,8 +486,41 @@ const stickCtx = stickCanvas ? stickCanvas.getContext("2d") : null;
 const toggleStickBtn = document.getElementById("toggle_stick_btn");
 const autodetectSplash = document.getElementById("autodetect_splash");
 const startPickFlowBtn = document.getElementById("start_pick_flow_btn");
+const smoothScrub = document.getElementById("smooth_scrub");
+const smoothScrubFill = document.getElementById("smooth_scrub_fill");
+const smoothScrubHandle = document.getElementById("smooth_scrub_handle");
+const openFrameModalBtn = document.getElementById("open_frame_modal_btn");
+const frameModal = document.getElementById("frame_modal");
+const closeFrameModalBtn = document.getElementById("close_frame_modal_btn");
+const frameModalCanvas = document.getElementById("frame_modal_canvas");
+const frameModalSlider = document.getElementById("frame_modal_slider");
+const frameModalPrevBtn = document.getElementById("frame_modal_prev_btn");
+const frameModalNextBtn = document.getElementById("frame_modal_next_btn");
+const frameModalGotoStartBtn = document.getElementById("frame_modal_goto_start_btn");
+const frameModalGotoDecisionBtn = document.getElementById("frame_modal_goto_decision_btn");
+const frameModalGotoContactBtn = document.getElementById("frame_modal_goto_contact_btn");
+const frameModalSetStartBtn = document.getElementById("frame_modal_set_start_btn");
+const frameModalSetDecisionBtn = document.getElementById("frame_modal_set_decision_btn");
+const frameModalSetContactBtn = document.getElementById("frame_modal_set_contact_btn");
+const contactCandidatesPanel = document.getElementById("contact_candidates_panel");
+const contactCandidateBtn1 = document.getElementById("contact_candidate_1");
+const contactCandidateBtn2 = document.getElementById("contact_candidate_2");
+const contactCandidateBtn3 = document.getElementById("contact_candidate_3");
+const contactCandidateCanvas1 = document.getElementById("contact_candidate_canvas_1");
+const contactCandidateCanvas2 = document.getElementById("contact_candidate_canvas_2");
+const contactCandidateCanvas3 = document.getElementById("contact_candidate_canvas_3");
+const contactCandidateLabel1 = document.getElementById("contact_candidate_label_1");
+const contactCandidateLabel2 = document.getElementById("contact_candidate_label_2");
+const contactCandidateLabel3 = document.getElementById("contact_candidate_label_3");
+const contactCandidatesRepickBtn = document.getElementById("contact_candidates_repick_btn");
 let showStickFigure = false;
 let autodetectRunning = false;
+let pendingContactChoices = [];
+let pendingAutodetectContext = null;
+let scrubActive = false;
+let scrubLastX = 0;
+let scrubFrameFloat = 0;
+let frameModalOpen = false;
 
 let analysisFrames = null;
 let graphReady = false;
@@ -288,6 +547,7 @@ const GRAPH_H = 220;
 let poseInstance = null;
 let poseInitPromise = null;
 let poseResolver = null;
+const POSE_ESTIMATE_TIMEOUT_MS = 2200;
 const POSE_CONNECTIONS = [
     [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
     [11, 23], [12, 24], [23, 24], [23, 25], [25, 27],
@@ -354,6 +614,7 @@ function hideAutodetectSplash() {
 }
 
 function beginBatterPickFlow() {
+    hideContactCandidates();
     awaitingManualPick = true;
     markerStatus.textContent = "Click directly on the batter. Autodetect will start immediately.";
     if (pickBatterBtn) pickBatterBtn.textContent = "Click Batter In Preview";
@@ -459,7 +720,17 @@ async function detectPosesOnBitmap(bitmap, crop = null) {
 
     let poses = [];
     try {
-        poses = await pose.estimatePoses(off, { maxPoses: 6, flipHorizontal: false });
+        // Keep inference light so autodetect remains responsive on slower devices.
+        const estimatePromise = pose.estimatePoses(off, { maxPoses: 2, flipHorizontal: false });
+        const timeoutPromise = new Promise((resolve) => {
+            setTimeout(() => resolve("__POSE_TIMEOUT__"), POSE_ESTIMATE_TIMEOUT_MS);
+        });
+        const res = await Promise.race([estimatePromise, timeoutPromise]);
+        if (res === "__POSE_TIMEOUT__") {
+            console.warn("MoveNet estimate timeout; skipping frame");
+            return [];
+        }
+        poses = res || [];
     } catch (e) {
         console.warn("MoveNet estimate failed", e);
         return [];
@@ -492,10 +763,8 @@ async function detectAllPoseCandidatesForFrame(bitmap) {
     for (const lm of full) candidates.push(lm);
 
     const crops = [
-        { x: 0.00, y: 0.00, w: 0.60, h: 0.78 },
-        { x: 0.40, y: 0.00, w: 0.60, h: 0.78 },
-        { x: 0.00, y: 0.18, w: 0.60, h: 0.82 },
-        { x: 0.40, y: 0.18, w: 0.60, h: 0.82 },
+        { x: 0.00, y: 0.00, w: 0.62, h: 0.80 },
+        { x: 0.38, y: 0.00, w: 0.62, h: 0.80 },
     ];
     for (const crop of crops) {
         const poses = await detectPosesOnBitmap(bitmap, crop);
@@ -891,6 +1160,10 @@ async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
     chosen[manualSeed.frame] = seedLm;
     const totalPassFrames = Math.max(1, (n - 1) * 2);
     let processedFrames = 0;
+    const trackStartedAt = (typeof performance !== "undefined" && performance.now)
+        ? performance.now()
+        : Date.now();
+    const TRACK_TIMEOUT_MS = 30000;
     if (onProgress) onProgress(0, "Autodetect: locking seed");
 
     const seedHip = hipCenter(seedLm);
@@ -898,11 +1171,10 @@ async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
     const seedSide = seedHip.x < 0.5 ? "left" : "right";
 
     const clamp01 = (v) => Math.max(0, Math.min(1, v));
-    const detectNearHip = async (bitmap, targetHip) => {
+    const detectNearHip = async (bitmap, targetHip, allowFullFallback = true) => {
         const windows = [
             { w: 0.34, h: 0.52, maxD: 0.09 },
             { w: 0.46, h: 0.68, maxD: 0.13 },
-            { w: 0.62, h: 0.86, maxD: 0.18 },
         ];
         for (const win of windows) {
             const crop = {
@@ -925,6 +1197,7 @@ async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
         }
 
         // Fallback: full-frame candidates, still tightly gated to current hip.
+        if (!allowFullFallback) return null;
         const fullCandidates = await detectAllPoseCandidatesForFrame(bitmap);
         let best = null;
         let bestD = Infinity;
@@ -947,11 +1220,17 @@ async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
     let prevHip = seedHip;
     let misses = 0;
     for (let i = manualSeed.frame + 1; i < n; i += 1) {
-        const lm = await detectNearHip(frames[i], prevHip);
+        const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        if ((now - trackStartedAt) > TRACK_TIMEOUT_MS) {
+            if (onProgress) onProgress(processedFrames / totalPassFrames, "Autodetect: timeout safeguard hit (partial track)");
+            break;
+        }
+        const lm = await detectNearHip(frames[i], prevHip, misses > 0);
         processedFrames += 1;
         if (onProgress && (processedFrames % 3 === 0 || i === n - 1)) {
             onProgress(processedFrames / totalPassFrames, `Autodetect: tracking forward ${i + 1}/${n}`);
         }
+        if (processedFrames % 5 === 0) await new Promise((r) => setTimeout(r, 0));
         if (!lm) {
             chosen[i] = null;
             misses += 1;
@@ -966,11 +1245,17 @@ async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
     prevHip = seedHip;
     misses = 0;
     for (let i = manualSeed.frame - 1; i >= 0; i -= 1) {
-        const lm = await detectNearHip(frames[i], prevHip);
+        const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        if ((now - trackStartedAt) > TRACK_TIMEOUT_MS) {
+            if (onProgress) onProgress(processedFrames / totalPassFrames, "Autodetect: timeout safeguard hit (partial track)");
+            break;
+        }
+        const lm = await detectNearHip(frames[i], prevHip, misses > 0);
         processedFrames += 1;
         if (onProgress && (processedFrames % 3 === 0 || i === 0)) {
             onProgress(processedFrames / totalPassFrames, `Autodetect: tracking backward ${n - i}/${n}`);
         }
+        if (processedFrames % 5 === 0) await new Promise((r) => setTimeout(r, 0));
         if (!lm) {
             chosen[i] = null;
             misses += 1;
@@ -1141,7 +1426,148 @@ function drawFrame(i) {
     }
 
     if (graphReady) updateGraphLine(i);
+    updateSmoothScrubUI(i);
+    updateFrameModalUI(i);
     drawStickFigureFrame(i);
+}
+
+function setFrameClamped(i) {
+    const maxIdx = Math.max(0, frames.length - 1);
+    const next = Math.max(0, Math.min(maxIdx, Math.round(i)));
+    slider.value = next;
+    drawFrame(next);
+}
+
+function updateSmoothScrubUI(i) {
+    if (!smoothScrub || !smoothScrubFill || !smoothScrubHandle) return;
+    const maxIdx = Math.max(1, frames.length - 1);
+    const ratio = Math.max(0, Math.min(1, (Number(i) || 0) / maxIdx));
+    smoothScrubFill.style.width = `${ratio * 100}%`;
+    const w = smoothScrub.clientWidth || 320;
+    smoothScrubHandle.style.left = `${ratio * w}px`;
+}
+
+function setupSmoothScrub() {
+    if (!smoothScrub) return;
+    const maxIdx = () => Math.max(0, frames.length - 1);
+    const posToFrame = (clientX) => {
+        const rect = smoothScrub.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+        const ratio = rect.width > 0 ? (x / rect.width) : 0;
+        return ratio * maxIdx();
+    };
+
+    smoothScrub.addEventListener("pointerdown", (ev) => {
+        if (!frames.length) return;
+        scrubActive = true;
+        scrubLastX = ev.clientX;
+        scrubFrameFloat = posToFrame(ev.clientX);
+        smoothScrub.setPointerCapture(ev.pointerId);
+        setFrameClamped(scrubFrameFloat);
+    });
+    smoothScrub.addEventListener("pointermove", (ev) => {
+        if (!scrubActive || !frames.length) return;
+        const dx = ev.clientX - scrubLastX;
+        scrubLastX = ev.clientX;
+        const gain = ev.shiftKey ? 0.07 : 0.14;
+        scrubFrameFloat += dx * gain;
+        scrubFrameFloat = Math.max(0, Math.min(maxIdx(), scrubFrameFloat));
+        setFrameClamped(scrubFrameFloat);
+    });
+    const endDrag = (ev) => {
+        if (!scrubActive) return;
+        scrubActive = false;
+        try { smoothScrub.releasePointerCapture(ev.pointerId); } catch (_) {}
+    };
+    smoothScrub.addEventListener("pointerup", endDrag);
+    smoothScrub.addEventListener("pointercancel", endDrag);
+    smoothScrub.addEventListener("wheel", (ev) => {
+        if (!frames.length) return;
+        ev.preventDefault();
+        const dir = ev.deltaY > 0 ? 1 : -1;
+        const step = ev.shiftKey ? 0.5 : 1;
+        scrubFrameFloat = (Number(slider.value) || 0) + (dir * step);
+        scrubFrameFloat = Math.max(0, Math.min(maxIdx(), scrubFrameFloat));
+        setFrameClamped(scrubFrameFloat);
+    }, { passive: false });
+}
+
+function updateFrameModalUI(i) {
+    if (!frameModal || !frameModalCanvas) return;
+    if (frameModalSlider) {
+        frameModalSlider.max = String(Math.max(0, frames.length - 1));
+        frameModalSlider.value = String(Math.max(0, Math.min(frames.length - 1, i)));
+    }
+    if (!frameModalOpen) return;
+    const f = frames[i];
+    if (!f) return;
+    if (frameModalCanvas.width !== f.width || frameModalCanvas.height !== f.height) {
+        frameModalCanvas.width = f.width;
+        frameModalCanvas.height = f.height;
+    }
+    const g = frameModalCanvas.getContext("2d");
+    if (!g) return;
+    const dstW = frameModalCanvas.width || 1;
+    const dstH = frameModalCanvas.height || 1;
+    g.fillStyle = "black";
+    g.fillRect(0, 0, dstW, dstH);
+    g.drawImage(f, 0, 0, dstW, dstH);
+
+    // Keep frame/marker context visible in modal view.
+    const lines = [
+        `Frame: ${i} / ${Math.max(0, frames.length - 1)}`,
+        `Start: ${startFrame}`,
+        `Decision: ${decisionFrame}`,
+        `Contact: ${contactFrame}`,
+    ];
+    const boxX = 8;
+    const boxY = 8;
+    const lineH = 18;
+    const boxW = 240;
+    const boxH = 10 + lines.length * lineH;
+    g.fillStyle = "rgba(0,0,0,0.65)";
+    g.fillRect(boxX, boxY, boxW, boxH);
+    g.font = "14px monospace";
+    for (let li = 0; li < lines.length; li += 1) {
+        const textY = boxY + 15 + li * lineH;
+        if (li === 1) g.fillStyle = i === startFrame ? "#00ffff" : "#9adfff";
+        else if (li === 2) g.fillStyle = i === decisionFrame ? "#33ff66" : "#aaff99";
+        else if (li === 3) g.fillStyle = i === contactFrame ? "#66aaff" : "#aaccff";
+        else g.fillStyle = "#ffffff";
+        g.fillText(lines[li], boxX + 8, textY);
+    }
+}
+
+function setupFrameModal() {
+    if (!openFrameModalBtn || !frameModal || !frameModalCanvas) return;
+    openFrameModalBtn.onclick = () => {
+        frameModalOpen = true;
+        frameModal.style.display = "flex";
+        updateFrameModalUI(+slider.value || 0);
+    };
+    if (closeFrameModalBtn) {
+        closeFrameModalBtn.onclick = () => {
+            frameModalOpen = false;
+            frameModal.style.display = "none";
+        };
+    }
+    frameModal.onclick = (ev) => {
+        if (ev.target === frameModal) {
+            frameModalOpen = false;
+            frameModal.style.display = "none";
+        }
+    };
+    if (frameModalSlider) {
+        frameModalSlider.oninput = () => setFrameClamped(+frameModalSlider.value || 0);
+    }
+    if (frameModalPrevBtn) frameModalPrevBtn.onclick = () => setFrameClamped((+slider.value || 0) - 1);
+    if (frameModalNextBtn) frameModalNextBtn.onclick = () => setFrameClamped((+slider.value || 0) + 1);
+    if (frameModalGotoStartBtn) frameModalGotoStartBtn.onclick = () => setFrameClamped(startFrame);
+    if (frameModalGotoDecisionBtn) frameModalGotoDecisionBtn.onclick = () => setFrameClamped(decisionFrame);
+    if (frameModalGotoContactBtn) frameModalGotoContactBtn.onclick = () => setFrameClamped(contactFrame);
+    if (frameModalSetStartBtn) frameModalSetStartBtn.onclick = () => document.getElementById("set_start_btn").click();
+    if (frameModalSetDecisionBtn) frameModalSetDecisionBtn.onclick = () => document.getElementById("set_decision_btn").click();
+    if (frameModalSetContactBtn) frameModalSetContactBtn.onclick = () => document.getElementById("set_contact_btn").click();
 }
 
 function drawStickFigureFrame(i) {
@@ -1265,6 +1691,15 @@ function smoothSeries(series, radius = 2) {
         if (cnt >= 2) out[i] = sum / cnt;
     }
     return out;
+}
+
+function median(values) {
+    if (!values || !values.length) return null;
+    const nums = values.filter((v) => Number.isFinite(v)).slice().sort((a, b) => a - b);
+    if (!nums.length) return null;
+    const mid = Math.floor(nums.length / 2);
+    if (nums.length % 2 === 1) return nums[mid];
+    return (nums[mid - 1] + nums[mid]) * 0.5;
 }
 
 function savgolSmooth(series, windowSize = 5) {
@@ -1693,35 +2128,9 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
     const vals = net.filter((v) => Number.isFinite(v));
     if (!vals.length) return Math.max(floorIdx, anchor);
     const maxNet = Math.max(...vals);
-    const majorThresh = maxNet * 0.72;
-
-    // First big fast change (earliest threshold crossing).
-    let triggerIdx = -1;
-    for (let i = scanStart; i < n; i += 1) {
-        const v = net[i];
-        if (Number.isFinite(v) && v >= majorThresh) {
-            triggerIdx = i;
-            break;
-        }
-    }
-    if (triggerIdx < 0) {
-        // Fallback to global fastest-change index.
-        let bestIdx = scanStart;
-        let bestVal = -Infinity;
-        for (let i = scanStart; i < n; i += 1) {
-            const v = net[i];
-            if (!Number.isFinite(v)) continue;
-            if (v > bestVal) {
-                bestVal = v;
-                bestIdx = i;
-            }
-        }
-        triggerIdx = bestIdx;
-    }
-
-    const regionStart = Math.max(floorIdx, triggerIdx);
-    const regionEnd = Math.min(n - 2, triggerIdx + 5);
-    if (regionEnd <= regionStart) return Math.max(floorIdx, regionStart);
+    const netMedian = median(vals) || 0;
+    // "Big fast change" gate: earliest strong spike, not global-late max only.
+    const majorThresh = Math.max(maxNet * 0.45, netMedian * 3.0);
 
     const isLocalMax = (arr, i) => {
         if (i <= 0 || i >= arr.length - 1) return false;
@@ -1736,9 +2145,9 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
         return b <= a && b < c;
     };
 
-    // Determine expected extremum direction.
+    // Determine expected extremum direction from starting hip width level.
     const rawVals = sg.filter((v) => Number.isFinite(v));
-    if (!rawVals.length) return Math.max(floorIdx, regionStart);
+    if (!rawVals.length) return Math.max(floorIdx, scanStart);
     const minRaw = Math.min(...rawVals);
     const maxRaw = Math.max(...rawVals);
     const midRaw = (minRaw + maxRaw) * 0.5;
@@ -1754,47 +2163,135 @@ function detectContactFrameFromHipSeries(series, selectedIdx, minContactIdx = 0,
     const startLevel = startCount ? (startSum / startCount) : sg[scanStart];
     const expectValley = Number.isFinite(startLevel) ? (startLevel >= midRaw) : false;
 
-    const swingRange = Math.max(1e-6, maxRaw - minRaw);
-    const minProm = swingRange * 0.14;
-    const extremumCands = [];
+    // First big fast change trigger (earliest).
+    let triggerIdx = -1;
+    for (let i = Math.max(scanStart, 1); i < n - 1; i += 1) {
+        const v = net[i];
+        if (!Number.isFinite(v) || v < majorThresh) continue;
+        const prev = net[i - 1];
+        const next = net[i + 1];
+        const peaky = (!Number.isFinite(prev) || v >= prev) && (!Number.isFinite(next) || v >= next * 0.9);
+        if (!peaky) continue;
+        triggerIdx = i;
+        break;
+    }
+    if (triggerIdx < 0) {
+        // If no "big" trigger found, use earliest moderate spike, still earliest-first.
+        const fallbackThresh = Math.max(netMedian * 2.2, maxNet * 0.33);
+        for (let i = Math.max(scanStart, 1); i < n - 1; i += 1) {
+            const v = net[i];
+            if (Number.isFinite(v) && v >= fallbackThresh) {
+                triggerIdx = i;
+                break;
+            }
+        }
+    }
+    if (triggerIdx < 0) {
+        // Last resort: earliest finite net sample.
+        for (let i = scanStart; i < n; i += 1) {
+            if (Number.isFinite(net[i])) {
+                triggerIdx = i;
+                break;
+            }
+        }
+    }
+    if (triggerIdx < 0) return Math.max(floorIdx, scanStart);
+
+    const regionStart = Math.max(floorIdx, triggerIdx);
+    const regionEnd = Math.min(n - 2, triggerIdx + 5);
+    if (regionEnd <= regionStart) return Math.max(floorIdx, regionStart);
+
+    // Exact user rule: first expected extremum after first big fast change.
     for (let i = regionStart + 1; i <= regionEnd - 1; i += 1) {
         const v = sg[i];
         if (!Number.isFinite(v)) continue;
         const localOk = expectValley ? isLocalMin(sg, i) : isLocalMax(sg, i);
-        if (!localOk) continue;
+        if (localOk) return Math.max(floorIdx, i);
+    }
 
-        // Prominence vs nearby neighborhood.
-        let neighSum = 0;
-        let neighCnt = 0;
-        for (let k = -3; k <= 3; k += 1) {
-            if (k === 0) continue;
-            const j = i + k;
-            if (j < regionStart || j > regionEnd) continue;
-            const nv = sg[j];
-            if (!Number.isFinite(nv)) continue;
-            neighSum += nv;
-            neighCnt += 1;
+    // No local extremum in tight window: choose endpoint value in same direction.
+    let bestIdx = regionStart;
+    let bestVal = sg[regionStart];
+    for (let i = regionStart; i <= regionEnd; i += 1) {
+        const v = sg[i];
+        if (!Number.isFinite(v)) continue;
+        if (!Number.isFinite(bestVal)) {
+            bestVal = v;
+            bestIdx = i;
+            continue;
         }
-        const neighAvg = neighCnt ? (neighSum / neighCnt) : v;
-        const prom = expectValley ? (neighAvg - v) : (v - neighAvg);
-
-        // Persistence: after extremum, signal should move away and stay away.
-        const p1 = sg[Math.min(n - 1, i + 1)];
-        const p2 = sg[Math.min(n - 1, i + 2)];
-        const persistent = expectValley
-            ? (Number.isFinite(p1) && Number.isFinite(p2) && p1 >= v && p2 >= v)
-            : (Number.isFinite(p1) && Number.isFinite(p2) && p1 <= v && p2 <= v);
-
-        extremumCands.push({ i, prom, persistent, v });
+        if (expectValley ? (v < bestVal) : (v > bestVal)) {
+            bestVal = v;
+            bestIdx = i;
+        }
     }
+    return Math.max(floorIdx, bestIdx);
+}
 
-    if (!extremumCands.length) return Math.max(floorIdx, regionStart);
-    // Rule: first big extremum after big fast change.
-    for (const c of extremumCands) {
-        if (c.prom >= minProm) return Math.max(floorIdx, c.i);
+function buildContactCandidatesFromHipSeries(series, minContactIdx = 0, landmarks = null, count = 3) {
+    if (!series || !series.length) return [];
+    const n = series.length;
+    const primary = detectContactFrameFromHipSeries(series, 0, minContactIdx, landmarks);
+    if (!Number.isFinite(primary)) return [];
+
+    const raw = new Array(n).fill(null);
+    for (let i = 0; i < n; i += 1) {
+        const v = series[i];
+        if (!Number.isFinite(v)) continue;
+        if (landmarks && !shouldDrawHipPair(landmarks[i])) continue;
+        raw[i] = v;
     }
-    extremumCands.sort((a, b) => b.prom - a.prom);
-    return Math.max(floorIdx, extremumCands[0].i);
+    const sg = savgolSmooth(raw, 5);
+    const rawVals = sg.filter((v) => Number.isFinite(v));
+    const minRaw = rawVals.length ? Math.min(...rawVals) : null;
+    const maxRaw = rawVals.length ? Math.max(...rawVals) : null;
+    const midRaw = (Number.isFinite(minRaw) && Number.isFinite(maxRaw)) ? ((minRaw + maxRaw) * 0.5) : null;
+    let startSum = 0;
+    let startCount = 0;
+    for (let i = 0; i <= Math.min(n - 1, 8); i += 1) {
+        if (!Number.isFinite(sg[i])) continue;
+        startSum += sg[i];
+        startCount += 1;
+    }
+    const startLevel = startCount ? (startSum / startCount) : null;
+    const expectValley = Number.isFinite(startLevel) && Number.isFinite(midRaw) ? (startLevel >= midRaw) : false;
+
+    const isLocalMax = (arr, i) => {
+        if (i <= 0 || i >= arr.length - 1) return false;
+        const a = arr[i - 1], b = arr[i], c = arr[i + 1];
+        if (![a, b, c].every(Number.isFinite)) return false;
+        return b >= a && b > c;
+    };
+    const isLocalMin = (arr, i) => {
+        if (i <= 0 || i >= arr.length - 1) return false;
+        const a = arr[i - 1], b = arr[i], c = arr[i + 1];
+        if (![a, b, c].every(Number.isFinite)) return false;
+        return b <= a && b < c;
+    };
+    const isLocalExt = (i) => expectValley ? isLocalMin(sg, i) : isLocalMax(sg, i);
+
+    const out = [];
+    const seen = new Set();
+    const push = (idx) => {
+        const i = Math.max(0, Math.min(n - 1, Math.round(idx)));
+        if (i < minContactIdx || seen.has(i)) return;
+        seen.add(i);
+        out.push(i);
+    };
+
+    push(primary);
+    if (isLocalExt(primary + 1)) push(primary + 1);
+    if (isLocalExt(primary - 1)) push(primary - 1);
+
+    for (let i = primary + 1; i <= Math.min(n - 2, primary + 12) && out.length < count; i += 1) {
+        if (isLocalExt(i)) push(i);
+    }
+    for (let i = 1; out.length < count && i <= 4; i += 1) {
+        push(primary + i);
+        if (out.length >= count) break;
+        push(primary - i);
+    }
+    return out.slice(0, count);
 }
 
 function evaluateHipVisibilityConsistency(landmarks) {
@@ -2678,24 +3175,6 @@ document.getElementById("goto_contact_btn").onclick = () => {
     drawFrame(target);
 };
 
-////////////////////////////////////////////////////////////
-// ZOOM CONTROLS
-////////////////////////////////////////////////////////////
-document.getElementById("zoom_in").onclick = () => {
-    previewScale = Math.min(previewScale + 0.25, 3.0);
-    drawFrame(+slider.value);
-};
-
-document.getElementById("zoom_out").onclick = () => {
-    previewScale = Math.max(previewScale - 0.25, 0.5);
-    drawFrame(+slider.value);
-};
-
-document.getElementById("zoom_reset").onclick = () => {
-    previewScale = 1.0;
-    drawFrame(+slider.value);
-};
-
 if (toggleAnalyticsBtn && analyticsPanel) {
     toggleAnalyticsBtn.onclick = () => {
         const isHidden = analyticsPanel.style.display === "none" || !analyticsPanel.style.display;
@@ -2714,6 +3193,115 @@ if (toggleStickBtn && stickCanvas) {
         stickCanvas.style.display = showStickFigure ? "block" : "none";
         toggleStickBtn.textContent = showStickFigure ? "Hide Stick Figure" : "Show Stick Figure";
         drawStickFigureFrame(+slider.value || 0);
+    };
+}
+
+function hideContactCandidates() {
+    pendingContactChoices = [];
+    pendingAutodetectContext = null;
+    if (contactCandidatesPanel) contactCandidatesPanel.style.display = "none";
+}
+
+function drawContactCandidatePreview(canvasEl, frameIdx) {
+    if (!canvasEl) return;
+    const g = canvasEl.getContext("2d");
+    if (!g) return;
+    g.fillStyle = "black";
+    g.fillRect(0, 0, canvasEl.width, canvasEl.height);
+    if (!frames.length || !Number.isFinite(frameIdx)) return;
+    const idx = Math.max(0, Math.min(frames.length - 1, Math.round(frameIdx)));
+    const f = frames[idx];
+    if (!f) return;
+
+    const size = canvasEl.width;
+    const scale = Math.min(size / f.width, size / f.height);
+    const w = Math.round(f.width * scale);
+    const h = Math.round(f.height * scale);
+    const drawX = Math.round((size - w) / 2);
+    const drawY = Math.round((size - h) / 2);
+    g.drawImage(f, drawX, drawY, w, h);
+
+    g.fillStyle = "rgba(0,0,0,0.62)";
+    g.fillRect(6, 6, 74, 20);
+    g.fillStyle = "#ffffff";
+    g.font = "12px monospace";
+    g.fillText(`F ${idx}`, 12, 20);
+}
+
+async function applySelectedContactFrame(selectedContactFrame) {
+    if (!pendingAutodetectContext) return;
+    const ctx = pendingAutodetectContext;
+    const n = poseLandmarksFrames ? poseLandmarksFrames.length : 0;
+    if (!n) return;
+    contactFrame = Math.max(0, Math.min(n - 1, Math.round(selectedContactFrame)));
+
+    if (ctx.hipsUsableForContact) {
+        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, Math.max(0, contactFrame - 6));
+        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
+    } else {
+        const fallbackDecision = Math.max(0, contactFrame - 5);
+        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, fallbackDecision);
+    }
+    // Always re-bind decision to the selected contact window.
+    // Decision must sit in [contact-7 .. contact-4], preferring contact-5.
+    {
+        const minDecision = Math.max(0, contactFrame - 7);
+        const maxDecision = Math.max(minDecision, contactFrame - 4);
+        const defaultDecision = Math.max(minDecision, Math.min(maxDecision, contactFrame - 5));
+        if (!Number.isFinite(decisionFrame)) {
+            decisionFrame = defaultDecision;
+        } else {
+            decisionFrame = Math.max(minDecision, Math.min(maxDecision, Math.round(decisionFrame)));
+        }
+    }
+
+    refreshStartChartSeries();
+    const autoStart = detectStartFrameFromLeadMotion(
+        poseLandmarksFrames,
+        { heel: ctx.leadIdx.heel, knee: ctx.leadIdx.knee, hip: ctx.leadIdx.hip },
+        decisionFrame,
+        contactFrame,
+        fps
+    );
+    if (Number.isFinite(autoStart)) startFrame = autoStart;
+
+    hideContactCandidates();
+    const subjectMode = manualSeedPoint ? "manual-lock" : "batter-track";
+    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${ctx.lead}, contact-mode=${ctx.contactMode}, hips=${ctx.hipStats.visibleCount}/${ctx.n}, start=${startFrame}, decision=${decisionFrame}, contact=${contactFrame})`;
+    updateSwingDurationDisplay();
+    updateGraphLine(+slider.value || 0);
+}
+
+function showContactCandidates(candidates, context) {
+    if (!contactCandidatesPanel) return;
+    const clean = (candidates || [])
+        .filter((v) => Number.isFinite(v))
+        .map((v) => Math.round(v));
+    if (!clean.length) return;
+    while (clean.length < 3) clean.push(clean[clean.length - 1]);
+    pendingContactChoices = clean.slice(0, 3);
+    pendingAutodetectContext = context;
+
+    const buttons = [contactCandidateBtn1, contactCandidateBtn2, contactCandidateBtn3];
+    const canvases = [contactCandidateCanvas1, contactCandidateCanvas2, contactCandidateCanvas3];
+    const labels = [contactCandidateLabel1, contactCandidateLabel2, contactCandidateLabel3];
+    for (let i = 0; i < buttons.length; i += 1) {
+        const btn = buttons[i];
+        if (!btn) continue;
+        const frame = pendingContactChoices[i];
+        btn.textContent = `Use Contact ${frame}`;
+        btn.onclick = () => applySelectedContactFrame(frame);
+        if (labels[i]) labels[i].textContent = `Candidate ${i + 1}: frame ${frame}`;
+        drawContactCandidatePreview(canvases[i], frame);
+        if (canvases[i]) canvases[i].onclick = () => applySelectedContactFrame(frame);
+    }
+    contactCandidatesPanel.style.display = "grid";
+}
+
+if (contactCandidatesRepickBtn) {
+    contactCandidatesRepickBtn.onclick = () => {
+        hideContactCandidates();
+        beginBatterPickFlow();
     };
 }
 
@@ -2737,6 +3325,7 @@ document.getElementById("set_decision_btn").onclick = () => {
 
 document.getElementById("set_contact_btn").onclick = () => {
     contactFrame = +slider.value;
+    hideContactCandidates();
     markerStatus.textContent =
         `Contact = ${contactFrame}`;
     updateSwingDurationDisplay();
@@ -2752,6 +3341,7 @@ async function runAutodetectFromManualSeed() {
     }
 
     autodetectRunning = true;
+    hideContactCandidates();
     showProgress();
     updateProgress(2, "Autodetect: initializing...");
     markerStatus.textContent = "Building pose charts...";
@@ -2849,45 +3439,39 @@ async function runAutodetectFromManualSeed() {
     const hipsUsableForContact =
         hipStats.visibleCount >= Math.max(8, Math.floor(n * 0.18));
     let contactMode = "hip";
+    let provisionalDecision = 0;
+    let contactCandidates = [];
 
     if (hipsUsableForContact) {
-        // Normal path: contact first from hips, then refine decision.
-        // Do not anchor contact to the currently selected frame.
-        const autoContact = detectContactFrameFromHipSeries(contactSeries, 0, 0, poseLandmarksFrames);
-        if (Number.isFinite(autoContact)) contactFrame = autoContact;
-        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, Math.max(0, contactFrame - 6));
-        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
+        // Normal path: contact candidates from hips first.
         contactMode = hipStats.consistent ? "hip" : "hip-relaxed";
+        contactCandidates = buildContactCandidatesFromHipSeries(contactSeries, 0, poseLandmarksFrames, 3);
+        if (!contactCandidates.length) {
+            const autoContact = detectContactFrameFromHipSeries(contactSeries, 0, 0, poseLandmarksFrames);
+            if (Number.isFinite(autoContact)) contactCandidates = [autoContact];
+        }
+        if (!contactCandidates.length) contactCandidates = [Math.max(0, Math.min(n - 1, 0))];
+        contactFrame = contactCandidates[0];
+        provisionalDecision = Math.max(0, contactFrame - 5);
     } else {
         // Low-hip-visibility fallback:
         // 1) decision first from hand acceleration
-        // 2) contact narrowed around decision+5
+        // 2) build contact candidates around decision+5
         contactMode = "decision-first-low-hip";
         const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, 0);
         const provisionalContact = Math.max(0, Math.min(n - 1, handOnsetGate + 5));
-        decisionFrame = detectDecisionFrameFromHandSeries(decisionSeries, provisionalContact, handOnsetGate);
-
-        const targetContact = Math.max(0, Math.min(n - 1, decisionFrame + 5));
-        const minContact = Math.max(0, targetContact - 2);
-        const maxContact = Math.min(n - 1, targetContact + 3);
-        const autoContact = detectContactFrameFromHipSeries(contactSeries, targetContact, minContact, poseLandmarksFrames);
-        if (Number.isFinite(autoContact)) {
-            contactFrame = Math.max(minContact, Math.min(maxContact, autoContact));
-        } else {
-            contactFrame = targetContact;
-        }
+        provisionalDecision = detectDecisionFrameFromHandSeries(decisionSeries, provisionalContact, handOnsetGate);
+        const targetContact = Math.max(0, Math.min(n - 1, provisionalDecision + 5));
+        contactCandidates = [
+            Math.max(0, targetContact - 1),
+            targetContact,
+            Math.min(n - 1, targetContact + 1),
+        ];
+        contactFrame = contactCandidates[0];
     }
+    decisionFrame = provisionalDecision;
 
-    updateProgress(90, "Autodetect: detecting start/decision/contact...");
-    refreshStartChartSeries();
-    const autoStart = detectStartFrameFromLeadMotion(
-        poseLandmarksFrames,
-        { heel: leadIdx.heel, knee: leadIdx.knee, hip: leadIdx.hip },
-        decisionFrame,
-        contactFrame,
-        fps
-    );
-    if (Number.isFinite(autoStart)) startFrame = autoStart;
+    updateProgress(90, "Autodetect: preparing contact choices...");
     ensureGraphCanvas("graph-contact", "analytics_graph_anchor");
     ensureGraphCanvas("graph-decision", "graph-contact");
     ensureGraphCanvas("graph-start", "graph-decision");
@@ -2897,10 +3481,16 @@ async function runAutodetectFromManualSeed() {
     ensureGraphCanvas("graph-part-knees", "graph-part-hands");
     ensureGraphCanvas("graph-part-feet", "graph-part-knees");
     graphReady = true;
-    const subjectMode = manualSeedPoint ? "manual-lock" : "batter-track";
-    markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${lead}, contact-mode=${contactMode}, hips=${hipStats.visibleCount}/${n}, start=${startFrame}, decision=${decisionFrame}, auto-contact=${contactFrame})`;
-    updateSwingDurationDisplay();
     updateGraphLine(+slider.value || 0);
+    showContactCandidates(contactCandidates, {
+        lead,
+        leadIdx,
+        hipStats,
+        n,
+        contactMode,
+        hipsUsableForContact,
+    });
+    markerStatus.textContent = `Autodetect ready: choose contact frame (${contactCandidates.map((v) => Math.round(v)).join(" / ")}), then decision/start will be set.`;
     updateProgress(100, "Autodetect complete.");
     setTimeout(() => hideProgress(), 350);
     autodetectRunning = false;
@@ -2967,6 +3557,7 @@ const { createFFmpeg } = FFmpeg;
 const PORTRAIT_OUT_W = 720;
 const PORTRAIT_OUT_H = 1280;
 const PORTRAIT_ASPECT = PORTRAIT_OUT_W / PORTRAIT_OUT_H;
+const PORTRAIT_SOURCE_BYPASS_TOL = 0.06;
 
 async function bitmapToPNG(bitmap) {
     const off = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -3008,8 +3599,14 @@ function computePortraitCropFromLandmarks(lm, fallback = null) {
     let cropW = cropH * PORTRAIT_ASPECT;
     cropW = Math.max(cropW, boxW * 1.95);
     cropH = cropW / PORTRAIT_ASPECT;
-    cropH = Math.min(cropH, 0.95);
-    cropW = Math.min(cropW, 0.95);
+    // Preserve portrait aspect exactly: scale both dimensions together.
+    const maxW = 0.95;
+    const maxH = 0.95;
+    const scaleW = maxW / cropW;
+    const scaleH = maxH / cropH;
+    const scale = Math.min(1, scaleW, scaleH);
+    cropW *= scale;
+    cropH *= scale;
 
     let x = cx - cropW * 0.5;
     let y = cy - cropH * 0.5;
@@ -3083,7 +3680,21 @@ async function bitmapToPortraitPNG(bitmap, crop) {
             sy = Math.floor((bitmap.height - sh) * 0.5);
         }
     }
-    outCtx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, PORTRAIT_OUT_W, PORTRAIT_OUT_H);
+    // Preserve source aspect into portrait output (no stretch), letterbox if needed.
+    const srcAspectSafe = sw / Math.max(1, sh);
+    const dstAspect = PORTRAIT_ASPECT;
+    let dx = 0;
+    let dy = 0;
+    let dw = PORTRAIT_OUT_W;
+    let dh = PORTRAIT_OUT_H;
+    if (srcAspectSafe > dstAspect) {
+        dh = Math.max(1, Math.round(PORTRAIT_OUT_W / srcAspectSafe));
+        dy = Math.floor((PORTRAIT_OUT_H - dh) * 0.5);
+    } else if (srcAspectSafe < dstAspect) {
+        dw = Math.max(1, Math.round(PORTRAIT_OUT_H * srcAspectSafe));
+        dx = Math.floor((PORTRAIT_OUT_W - dw) * 0.5);
+    }
+    outCtx.drawImage(bitmap, sx, sy, sw, sh, dx, dy, dw, dh);
     const blob = await out.convertToBlob({ type: "image/png" });
     return new Uint8Array(await blob.arrayBuffer());
 }
@@ -3099,6 +3710,12 @@ async function trimAndUpload() {
         return;
     }
 
+    if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
+        alert("Run Autodetect first so pose data is saved with this swing.");
+        markerStatus.textContent = "Finalize blocked: no pose data. Run Autodetect first.";
+        return;
+    }
+
     showProgress();
     updateProgress(10, "Loading FFmpegâ€¦");
 
@@ -3108,15 +3725,18 @@ async function trimAndUpload() {
     });
     await ffmpeg.load();
 
+    const selected = frames.slice(startFrame, contactFrame + 1);
     const selectedLandmarks = poseLandmarksFrames
         ? poseLandmarksFrames.slice(startFrame, contactFrame + 1)
         : [];
-    const usePortraitCrop = selectedLandmarks.some((lm) => !!lm);
+    const firstFrame = selected.length ? selected[0] : null;
+    const srcAspect = firstFrame ? (firstFrame.width / Math.max(1, firstFrame.height)) : PORTRAIT_ASPECT;
+    const alreadyPortrait = srcAspect <= (PORTRAIT_ASPECT + PORTRAIT_SOURCE_BYPASS_TOL);
+    const usePortraitCrop = !alreadyPortrait && selectedLandmarks.some((lm) => !!lm);
     const portraitCrops = usePortraitCrop ? buildPortraitCropSeries(selectedLandmarks) : null;
 
     updateProgress(25, usePortraitCrop ? "Preparing portrait framesâ€¦" : "Preparing framesâ€¦");
 
-    const selected = frames.slice(startFrame, contactFrame + 1);
     const trimmedDecision = decisionFrame - startFrame;
 
     for (let i = 0; i < selected.length; i++) {
@@ -3155,6 +3775,18 @@ async function trimAndUpload() {
     form.append("description", DESCRIPTION);
     form.append("fps", fps);
     form.append("decision_frame", trimmedDecision);
+    let poseData = "";
+    try {
+        poseData = (buildPoseTableCSV().csv || "").trim();
+    } catch (e) {
+        poseData = "";
+    }
+    if (!poseData) {
+        alert("Could not generate pose data. Re-run Autodetect before finalizing.");
+        markerStatus.textContent = "Finalize blocked: pose export failed. Re-run Autodetect.";
+        return;
+    }
+    form.append("pose_data", poseData);
     form.append("file", blob, "trimmed_swing.mp4");
 
     const r = await fetch(`/upload/swing/finalize`, {
@@ -3201,6 +3833,8 @@ document.getElementById("copy_pose_table_btn").onclick = async () => {
 // START
 ////////////////////////////////////////////////////////////
 loadVideo();
+setupSmoothScrub();
+setupFrameModal();
 </script>
 
 {% endblock %}

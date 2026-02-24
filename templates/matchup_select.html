@@ -220,36 +220,55 @@ document.addEventListener("DOMContentLoaded", async () => {
     // FRAME EXTRACTION
     //------------------------------------------------
     async function extractFramesFromVideo(arrayBuffer) {
-        return new Promise(async (resolve) => {
+        const blob = new Blob([arrayBuffer], { type: "video/mp4" });
+        const url = URL.createObjectURL(blob);
+        const video = document.createElement("video");
+        video.src = url;
+        video.muted = true;
+        video.playsInline = true;
 
-            const blob = new Blob([arrayBuffer], { type: "video/mp4" });
-            const url = URL.createObjectURL(blob);
-            const video = document.createElement("video");
-            video.src = url;
-            video.muted = true;
-
+        // Primary path: MediaStreamTrackProcessor frame-by-frame decode (more complete).
+        if (typeof MediaStreamTrackProcessor !== "undefined") {
             await video.play().catch(()=>{});
+            const stream = video.captureStream();
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+                const reader = new MediaStreamTrackProcessor(track).readable.getReader();
+                const frames = [];
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const bmp = await createImageBitmap(value);
+                    const c = document.createElement("canvas");
+                    c.width = bmp.width;
+                    c.height = bmp.height;
+                    const ctx = c.getContext("2d");
+                    ctx.drawImage(bmp, 0, 0);
+                    bmp.close();
+                    value.close();
+                    frames.push(c);
+                }
+                URL.revokeObjectURL(url);
+                return frames;
+            }
+        }
 
+        // Fallback: requestVideoFrameCallback
+        return new Promise(async (resolve) => {
+            await video.play().catch(()=>{});
             const frames = [];
-
-            function captureFrame(now, metadata) {
+            function captureFrame() {
                 const vw = video.videoWidth;
                 const vh = video.videoHeight;
-    
                 const c = document.createElement("canvas");
                 c.width = vw;
                 c.height = vh;
-    
                 const ctx = c.getContext("2d");
                 ctx.drawImage(video, 0, 0, vw, vh);
-    
                 frames.push(c);
-    
                 video.requestVideoFrameCallback(captureFrame);
             }
-    
             video.requestVideoFrameCallback(captureFrame);
-    
             video.onended = () => {
                 URL.revokeObjectURL(url);
                 resolve(frames);
@@ -282,7 +301,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const swingF = await extractFramesFromVideo(swingBuf);
 
         const meta = await fetch(`/api/swing_meta?id=${swing_id}`).then(r => r.json());
-        let decision_frame = meta.decision_frame;
+        let decision_frame = Number(meta.decision_frame);
 
         updateProgress(20, "Frames extracted…");
 
@@ -291,8 +310,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         // MATCHUP LOGIC (UNCHANGED EXCEPT TITLE prepend)
         //------------------------------------------------------------
         const padCount = Math.max(0, pitchF.length - swingF.length);
-        decision_frame += padCount;
-        const contact = padCount + swingF.length - 1;
+        const swingLastIdx = Math.max(0, swingF.length - 1);
+        const decisionLocal = Number.isFinite(decision_frame)
+            ? Math.max(0, Math.min(swingLastIdx, Math.round(decision_frame)))
+            : Math.max(0, swingLastIdx - 5);
+        let decisionGlobal = decisionLocal + padCount;
+        const contact = padCount + swingLastIdx;
+        if (decisionGlobal >= contact) {
+            decisionGlobal = Math.max(padCount, contact - 1);
+        }
         const freeze = 60;
 
         const outFrames = [];
@@ -313,6 +339,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             // clamp index so it never exceeds swingF length
             const idx = Math.min(i - padCount, swingF.length - 1);
             return swingF[idx];
+        }
+        function getPitch(i) {
+            const idx = Math.max(0, Math.min(pitchF.length - 1, i));
+            return pitchF[idx];
         }
 
 
@@ -387,23 +417,23 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         // PHASES:
         for (let i = 0; i < padCount; i++)
-            outFrames.push(compose(pitchF[i], swingF[0]));
+            outFrames.push(compose(getPitch(i), swingF[0]));
 
         for (let i = 0; i < freeze; i++)
-            outFrames.push(compose(pitchF[padCount], swingF[0], yellow));
+            outFrames.push(compose(getPitch(padCount), swingF[0], yellow));
 
-        for (let i = padCount + 1; i < decision_frame; i++)
-            outFrames.push(compose(pitchF[i], getSwing(i)));
+        for (let i = padCount + 1; i < decisionGlobal; i++)
+            outFrames.push(compose(getPitch(i), getSwing(i)));
 
         for (let i = 0; i < freeze; i++)
-            outFrames.push(compose(pitchF[decision_frame], getSwing(decision_frame), green));
+            outFrames.push(compose(getPitch(decisionGlobal), getSwing(decisionGlobal), green));
 
-        for (let i = decision_frame + 1; i <= contact; i++)
-            outFrames.push(compose(pitchF[i], getSwing(i)));
+        for (let i = decisionGlobal + 1; i <= contact; i++)
+            outFrames.push(compose(getPitch(i), getSwing(i)));
 
         const finalSwing = swingF[swingF.length - 1];
         for (let i = contact + 1; i < pitchF.length; i++)
-            outFrames.push(compose(pitchF[i], finalSwing));
+            outFrames.push(compose(getPitch(i), finalSwing));
 
         // --------------------------------------------------------
         // NEW: freeze final frame for 2 seconds (60 frames)
@@ -424,7 +454,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const TITLE_COUNT = 120;
 
         const matchupDate   = new Date().toLocaleDateString();
-        const swingDuration = (swingF.length / 30).toFixed(2);
+        const swingDuration = Number.isFinite(Number(meta.swing_seconds))
+            ? Number(meta.swing_seconds).toFixed(2)
+            : (swingF.length / 30).toFixed(2);
         const hitterName    = swHitter.options[swHitter.selectedIndex].text;
         const pitcherName   = ptPitcher.options[ptPitcher.selectedIndex].text;
 

@@ -26,12 +26,19 @@ def serve_thumbnail(blob):
         media_type="image/jpeg"
     )
 
+def pitch_table_has_thumb(conn):
+    cols = conn.execute("PRAGMA table_info(pitch_clips)").fetchall()
+    return any((row[1] == "thumb") for row in cols)
+
 # ------------------------------------------------------------
 # GET /thumbnail/pitch
 # ------------------------------------------------------------
 @router.get("/thumbnail/pitch")
 def thumbnail_pitch(id: int):
     conn = db()
+    if not pitch_table_has_thumb(conn):
+        conn.close()
+        return HTMLResponse("not found", status_code=404)
     row = conn.execute("SELECT thumb FROM pitch_clips WHERE id=?", (id,)).fetchone()
     conn.close()
 
@@ -247,11 +254,18 @@ async def finalize_pitch(
         os.remove(tmp_path)
 
     conn = db()
-    conn.execute(
-        "INSERT INTO pitch_clips (team_id, pitcher_id, description, clip_blob, thumb, fps, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (team_id, pitcher_id, description, blob, thumb_blob, fps, datetime.now())
-    )
+    if pitch_table_has_thumb(conn):
+        conn.execute(
+            "INSERT INTO pitch_clips (team_id, pitcher_id, description, clip_blob, thumb, fps, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (team_id, pitcher_id, description, blob, thumb_blob, fps, datetime.now())
+        )
+    else:
+        conn.execute(
+            "INSERT INTO pitch_clips (team_id, pitcher_id, description, clip_blob, fps, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (team_id, pitcher_id, description, blob, fps, datetime.now())
+        )
     conn.commit()
     conn.close()
 

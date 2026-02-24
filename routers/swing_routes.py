@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, Response, RedirectResponse, StreamingResponse, FileResponse
+from fastapi.responses import HTMLResponse, Response, RedirectResponse, StreamingResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from utils.db import db
 import re
@@ -23,6 +23,102 @@ def temp_path(id):
 
 def serve_thumbnail(blob):
     return StreamingResponse(io.BytesIO(blob), media_type="image/jpeg")
+
+
+# ------------------------------------------------------------
+# POST /upload/common/add-team
+# ------------------------------------------------------------
+@router.post("/upload/common/add-team")
+def add_team(name: str = Form(...)):
+    team_name = (name or "").strip()
+    if not team_name:
+        return JSONResponse({"ok": False, "error": "Team name is required."}, status_code=400)
+
+    conn = db()
+    existing = conn.execute(
+        "SELECT id, name FROM teams WHERE name = ? COLLATE NOCASE",
+        (team_name,),
+    ).fetchone()
+    if existing:
+        conn.close()
+        return JSONResponse({"ok": False, "error": "Team already exists."}, status_code=400)
+
+    try:
+        conn.execute("INSERT INTO teams (name) VALUES (?)", (team_name,))
+        conn.commit()
+    except Exception:
+        conn.close()
+        return JSONResponse({"ok": False, "error": "Team already exists or is invalid."}, status_code=400)
+
+    row = conn.execute("SELECT id, name FROM teams WHERE name=?", (team_name,)).fetchone()
+    conn.close()
+    return JSONResponse({"ok": True, "id": row[0], "name": row[1]})
+
+
+# ------------------------------------------------------------
+# POST /upload/common/add-hitter
+# ------------------------------------------------------------
+@router.post("/upload/common/add-hitter")
+def add_hitter(team_id: int = Form(...), name: str = Form(...)):
+    hitter_name = (name or "").strip()
+    if not hitter_name:
+        return JSONResponse({"ok": False, "error": "Hitter name is required."}, status_code=400)
+
+    conn = db()
+    team = conn.execute("SELECT id FROM teams WHERE id=?", (team_id,)).fetchone()
+    if not team:
+        conn.close()
+        return JSONResponse({"ok": False, "error": "Team not found."}, status_code=400)
+
+    existing = conn.execute(
+        "SELECT id FROM hitters WHERE team_id=? AND name = ? COLLATE NOCASE",
+        (team_id, hitter_name),
+    ).fetchone()
+    if existing:
+        conn.close()
+        return JSONResponse({"ok": False, "error": "Hitter already exists on this team."}, status_code=400)
+
+    conn.execute("INSERT INTO hitters (team_id, name) VALUES (?, ?)", (team_id, hitter_name))
+    conn.commit()
+    row = conn.execute(
+        "SELECT id, name, team_id FROM hitters WHERE team_id=? AND name=? ORDER BY id DESC LIMIT 1",
+        (team_id, hitter_name),
+    ).fetchone()
+    conn.close()
+    return JSONResponse({"ok": True, "id": row[0], "name": row[1], "team_id": row[2]})
+
+
+# ------------------------------------------------------------
+# POST /upload/common/add-pitcher
+# ------------------------------------------------------------
+@router.post("/upload/common/add-pitcher")
+def add_pitcher(team_id: int = Form(...), name: str = Form(...)):
+    pitcher_name = (name or "").strip()
+    if not pitcher_name:
+        return JSONResponse({"ok": False, "error": "Pitcher name is required."}, status_code=400)
+
+    conn = db()
+    team = conn.execute("SELECT id FROM teams WHERE id=?", (team_id,)).fetchone()
+    if not team:
+        conn.close()
+        return JSONResponse({"ok": False, "error": "Team not found."}, status_code=400)
+
+    existing = conn.execute(
+        "SELECT id FROM pitchers WHERE team_id=? AND name = ? COLLATE NOCASE",
+        (team_id, pitcher_name),
+    ).fetchone()
+    if existing:
+        conn.close()
+        return JSONResponse({"ok": False, "error": "Pitcher already exists on this team."}, status_code=400)
+
+    conn.execute("INSERT INTO pitchers (team_id, name) VALUES (?, ?)", (team_id, pitcher_name))
+    conn.commit()
+    row = conn.execute(
+        "SELECT id, name, team_id FROM pitchers WHERE team_id=? AND name=? ORDER BY id DESC LIMIT 1",
+        (team_id, pitcher_name),
+    ).fetchone()
+    conn.close()
+    return JSONResponse({"ok": True, "id": row[0], "name": row[1], "team_id": row[2]})
 
 
 # ------------------------------------------------------------
@@ -118,6 +214,24 @@ def stream_swing_clip(id: int):
 
 
 # ------------------------------------------------------------
+# GET /swing/pose-data
+# ------------------------------------------------------------
+@router.get("/swing/pose-data")
+def get_swing_pose_data(id: int):
+    conn = db()
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(swing_clips)").fetchall()}
+    if "pose_data" not in cols:
+        conn.close()
+        return JSONResponse({"ok": False, "error": "pose_data field not available."}, status_code=404)
+    row = conn.execute("SELECT pose_data FROM swing_clips WHERE id=?", (id,)).fetchone()
+    conn.close()
+    if not row:
+        return JSONResponse({"ok": False, "error": "Swing not found."}, status_code=404)
+    pose_data = row[0] or ""
+    return JSONResponse({"ok": True, "pose_data": pose_data})
+
+
+# ------------------------------------------------------------
 # POST /upload/swing/finalize   <-- THUMBNAIL ADDED
 # ------------------------------------------------------------
 @router.post("/upload/swing/finalize")
@@ -126,6 +240,7 @@ async def finalize_swing(
     team_id: int = Form(...),
     hitter_id: int = Form(...),
     description: str = Form(""),
+    pose_data: str = Form(""),
     decision_frame: int = Form(...),
     file: UploadFile = File(...)
 ):
@@ -153,10 +268,15 @@ async def finalize_swing(
         os.remove(tmp_path)
 
     conn = db()
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(swing_clips)").fetchall()}
+    if "pose_data" not in cols:
+        conn.execute("ALTER TABLE swing_clips ADD COLUMN pose_data TEXT")
+        conn.commit()
+
     conn.execute("""
         INSERT INTO swing_clips
-        (team_id, hitter_id, description, decision_frame, clip_blob, thumb, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+        (team_id, hitter_id, description, decision_frame, clip_blob, thumb, pose_data, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
     """, (
         team_id,
         hitter_id,
@@ -164,6 +284,7 @@ async def finalize_swing(
         decision_frame,
         blob,
         thumb_blob,
+        pose_data or "",
     ))
     conn.commit()
     conn.close()
