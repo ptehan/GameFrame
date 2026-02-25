@@ -910,7 +910,7 @@ app.post("/library/matchup/delete", (req, res) => {
   res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}&type=matchup`);
 });
 
-app.post("/upload/common/add-team", (req, res) => {
+app.post("/upload/common/add-team", upload.none(), (req, res) => {
   const teamName = String(req.body.name || "").trim();
   if (!teamName) return res.status(400).json({ ok: false, error: "Team name is required." });
   const exists = db.prepare("SELECT id, name FROM teams WHERE name=? COLLATE NOCASE").get(teamName);
@@ -924,7 +924,7 @@ app.post("/upload/common/add-team", (req, res) => {
   }
 });
 
-app.post("/upload/common/add-hitter", (req, res) => {
+app.post("/upload/common/add-hitter", upload.none(), (req, res) => {
   const teamId = Number(req.body.team_id);
   const name = String(req.body.name || "").trim();
   if (!name) return res.status(400).json({ ok: false, error: "Hitter name is required." });
@@ -937,7 +937,7 @@ app.post("/upload/common/add-hitter", (req, res) => {
   res.json({ ok: true, id: row.id, name: row.name, team_id: row.team_id });
 });
 
-app.post("/upload/common/add-pitcher", (req, res) => {
+app.post("/upload/common/add-pitcher", upload.none(), (req, res) => {
   const teamId = Number(req.body.team_id);
   const name = String(req.body.name || "").trim();
   if (!name) return res.status(400).json({ ok: false, error: "Pitcher name is required." });
