@@ -35,3 +35,7 @@ AppImages.zip
 
 # Node or build-generated assets you don’t want
 static/js/ffmpeg/
+!GameFrameJS/static/js/ffmpeg/ffmpeg.min.js
+!GameFrameJS/static/js/ffmpeg/ffmpeg-core.js
+!GameFrameJS/static/js/ffmpeg/ffmpeg-core.worker.js
+!GameFrameJS/static/js/ffmpeg/ffmpeg-core.wasm
