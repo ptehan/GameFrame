@@ -1,0 +1,330 @@
+/* GLOBAL --------------------------------------------------- */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: #111;
+    color: #eee;
+}
+
+h1, h2, h3 {
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+}
+
+/* SIDEBAR --------------------------------------------------- */
+#sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 240px;
+    height: 100%;
+    background: #000;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    border-right: 1px solid #222;
+}
+
+#sidebar .title {
+    font-size: 22px;
+    letter-spacing: 2px;
+    margin-bottom: 25px;
+    color: #fff;
+}
+
+.menu-section {
+    margin-top: 20px;
+    margin-bottom: 5px;
+    color: #aaa;
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+.menu-item {
+    display: block;
+    padding: 8px 5px;
+    margin: 3px 0;
+    color: #ddd;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: 0.15s;
+}
+
+.menu-item:hover {
+    background: #ffdd00;
+    color: #000;
+}
+
+/* MAIN LAYOUT ------------------------------------------------ */
+#main {
+    margin-left: 260px;
+    padding: 20px;
+}
+
+/* FORMS ------------------------------------------------------ */
+form {
+    margin: 15px 0;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+    background: #222;
+    border: 1px solid #444;
+    padding: 6px 8px;
+    border-radius: 4px;
+    color: #eee;
+}
+
+button {
+    background: #333;
+    color: #eee;
+    border: 1px solid #555;
+    padding: 7px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #ffdd00;
+    color: #000;
+}
+
+/* TABLES ----------------------------------------------------- */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+table th {
+    background: #222;
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid #333;
+}
+
+table td {
+    padding: 8px;
+    border-bottom: 1px solid #222;
+}
+
+table tr:hover {
+    background: #1d1d0d;
+}
+
+/* EXPANDER / PANEL ------------------------------------------ */
+.panel {
+    background: #181818;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 15px 0;
+    border: 1px solid #282828;
+}
+
+/* VIDEO + SLIDER -------------------------------------------- */
+.video-preview {
+    border: 1px solid #333;
+    background: #000;
+    display: inline-block;
+    margin-bottom: 10px;
+}
+
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+input[type="range"] {
+    width: 300px;
+}
+
+/* BASE THUMBNAILS ------------------------------------------- */
+.thumb {
+    width: 100px;
+    height: auto;
+    border-radius: 4px;
+    border: 1px solid #444;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+/* MATCHUP GRID ---------------------------------------------- */
+#matchup_list {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 28px !important;
+    width: 100%;
+}
+
+/* CARD ------------------------------------------------------- */
+.library-item {
+    background: #181818;
+    border: 1px solid #222;
+    border-radius: 8px;
+    padding: 14px;
+
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 14px;
+
+    width: 100% !important;
+    min-width: 0;
+}
+
+.library-item:hover {
+    border-color: #ffdd00;
+}
+
+.library-item img.thumb {
+    width: 130px !important;
+    height: auto !important;
+    flex-shrink: 0;
+    border-radius: 4px;
+}
+
+.library-item .info {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.library-item .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: auto;
+}
+
+/* FLASH COLORS ---------------------------------------------- */
+.flash-yellow {
+    background: rgba(255, 221, 0, 0.35);
+}
+
+.flash-green {
+    background: rgba(0, 255, 0, 0.35);
+}
+
+/* FONTS ------------------------------------------------------ */
+body, input, select, button, textarea, label, option {
+    font-family: inherit !important;
+}
+
+* {
+    font-family: "Segoe UI", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+}
+
+/* =========================================================== */
+/* UNIVERSAL 2-COLUMN GRID FOR ALL CARD LISTS                  */
+/* =========================================================== */
+
+.card-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 28px !important;
+    width: 100%;
+}
+
+.card-row {
+    width: 100% !important;
+    display: block !important;
+}
+
+
+
+/* ===========================================================
+   MATCHUP FORM — 2 COLUMN LAYOUT
+   =========================================================== */
+
+.matchup-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 420px;
+}
+
+.form-row {
+    display: flex;
+    gap: 30px;
+}
+
+.col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-control {
+    margin-bottom: 8px;
+}
+
+/* ===========================================================
+   CONDENSED, SORTABLE LIST TABLES
+   =========================================================== */
+
+table.compact {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+table.compact th,
+table.compact td {
+    padding: 5px 8px;
+    border-bottom: 1px solid #222;
+    white-space: nowrap;
+}
+
+table.compact th {
+    background: #1a1a1a;
+    color: #ccc;
+    cursor: pointer;
+    user-select: none;
+}
+
+table.compact th:hover {
+    color: #ffdd00;
+}
+
+table.compact tr:hover {
+    background: #1f1f10;
+}
+
+/* Right-align action column */
+table.compact td.actions {
+    text-align: right;
+}
+
+/* Smaller delete buttons */
+table.compact .actions button {
+    padding: 2px 6px;
+    font-size: 11px;
+}
+
+/* ===========================================================
+   FILTER INPUT
+   =========================================================== */
+
+.filter-box {
+    margin: 8px 0 12px 0;
+    padding: 6px 8px;
+    width: 260px;
+    font-size: 13px;
+    background: #1b1b1b;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #eee;
+}
+
+.filter-box::placeholder {
+    color: #777;
+}
