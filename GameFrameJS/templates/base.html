@@ -51,7 +51,7 @@
     </div>
 
     <!-- CREATE VIDEOS -->
-    <div class="menu-section" data-target="create-videos">Create Videos ▸</div>
+    <div class="menu-section" data-target="create-videos">Create Videos ></div>
     <div class="submenu" id="create-videos">
         <a class="menu-item" href="/upload/pitch?sid={{ sid }}">Upload Pitch Clip</a>
         <a class="menu-item" href="/upload/swing?sid={{ sid }}">Upload Swing Clip</a>
@@ -64,17 +64,17 @@
 
     <!-- LIBRARY -->
     <div class="menu-section">
-        <a class="menu-section" href="/library?sid={{ sid }}" style="text-decoration:none;">Library ▸</a>
+        <a class="menu-section" href="/library?sid={{ sid }}" style="text-decoration:none;">Library ></a>
     </div>
 
     <!-- DASHBOARD -->
-    <div class="menu-section" data-target="dashboard">Dashboard ▸</div>
+    <div class="menu-section" data-target="dashboard">Dashboard ></div>
     <div class="submenu" id="dashboard">
         <a class="menu-item" href="/dashboard/player?sid={{ sid }}">Player Dashboard</a>
     </div>
 
     <!-- MANAGE -->
-    <div class="menu-section" data-target="manage">Manage ▸</div>
+    <div class="menu-section" data-target="manage">Manage ></div>
     <div class="submenu" id="manage">
         <a class="menu-item" href="/teams?sid={{ sid }}">Teams</a>
         <a class="menu-item" href="/pitchers?sid={{ sid }}">Pitchers</a>
@@ -82,7 +82,7 @@
     </div>
 
     <!-- AUTH -->
-    <div class="menu-section" data-target="auth">Auth ▸</div>
+    <div class="menu-section" data-target="auth">Auth ></div>
     <div class="submenu" id="auth">
         <a class="menu-item" href="/logout?sid={{ sid }}">Logout</a>
     </div>
@@ -101,10 +101,10 @@ document.querySelectorAll(".menu-section").forEach(section => {
 
         if (menu && menu.style.display === "block") {
             menu.style.display = "none";
-            section.textContent = section.textContent.replace("▾", "▸");
+            section.textContent = section.textContent.replace(" v", " >");
         } else if (menu) {
             menu.style.display = "block";
-            section.textContent = section.textContent.replace("▸", "▾");
+            section.textContent = section.textContent.replace(" >", " v");
         }
     });
 });
@@ -169,5 +169,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 

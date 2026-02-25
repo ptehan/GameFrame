@@ -7,13 +7,13 @@
         <div id="progress-bar" style="height:100%; width:0%; background:#ffdd00;"></div>
     </div>
     <div id="progress-label" style="margin-top:6px; font-size:13px;">
-        Workingâ€¦
+        Working...
     </div>
 </div>
 
 <h2>Trim Swing Clip</h2>
 
-<p id="info">Loading videoÃ¢â‚¬Â¦</p>
+<p id="info">Loading video...</p>
 
 
 
@@ -1277,12 +1277,12 @@ async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
 async function loadVideo() {
     // Browser-side decode pipeline: fetch MP4, decode to per-frame ImageBitmaps for scrubbing.
     showProgress();
-    updateProgress(5, "Fetching videoâ€¦");
+    updateProgress(5, "Fetching video...");
 
     const resp = await fetch(`/raw/swing?id=${TEMP_ID}`);
     const buf  = await resp.arrayBuffer();
 
-    updateProgress(20, "Preparing videoâ€¦");
+    updateProgress(20, "Preparing video...");
 
     const blob = new Blob([buf], { type: "video/mp4" });
     const video = document.createElement("video");
@@ -1291,7 +1291,7 @@ async function loadVideo() {
     video.playsInline = true;
 
     await video.play().catch(() => {});
-    updateProgress(35, "Initializing decoderâ€¦");
+    updateProgress(35, "Initializing decoder...");
 
     const stream = video.captureStream();
     const track  = stream.getVideoTracks()[0];
@@ -1304,7 +1304,7 @@ async function loadVideo() {
     const reader    = processor.readable.getReader();
 
     frames = [];
-    updateProgress(40, "Decoding framesâ€¦");
+    updateProgress(40, "Decoding frames...");
 
     while (true) {
         const { done, value } = await reader.read();
@@ -1317,12 +1317,12 @@ async function loadVideo() {
         if (frames.length % 20 === 0) {
             updateProgress(
                 Math.min(40 + (frames.length / 5000) * 40, 80),
-                `Decodingâ€¦ ${frames.length} frames`
+                `Decoding... ${frames.length} frames`
             );
         }
     }
 
-    updateProgress(90, "Building previewâ€¦");
+    updateProgress(90, "Building preview...");
 
     slider.max = frames.length - 1;
     drawFrame(0);
@@ -3717,7 +3717,7 @@ async function trimAndUpload() {
     }
 
     showProgress();
-    updateProgress(10, "Loading FFmpegâ€¦");
+    updateProgress(10, "Loading FFmpeg...");
 
     const ffmpeg = createFFmpeg({
         corePath: "/static/js/ffmpeg/ffmpeg-core.js",
@@ -3735,7 +3735,7 @@ async function trimAndUpload() {
     const usePortraitCrop = !alreadyPortrait && selectedLandmarks.some((lm) => !!lm);
     const portraitCrops = usePortraitCrop ? buildPortraitCropSeries(selectedLandmarks) : null;
 
-    updateProgress(25, usePortraitCrop ? "Preparing portrait framesâ€¦" : "Preparing framesâ€¦");
+    updateProgress(25, usePortraitCrop ? "Preparing portrait frames..." : "Preparing frames...");
 
     const trimmedDecision = decisionFrame - startFrame;
 
@@ -3751,7 +3751,7 @@ async function trimAndUpload() {
         }
     }
 
-    updateProgress(60, "Encoding MP4â€¦");
+    updateProgress(60, "Encoding MP4...");
 
     await ffmpeg.run(
         "-framerate", String(fps),
@@ -3763,7 +3763,7 @@ async function trimAndUpload() {
         "out.mp4"
     );
 
-    updateProgress(90, "Uploadingâ€¦");
+    updateProgress(90, "Uploading...");
 
     const out = ffmpeg.FS("readFile", "out.mp4");
     const blob = new Blob([out.buffer], { type: "video/mp4" });
