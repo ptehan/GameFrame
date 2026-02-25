@@ -53,6 +53,45 @@ function tempPath(id) {
   return path.join(TMP_DIR, `gf_${id}.mp4`);
 }
 
+function sourceTempPath(id) {
+  return path.join(TMP_DIR, `gf_src_${id}.mp4`);
+}
+
+function isSupportedImportUrl(raw) {
+  try {
+    const u = new URL(String(raw || "").trim());
+    if (!["http:", "https:"].includes(u.protocol)) return false;
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    const allowed = [
+      "youtube.com",
+      "youtu.be",
+      "twitter.com",
+      "x.com",
+      "instagram.com",
+      "tiktok.com",
+    ];
+    return allowed.some((d) => host === d || host.endsWith(`.${d}`));
+  } catch (_) {
+    return false;
+  }
+}
+
+function importKind(raw) {
+  return raw === "pitch" ? "pitch" : "swing";
+}
+
+function downloadExternalVideo(url, outputPath) {
+  const ytdlpBin = process.env.YTDLP_BIN || "yt-dlp";
+  runCmd(ytdlpBin, [
+    "--no-playlist",
+    "--no-warnings",
+    "--format", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b",
+    "--merge-output-format", "mp4",
+    "-o", outputPath,
+    url,
+  ]);
+}
+
 function parseFraction(raw) {
   if (!raw) return 0;
   if (typeof raw === "number") return raw;
@@ -343,6 +382,107 @@ app.get("/service-worker.js", (req, res) => {
 app.get("/", (req, res) => render(req, res, "index.html", { sid: sidOf(req) }));
 app.get("/external_video", (req, res) => render(req, res, "external_video.html", { sid: sidOf(req) }));
 app.get("/logout", (req, res) => res.redirect(302, `/?sid=${encodeURIComponent(sidOf(req))}`));
+
+app.post("/external_video/fetch", async (req, res) => {
+  const sid = sidOf(req);
+  const videoUrl = String(req.body.video_url || "").trim();
+  const clipType = importKind(String(req.body.clip_type || "swing").trim());
+
+  if (!isSupportedImportUrl(videoUrl)) {
+    return render(req, res, "external_video.html", {
+      sid,
+      error: "Paste a valid YouTube, X/Twitter, Instagram, or TikTok link.",
+      video_url: videoUrl,
+      clip_type: clipType,
+    });
+  }
+
+  const sourceId = crypto.randomUUID();
+  const srcPath = sourceTempPath(sourceId);
+  try {
+    downloadExternalVideo(videoUrl, srcPath);
+    const meta = ffprobeMeta(srcPath);
+    if (!meta.duration || meta.duration <= 0) {
+      throw new Error("Could not read video duration after download.");
+    }
+    return render(req, res, "external_video_trim.html", {
+      sid,
+      source_id: sourceId,
+      clip_type: clipType,
+      source_url: `/external/source?id=${encodeURIComponent(sourceId)}`,
+      duration: meta.duration,
+    });
+  } catch (err) {
+    await fsp.unlink(srcPath).catch(() => {});
+    const msg = String(err && err.message ? err.message : err || "");
+    const hint = msg.includes("yt-dlp")
+      ? "Video import failed. Ensure yt-dlp is installed on the server."
+      : "Video import failed. Try a public post link and retry.";
+    return render(req, res, "external_video.html", {
+      sid,
+      error: hint,
+      video_url: videoUrl,
+      clip_type: clipType,
+    });
+  }
+});
+
+app.get("/external/source", (req, res) => {
+  const p = sourceTempPath(req.query.id);
+  if (!fs.existsSync(p)) return res.status(404).send("not found");
+  res.type("video/mp4").sendFile(p);
+});
+
+app.post("/external_video/trim", async (req, res) => {
+  const sid = sidOf(req);
+  const sourceId = String(req.body.source_id || "").trim();
+  const clipType = importKind(String(req.body.clip_type || "swing").trim());
+  const startSec = Math.max(0, Number(req.body.start_sec || 0));
+  const srcPath = sourceTempPath(sourceId);
+  const outPath = tempPath(sourceId);
+
+  if (!sourceId || !fs.existsSync(srcPath)) {
+    return render(req, res, "external_video.html", {
+      sid,
+      error: "Source video expired. Paste the link again.",
+      clip_type: clipType,
+    });
+  }
+
+  try {
+    const meta = ffprobeMeta(srcPath);
+    const maxStart = Math.max(0, (meta.duration || 0) - 5);
+    const clampedStart = Math.min(startSec, maxStart);
+    runCmd("ffmpeg", [
+      "-y",
+      "-ss", String(clampedStart),
+      "-i", srcPath,
+      "-t", "5",
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-crf", "23",
+      "-an",
+      outPath,
+    ]);
+    await fsp.unlink(srcPath).catch(() => {});
+  } catch (_) {
+    return render(req, res, "external_video.html", {
+      sid,
+      error: "Could not trim to 5 seconds. Try another link or clip.",
+      clip_type: clipType,
+    });
+  }
+
+  const q = new URLSearchParams({
+    sid,
+    from_yt: "1",
+    temp_id: sourceId,
+  });
+  if (clipType === "pitch") {
+    return res.redirect(303, `/upload/pitch?${q.toString()}`);
+  }
+  return res.redirect(303, `/upload/swing?${q.toString()}`);
+});
 
 app.get("/teams", (req, res) => {
   const items = db.prepare("SELECT id, name, description FROM teams ORDER BY name").all();
@@ -705,6 +845,12 @@ app.get("/raw/pitch", (req, res) => {
 
 app.get("/raw/swing", (req, res) => {
   const p = tempPath(req.query.id);
+  if (!fs.existsSync(p)) return res.status(404).send("not found");
+  res.type("video/mp4").sendFile(p);
+});
+
+app.get("/import/youtube/tempfile", (req, res) => {
+  const p = tempPath(req.query.temp_id);
   if (!fs.existsSync(p)) return res.status(404).send("not found");
   res.type("video/mp4").sendFile(p);
 });

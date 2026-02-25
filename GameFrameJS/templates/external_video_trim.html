@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Select 5-Second Range ({{ clip_type|upper }})</h2>
+
+<form method="post" action="/external_video/trim" style="max-width:980px;">
+  <input type="hidden" name="sid" value="{{ sid }}">
+  <input type="hidden" name="source_id" value="{{ source_id }}">
+  <input type="hidden" name="clip_type" value="{{ clip_type }}">
+  <input type="hidden" id="start_sec" name="start_sec" value="0">
+
+  <video id="src_video" controls playsinline style="width:100%; max-height:520px; background:#000; border:1px solid #333;">
+    <source src="{{ source_url }}" type="video/mp4">
+  </video>
+
+  <div style="margin-top:14px;">
+    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+      <span id="range_label">Start: 0.00s  End: 5.00s</span>
+      <span id="duration_label">Duration: {{ '%.2f'|format(duration) }}s</span>
+    </div>
+
+    <div style="position:relative; height:22px; background:#1f1f1f; border:1px solid #3b3b3b; border-radius:6px; overflow:hidden;">
+      <div id="window_bar" style="position:absolute; top:0; bottom:0; left:0; width:10%; background:rgba(0,190,120,0.35);"></div>
+      <div id="playhead_bar" style="position:absolute; top:0; bottom:0; left:0; width:2px; background:#ffe082;"></div>
+    </div>
+
+    <input id="start_slider" type="range" min="0" max="0" step="0.01" value="0" style="width:100%; margin-top:10px;">
+  </div>
+
+  <div style="display:flex; gap:10px; margin-top:14px;">
+    <button type="button" id="preview_btn">Preview 5s</button>
+    <button type="submit">Use This 5-Second Clip</button>
+  </div>
+</form>
+
+<script>
+const FIXED_LEN = 5;
+const video = document.getElementById("src_video");
+const slider = document.getElementById("start_slider");
+const startInput = document.getElementById("start_sec");
+const rangeLabel = document.getElementById("range_label");
+const durationLabel = document.getElementById("duration_label");
+const windowBar = document.getElementById("window_bar");
+const playheadBar = document.getElementById("playhead_bar");
+const previewBtn = document.getElementById("preview_btn");
+let duration = Number({{ '%.6f'|format(duration) }}) || 0;
+let previewTimer = null;
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function updateSelection() {
+  const start = Number(slider.value || 0);
+  const end = Math.min(duration, start + FIXED_LEN);
+  startInput.value = String(start.toFixed(2));
+  rangeLabel.textContent = `Start: ${start.toFixed(2)}s  End: ${end.toFixed(2)}s`;
+
+  const leftPct = duration > 0 ? (start / duration) * 100 : 0;
+  const widthPct = duration > 0 ? (Math.min(FIXED_LEN, duration) / duration) * 100 : 100;
+  windowBar.style.left = `${leftPct}%`;
+  windowBar.style.width = `${widthPct}%`;
+}
+
+function updatePlayhead() {
+  const t = clamp(video.currentTime || 0, 0, duration);
+  const pct = duration > 0 ? (t / duration) * 100 : 0;
+  playheadBar.style.left = `${pct}%`;
+}
+
+video.addEventListener("loadedmetadata", () => {
+  duration = Number(video.duration || duration || 0);
+  const maxStart = Math.max(0, duration - FIXED_LEN);
+  slider.max = String(maxStart.toFixed(2));
+  slider.value = "0";
+  durationLabel.textContent = `Duration: ${duration.toFixed(2)}s`;
+  updateSelection();
+  updatePlayhead();
+});
+
+slider.addEventListener("input", updateSelection);
+video.addEventListener("timeupdate", updatePlayhead);
+
+previewBtn.addEventListener("click", () => {
+  const start = Number(slider.value || 0);
+  const end = Math.min(duration, start + FIXED_LEN);
+  if (previewTimer) clearTimeout(previewTimer);
+  video.currentTime = start;
+  video.play().catch(() => {});
+  previewTimer = setTimeout(() => {
+    if (video.currentTime >= end - 0.03) {
+      video.pause();
+      video.currentTime = start;
+    }
+  }, Math.max(250, Math.floor((end - start) * 1000)));
+});
+
+updateSelection();
+</script>
+
+{% endblock %}
