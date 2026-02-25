@@ -23,6 +23,12 @@ AppImages.zip
 
 # Images and logos (optional)
 *.png
+!GameFrameJS/static/icons/icon-192.png
+!GameFrameJS/static/icons/icon-512.png
+!GameFrameJS/static/logo/GameFrameLogo.png
+!GameFrameJS/static/logo/GameFrameLogo2.png
+!GameFrameJS/static/GameFrameLogo.png
+!GameFrameJS/static/GameFrameLogo2.png
 
 # WASM maps and debug
 *.map

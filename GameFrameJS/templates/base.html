@@ -41,8 +41,8 @@
     </div>
 
     <div id="pwa-install" class="menu-item"
-         style="display:none; font-weight:bold; cursor:pointer;">
-        📲 Install GameFrame
+         style="display:block; font-weight:bold; cursor:pointer;">
+        Install GameFrame
     </div>
 
     <!-- HOME -->
@@ -112,25 +112,31 @@ document.querySelectorAll(".menu-section").forEach(section => {
 
 <script>
 let deferredPrompt = null;
+const installLink = document.getElementById("pwa-install");
 
 window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
-
-    const installLink = document.getElementById("pwa-install");
+    installLink.textContent = "Install GameFrame";
     installLink.style.display = "block";
+});
 
-    installLink.onclick = async () => {
-        if (!deferredPrompt) return;
+installLink.onclick = async () => {
+    if (deferredPrompt) {
         deferredPrompt.prompt();
         await deferredPrompt.userChoice;
         deferredPrompt = null;
-        installLink.style.display = "none";
-    };
-});
+        return;
+    }
+    alert("To install: use browser menu and choose 'Install app' or 'Add to Home Screen'.");
+};
+
+if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) {
+    installLink.style.display = "none";
+}
 
 window.addEventListener("appinstalled", () => {
-    document.getElementById("pwa-install").style.display = "none";
+    installLink.style.display = "none";
 });
 </script>
 
@@ -163,3 +169,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
+
