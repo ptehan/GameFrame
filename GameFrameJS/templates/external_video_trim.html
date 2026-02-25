@@ -1,15 +1,57 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>Select 5-Second Range ({{ clip_type|upper }})</h2>
+<style>
+  #main {
+    height: 100vh;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .ev-shell {
+    height: calc(100vh - 40px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+  }
+  .ev-form {
+    margin: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 980px;
+    overflow: hidden;
+  }
+  .ev-video {
+    width: 100%;
+    flex: 1;
+    min-height: 220px;
+    max-height: calc(100vh - 260px);
+    background: #000;
+    border: 1px solid #333;
+    object-fit: contain;
+  }
+  @media (max-width: 900px) {
+    .ev-shell {
+      height: calc(100vh - 24px);
+    }
+    .ev-video {
+      max-height: calc(100vh - 300px);
+    }
+  }
+</style>
 
-<form method="post" action="/external_video/trim" style="max-width:980px;">
+<div class="ev-shell">
+<h2 style="margin:0;">Select 5-Second Range ({{ clip_type|upper }})</h2>
+
+<form class="ev-form" method="post" action="/external_video/trim">
   <input type="hidden" name="sid" value="{{ sid }}">
   <input type="hidden" name="source_id" value="{{ source_id }}">
   <input type="hidden" name="clip_type" value="{{ clip_type }}">
   <input type="hidden" id="start_sec" name="start_sec" value="0">
 
-  <video id="src_video" controls playsinline style="width:100%; max-height:520px; background:#000; border:1px solid #333;">
+  <video id="src_video" class="ev-video" controls playsinline>
     <source src="{{ source_url }}" type="video/mp4">
   </video>
 
@@ -32,6 +74,7 @@
     <button type="submit">Use This 5-Second Clip</button>
   </div>
 </form>
+</div>
 
 <script>
 const FIXED_LEN = 5;

@@ -85,7 +85,8 @@ function downloadExternalVideo(url, outputPath) {
   runCmd(ytdlpBin, [
     "--no-playlist",
     "--no-warnings",
-    "--format", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b",
+    // Use broad best-available formats; strict mp4-only selectors fail on some links.
+    "--format", "bv*+ba/b",
     "--merge-output-format", "mp4",
     "-o", outputPath,
     url,
@@ -415,8 +416,9 @@ app.post("/external_video/fetch", async (req, res) => {
   } catch (err) {
     await fsp.unlink(srcPath).catch(() => {});
     const msg = String(err && err.message ? err.message : err || "");
-    const hint = msg.includes("yt-dlp")
-      ? "Video import failed. Ensure yt-dlp is installed on the server."
+    const firstLine = (msg.split("\n").find((s) => s.trim()) || "").trim();
+    const hint = firstLine
+      ? `Video import failed: ${firstLine}`
       : "Video import failed. Try a public post link and retry.";
     return render(req, res, "external_video.html", {
       sid,
