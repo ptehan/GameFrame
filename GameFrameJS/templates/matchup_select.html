@@ -30,7 +30,7 @@
             <select id="pitch_team" style="width:100%; padding:8px; margin:8px 0;">
                 <option value="">Select Team</option>
                 {% for t in teams %}
-                    <option value="{{ t[0] }}">{{ t[1] }}</option>
+                    <option value="{{ t.id or t[0] }}">{{ t.name or t[1] }}</option>
                 {% endfor %}
             </select>
 
@@ -58,7 +58,7 @@
             <select id="swing_team" style="width:100%; padding:8px; margin:8px 0;">
                 <option value="">Select Team</option>
                 {% for t in teams %}
-                    <option value="{{ t[0] }}">{{ t[1] }}</option>
+                    <option value="{{ t.id or t[0] }}">{{ t.name or t[1] }}</option>
                 {% endfor %}
             </select>
 
@@ -145,14 +145,22 @@ document.addEventListener("DOMContentLoaded", async () => {
         ptClip.innerHTML = "";
     
         const pitchers = pitcherMap[ptTeam.value] || [];
-    
-        // ONLY add pitchers that have clips
+        let added = 0;
+        // Prefer pitchers that already have clips.
         pitchers.forEach(p => {
             const clips = pitchClipMap[p.id] || [];
             if (clips.length > 0) {
                 ptPitcher.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+                added += 1;
             }
         });
+
+        // Fallback: if none have clips yet, still show all pitchers for that team.
+        if (added === 0) {
+            pitchers.forEach(p => {
+                ptPitcher.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+            });
+        }
     
         // Auto-select the first valid pitcher
         if (ptPitcher.options.length > 0) {
@@ -166,7 +174,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         ptClip.innerHTML = "";
 
         const clips = pitchClipMap[ptPitcher.value] || [];
-        if (clips.length === 0) return;
+        if (clips.length === 0) {
+            ptClip.innerHTML = `<option value="">No pitch clips for this pitcher</option>`;
+            return;
+        }
     
         // Add ALL clips for this pitcher
         clips.forEach(c => {
@@ -183,14 +194,22 @@ document.addEventListener("DOMContentLoaded", async () => {
         swClip.innerHTML = "";
     
         const hitters = hitterMap[swTeam.value] || [];
-    
-        // ONLY add hitters with existing clips
+        let added = 0;
+        // Prefer hitters that already have clips.
         hitters.forEach(h => {
             const clips = swingClipMap[h.id] || [];
             if (clips.length > 0) {
                 swHitter.innerHTML += `<option value="${h.id}">${h.name}</option>`;
+                added += 1;
             }
         });
+
+        // Fallback: if none have clips yet, still show all hitters for that team.
+        if (added === 0) {
+            hitters.forEach(h => {
+                swHitter.innerHTML += `<option value="${h.id}">${h.name}</option>`;
+            });
+        }
     
         // Auto-select first valid hitter
         if (swHitter.options.length > 0) {
@@ -204,7 +223,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         swClip.innerHTML = "";
     
         const clips = swingClipMap[swHitter.value] || [];
-        if (clips.length === 0) return;
+        if (clips.length === 0) {
+            swClip.innerHTML = `<option value="">No swing clips for this hitter</option>`;
+            return;
+        }
     
         // Add ALL clips for this hitter
         clips.forEach(c => {
@@ -214,6 +236,32 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Auto-select MOST RECENT
         swClip.selectedIndex = clips.length - 1;
     };
+
+    // Initialize dropdowns on first load.
+    const initPitchTeam = Array.from(ptTeam.options).find((opt) => {
+        if (!opt.value) return false;
+        const pitchers = pitcherMap[opt.value] || [];
+        return pitchers.some((p) => (pitchClipMap[p.id] || []).length > 0);
+    });
+    const initSwingTeam = Array.from(swTeam.options).find((opt) => {
+        if (!opt.value) return false;
+        const hitters = hitterMap[opt.value] || [];
+        return hitters.some((h) => (swingClipMap[h.id] || []).length > 0);
+    });
+    if (initPitchTeam) {
+        ptTeam.value = initPitchTeam.value;
+        ptTeam.onchange();
+    } else if (ptTeam.options.length > 1) {
+        ptTeam.selectedIndex = 1;
+        ptTeam.onchange();
+    }
+    if (initSwingTeam) {
+        swTeam.value = initSwingTeam.value;
+        swTeam.onchange();
+    } else if (swTeam.options.length > 1) {
+        swTeam.selectedIndex = 1;
+        swTeam.onchange();
+    }
 
 
     //------------------------------------------------

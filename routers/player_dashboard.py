@@ -20,9 +20,16 @@ def dashboard_delete_swing(
     swing_id: int = Form(...),
 ):
     conn = db()
-    conn.execute("DELETE FROM swing_clips WHERE id=?", (swing_id,))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("BEGIN")
+        conn.execute("DELETE FROM matchups WHERE swing_clip_id=?", (swing_id,))
+        conn.execute("DELETE FROM swing_clips WHERE id=?", (swing_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     return RedirectResponse(
         f"/dashboard/player?sid={sid}&tid={tid}&hid={hid}",
         status_code=303,

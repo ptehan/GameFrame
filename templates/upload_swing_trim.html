@@ -21,7 +21,7 @@
     <div class="trim-splash-card">
         <h3 style="margin:0 0 10px 0;">Step 1: Pick The Batter</h3>
         <p style="margin:0 0 10px 0;">
-            Autodetect is required before trimming. Click the batter on the preview and analysis will start automatically.
+            Autodetect is optional. You can trim manually right away, or run autodetect if you want pose analysis.
         </p>
         <p style="margin:0 0 14px 0; color:#d6d6d6; font-size:13px;">
             If tracking misses, click Pick Batter and try again on an early frame.
@@ -605,7 +605,7 @@ function updateSwingDurationDisplay() {
 
 function showAutodetectSplash() {
     if (!autodetectSplash) return;
-    autodetectSplash.style.display = "flex";
+    autodetectSplash.style.display = "none";
 }
 
 function hideAutodetectSplash() {
@@ -616,7 +616,7 @@ function hideAutodetectSplash() {
 function beginBatterPickFlow() {
     hideContactCandidates();
     awaitingManualPick = true;
-    markerStatus.textContent = "Click directly on the batter. Autodetect will start immediately.";
+    markerStatus.textContent = "Click directly on the batter to lock subject. Then click Autodetect only if you want analysis.";
     if (pickBatterBtn) pickBatterBtn.textContent = "Click Batter In Preview";
 }
 
@@ -1332,7 +1332,8 @@ async function loadVideo() {
 
     info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
     updateSwingDurationDisplay();
-    showAutodetectSplash();
+    hideAutodetectSplash();
+    markerStatus.textContent = "Manual trim is ready. Autodetect is optional.";
     if (pickBatterBtn) pickBatterBtn.textContent = "Pick Batter";
 }
 
@@ -3535,8 +3536,7 @@ canvas.addEventListener("click", async (ev) => {
         y: Math.max(0, Math.min(1, ny)),
     };
     awaitingManualPick = false;
-    markerStatus.textContent = `Batter locked at frame ${i}. Starting autodetect...`;
-    await runAutodetectFromManualSeed();
+    markerStatus.textContent = `Batter locked at frame ${i}. Manual trim is ready. Click Autodetect only if you want analysis.`;
 });
 
 if (buildChartsBtn) {
@@ -3710,12 +3710,6 @@ async function trimAndUpload() {
         return;
     }
 
-    if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
-        alert("Run Autodetect first so pose data is saved with this swing.");
-        markerStatus.textContent = "Finalize blocked: no pose data. Run Autodetect first.";
-        return;
-    }
-
     showProgress();
     updateProgress(10, "Loading FFmpegâ€¦");
 
@@ -3776,15 +3770,12 @@ async function trimAndUpload() {
     form.append("fps", fps);
     form.append("decision_frame", trimmedDecision);
     let poseData = "";
-    try {
-        poseData = (buildPoseTableCSV().csv || "").trim();
-    } catch (e) {
-        poseData = "";
-    }
-    if (!poseData) {
-        alert("Could not generate pose data. Re-run Autodetect before finalizing.");
-        markerStatus.textContent = "Finalize blocked: pose export failed. Re-run Autodetect.";
-        return;
+    if (poseLandmarksFrames && poseLandmarksFrames.length) {
+        try {
+            poseData = (buildPoseTableCSV().csv || "").trim();
+        } catch (e) {
+            poseData = "";
+        }
     }
     form.append("pose_data", poseData);
     form.append("file", blob, "trimmed_swing.mp4");
@@ -3838,6 +3829,7 @@ setupFrameModal();
 </script>
 
 {% endblock %}
+
 
 
 

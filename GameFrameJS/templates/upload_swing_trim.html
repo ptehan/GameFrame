@@ -21,7 +21,7 @@
     <div class="trim-splash-card">
         <h3 style="margin:0 0 10px 0;">Step 1: Pick The Batter</h3>
         <p style="margin:0 0 10px 0;">
-            Autodetect is required before trimming. Click the batter on the preview and analysis will start automatically.
+            Autodetect is optional. You can trim manually right away, or run autodetect if you want pose analysis.
         </p>
         <p style="margin:0 0 14px 0; color:#d6d6d6; font-size:13px;">
             If tracking misses, click Pick Batter and try again on an early frame.
@@ -450,7 +450,8 @@
  *
  * Finalization output:
  * - If pose data exists, output is portrait-cropped around tracked batter.
- * - If not, fallback to centered portrait crop.
+ * - If pose data does not exist but batter was manually picked, output uses manual-seed portrait crop.
+ * - If neither exists, fallback to centered portrait crop.
  */
 ////////////////////////////////////////////////////////////
 // VARS
@@ -605,7 +606,7 @@ function updateSwingDurationDisplay() {
 
 function showAutodetectSplash() {
     if (!autodetectSplash) return;
-    autodetectSplash.style.display = "flex";
+    autodetectSplash.style.display = "none";
 }
 
 function hideAutodetectSplash() {
@@ -616,7 +617,7 @@ function hideAutodetectSplash() {
 function beginBatterPickFlow() {
     hideContactCandidates();
     awaitingManualPick = true;
-    markerStatus.textContent = "Click directly on the batter. Autodetect will start immediately.";
+    markerStatus.textContent = "Click directly on the batter to lock subject. Then click Autodetect only if you want analysis.";
     if (pickBatterBtn) pickBatterBtn.textContent = "Click Batter In Preview";
 }
 
@@ -1332,7 +1333,8 @@ async function loadVideo() {
 
     info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
     updateSwingDurationDisplay();
-    showAutodetectSplash();
+    hideAutodetectSplash();
+    markerStatus.textContent = "Manual trim is ready. Autodetect is optional.";
     if (pickBatterBtn) pickBatterBtn.textContent = "Pick Batter";
 }
 
@@ -3535,8 +3537,7 @@ canvas.addEventListener("click", async (ev) => {
         y: Math.max(0, Math.min(1, ny)),
     };
     awaitingManualPick = false;
-    markerStatus.textContent = `Batter locked at frame ${i}. Starting autodetect...`;
-    await runAutodetectFromManualSeed();
+    markerStatus.textContent = `Batter locked at frame ${i}. Manual trim is ready. Click Autodetect only if you want analysis.`;
 });
 
 if (buildChartsBtn) {
@@ -3652,6 +3653,28 @@ function buildPortraitCropSeries(landmarksSeq) {
     return smooth;
 }
 
+function computePortraitCropFromManualSeed(seedPoint) {
+    // Fallback crop when user manually picked batter but did not run autodetect.
+    if (!seedPoint || !Number.isFinite(seedPoint.x) || !Number.isFinite(seedPoint.y)) return null;
+    let cropH = 0.76;
+    let cropW = cropH * PORTRAIT_ASPECT;
+    const maxW = 0.95;
+    const maxH = 0.95;
+    const scaleW = maxW / cropW;
+    const scaleH = maxH / cropH;
+    const scale = Math.min(1, scaleW, scaleH);
+    cropW *= scale;
+    cropH *= scale;
+
+    const cx = Math.max(0, Math.min(1, seedPoint.x));
+    const cy = Math.max(0, Math.min(1, seedPoint.y + 0.06));
+    let x = cx - cropW * 0.5;
+    let y = cy - cropH * 0.5;
+    x = Math.max(0, Math.min(1 - cropW, x));
+    y = Math.max(0, Math.min(1 - cropH, y));
+    return { x, y, w: cropW, h: cropH };
+}
+
 async function bitmapToPortraitPNG(bitmap, crop) {
     // Render one frame into fixed portrait canvas (720x1280) using crop window.
     const out = new OffscreenCanvas(PORTRAIT_OUT_W, PORTRAIT_OUT_H);
@@ -3710,12 +3733,6 @@ async function trimAndUpload() {
         return;
     }
 
-    if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
-        alert("Run Autodetect first so pose data is saved with this swing.");
-        markerStatus.textContent = "Finalize blocked: no pose data. Run Autodetect first.";
-        return;
-    }
-
     showProgress();
     updateProgress(10, "Loading FFmpeg...");
 
@@ -3725,29 +3742,36 @@ async function trimAndUpload() {
     });
     await ffmpeg.load();
 
+    const contactBufferFrames = Math.max(0, Math.round((Number(fps) || 0) * 0.5));
+    const libraryEndFrame = Math.min(frames.length - 1, contactFrame + contactBufferFrames);
     const selected = frames.slice(startFrame, contactFrame + 1);
+    const librarySelected = frames.slice(startFrame, libraryEndFrame + 1);
     const selectedLandmarks = poseLandmarksFrames
         ? poseLandmarksFrames.slice(startFrame, contactFrame + 1)
         : [];
-    const firstFrame = selected.length ? selected[0] : null;
-    const srcAspect = firstFrame ? (firstFrame.width / Math.max(1, firstFrame.height)) : PORTRAIT_ASPECT;
-    const alreadyPortrait = srcAspect <= (PORTRAIT_ASPECT + PORTRAIT_SOURCE_BYPASS_TOL);
-    const usePortraitCrop = !alreadyPortrait && selectedLandmarks.some((lm) => !!lm);
-    const portraitCrops = usePortraitCrop ? buildPortraitCropSeries(selectedLandmarks) : null;
+    const librarySelectedLandmarks = poseLandmarksFrames
+        ? poseLandmarksFrames.slice(startFrame, libraryEndFrame + 1)
+        : [];
+    const usePosePortraitCrop = librarySelectedLandmarks.some((lm) => !!lm);
+    const manualSeedCrop = (!usePosePortraitCrop) ? computePortraitCropFromManualSeed(manualSeedPoint) : null;
+    const portraitCrops = usePosePortraitCrop
+        ? buildPortraitCropSeries(librarySelectedLandmarks)
+        : (manualSeedCrop ? librarySelected.map(() => manualSeedCrop) : null);
+    const usePortraitCrop = !!portraitCrops;
 
     updateProgress(25, usePortraitCrop ? "Preparing portrait frames..." : "Preparing frames...");
 
     const trimmedDecision = decisionFrame - startFrame;
 
-    for (let i = 0; i < selected.length; i++) {
+    for (let i = 0; i < librarySelected.length; i++) {
         const framePng = usePortraitCrop
-            ? await bitmapToPortraitPNG(selected[i], portraitCrops ? portraitCrops[i] : null)
-            : await bitmapToPNG(selected[i]);
+            ? await bitmapToPortraitPNG(librarySelected[i], portraitCrops ? portraitCrops[i] : null)
+            : await bitmapToPNG(librarySelected[i]);
         ffmpeg.FS("writeFile", `f_${i}.png`,
             framePng);
         if (i % 5 === 0) {
-            updateProgress(25 + (i / selected.length) * 30,
-                `Preparing frame ${i}/${selected.length}`);
+            updateProgress(25 + (i / librarySelected.length) * 30,
+                `Preparing frame ${i}/${librarySelected.length}`);
         }
     }
 
@@ -3756,6 +3780,7 @@ async function trimAndUpload() {
     await ffmpeg.run(
         "-framerate", String(fps),
         "-i", "f_%d.png",
+        "-frames:v", String(selected.length),
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
         "-preset", "fast",
@@ -3763,10 +3788,22 @@ async function trimAndUpload() {
         "out.mp4"
     );
 
+    await ffmpeg.run(
+        "-framerate", String(fps),
+        "-i", "f_%d.png",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-preset", "fast",
+        "-crf", "23",
+        "library_out.mp4"
+    );
+
     updateProgress(90, "Uploading...");
 
     const out = ffmpeg.FS("readFile", "out.mp4");
     const blob = new Blob([out.buffer], { type: "video/mp4" });
+    const libraryOut = ffmpeg.FS("readFile", "library_out.mp4");
+    const libraryBlob = new Blob([libraryOut.buffer], { type: "video/mp4" });
 
     const form = new FormData();
     form.append("sid", SID);
@@ -3776,18 +3813,16 @@ async function trimAndUpload() {
     form.append("fps", fps);
     form.append("decision_frame", trimmedDecision);
     let poseData = "";
-    try {
-        poseData = (buildPoseTableCSV().csv || "").trim();
-    } catch (e) {
-        poseData = "";
-    }
-    if (!poseData) {
-        alert("Could not generate pose data. Re-run Autodetect before finalizing.");
-        markerStatus.textContent = "Finalize blocked: pose export failed. Re-run Autodetect.";
-        return;
+    if (poseLandmarksFrames && poseLandmarksFrames.length) {
+        try {
+            poseData = (buildPoseTableCSV().csv || "").trim();
+        } catch (e) {
+            poseData = "";
+        }
     }
     form.append("pose_data", poseData);
     form.append("file", blob, "trimmed_swing.mp4");
+    form.append("library_file", libraryBlob, "library_swing.mp4");
 
     const r = await fetch(`/upload/swing/finalize`, {
         method: "POST",
@@ -3838,7 +3873,6 @@ setupFrameModal();
 </script>
 
 {% endblock %}
-
 
 
 

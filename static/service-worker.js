@@ -1,4 +1,4 @@
-const CACHE_NAME = "gameframe-cache-v3";
+const CACHE_NAME = "gameframe-cache-v4";
 
 // Files we WANT to cache, but will NEVER crash install if missing
 const ASSETS = [
@@ -46,9 +46,26 @@ self.addEventListener("activate", event => {
   self.clients.claim();
 });
 
-// Cache-first for static, network-first for everything else
+// Network-first for JS so localhost always gets newest code.
+// Cache-first for other assets.
 self.addEventListener("fetch", event => {
   const req = event.request;
+  const url = new URL(req.url);
+
+  if (url.pathname.startsWith("/static/js/")) {
+    event.respondWith(
+      fetch(req)
+        .then(res => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(req).then(cached => {

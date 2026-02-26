@@ -221,6 +221,7 @@ function ensureBaseSchema() {
       hitter_id INTEGER,
       description TEXT,
       clip_blob BLOB,
+      library_clip_blob BLOB,
       thumb BLOB,
       pose_data TEXT,
       frame_count INTEGER,
@@ -253,6 +254,26 @@ function ensureSchemaCompatibility() {
   ensureColumn("swing_clips", "pose_data", "TEXT");
   ensureColumn("swing_clips", "frame_count", "INTEGER");
   ensureColumn("swing_clips", "swing_seconds", "REAL");
+  ensureColumn("swing_clips", "library_clip_blob", "BLOB");
+}
+
+function safeIdent(name) {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(name || ""));
+}
+
+function deleteReferencingRows(parentTable, parentId) {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+  for (const t of tables) {
+    const tableName = String(t.name || "");
+    if (!safeIdent(tableName)) continue;
+    const fkRows = db.prepare(`PRAGMA foreign_key_list(${tableName})`).all();
+    for (const fk of fkRows) {
+      if (String(fk.table || "") !== parentTable) continue;
+      const fromCol = String(fk.from || "");
+      if (!safeIdent(fromCol)) continue;
+      db.prepare(`DELETE FROM ${tableName} WHERE ${fromCol}=?`).run(parentId);
+    }
+  }
 }
 
 function render(req, res, template, data = {}) {
@@ -736,7 +757,7 @@ app.get("/stream/pitch", (req, res) => {
 });
 
 app.get("/stream/swing", (req, res) => {
-  const row = db.prepare("SELECT clip_blob FROM swing_clips WHERE id=?").get(Number(req.query.id));
+  const row = db.prepare("SELECT COALESCE(library_clip_blob, clip_blob) AS clip_blob FROM swing_clips WHERE id=?").get(Number(req.query.id));
   if (!row) return res.status(404).send("not found");
   streamBlob(req, res, row.clip_blob);
 });
@@ -875,20 +896,27 @@ app.post("/upload/pitch/finalize", upload.single("file"), async (req, res) => {
   res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}&type=pitch`);
 });
 
-app.post("/upload/swing/finalize", upload.single("file"), async (req, res) => {
-  const blob = await fsp.readFile(req.file.path);
-  const thumbBlob = extractLastFrameJpeg(req.file.path);
-  await fsp.unlink(req.file.path).catch(() => {});
+app.post("/upload/swing/finalize", upload.fields([{ name: "file", maxCount: 1 }, { name: "library_file", maxCount: 1 }]), async (req, res) => {
+  const mainFile = req.files && req.files.file && req.files.file[0];
+  if (!mainFile) return res.status(400).send("missing file");
+  const libraryFile = req.files && req.files.library_file && req.files.library_file[0];
+
+  const blob = await fsp.readFile(mainFile.path);
+  const libraryBlob = libraryFile ? await fsp.readFile(libraryFile.path) : blob;
+  const thumbBlob = extractLastFrameJpeg(mainFile.path);
+  await fsp.unlink(mainFile.path).catch(() => {});
+  if (libraryFile) await fsp.unlink(libraryFile.path).catch(() => {});
   db.prepare(`
     INSERT INTO swing_clips
-    (team_id, hitter_id, description, decision_frame, clip_blob, thumb, pose_data, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    (team_id, hitter_id, description, decision_frame, clip_blob, library_clip_blob, thumb, pose_data, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `).run(
     Number(req.body.team_id),
     Number(req.body.hitter_id),
     req.body.description || "",
     Number(req.body.decision_frame || 0),
     blob,
+    libraryBlob,
     thumbBlob,
     req.body.pose_data || ""
   );
@@ -901,7 +929,12 @@ app.post("/library/pitch/delete", (req, res) => {
 });
 
 app.post("/library/swing/delete", (req, res) => {
-  db.prepare("DELETE FROM swing_clips WHERE id=?").run(Number(req.body.id));
+  const swingId = Number(req.body.id);
+  const removeSwing = db.transaction((id) => {
+    deleteReferencingRows("swing_clips", id);
+    db.prepare("DELETE FROM swing_clips WHERE id=?").run(id);
+  });
+  removeSwing(swingId);
   res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}&type=swing`);
 });
 
@@ -1064,7 +1097,12 @@ app.post("/matchup/create", upload.single("file"), async (req, res) => {
 });
 
 app.post("/dashboard/player/swing/delete", (req, res) => {
-  db.prepare("DELETE FROM swing_clips WHERE id=?").run(Number(req.body.swing_id));
+  const swingId = Number(req.body.swing_id);
+  const removeSwing = db.transaction((id) => {
+    deleteReferencingRows("swing_clips", id);
+    db.prepare("DELETE FROM swing_clips WHERE id=?").run(id);
+  });
+  removeSwing(swingId);
   const sid = encodeURIComponent(sidOf(req));
   const tid = encodeURIComponent(String(req.body.tid || 0));
   const hid = encodeURIComponent(String(req.body.hid || 0));

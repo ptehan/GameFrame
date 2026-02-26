@@ -226,6 +226,55 @@ document.addEventListener("DOMContentLoaded", async () => {
         video.src = url;
         video.muted = true;
         video.playsInline = true;
+        video.preload = "auto";
+
+        const captureVideoFrame = () => {
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+            if (!vw || !vh) return null;
+            const c = document.createElement("canvas");
+            c.width = vw;
+            c.height = vh;
+            const ctx = c.getContext("2d");
+            ctx.drawImage(video, 0, 0, vw, vh);
+            return c;
+        };
+
+        const frameSignature = (c) => {
+            if (!c) return "";
+            const ctx = c.getContext("2d");
+            if (!ctx) return "";
+            const w = c.width, h = c.height;
+            if (!w || !h) return "";
+            const sample = (x, y) => {
+                const d = ctx.getImageData(x, y, 1, 1).data;
+                return `${d[0]},${d[1]},${d[2]}`;
+            };
+            const p1 = sample(0, 0);
+            const p2 = sample(Math.floor(w * 0.5), Math.floor(h * 0.5));
+            const p3 = sample(Math.max(0, w - 1), Math.max(0, h - 1));
+            return `${w}x${h}|${p1}|${p2}|${p3}`;
+        };
+
+        const appendGuaranteedTailFrame = async (frames) => {
+            try {
+                const dur = Number(video.duration);
+                if (!Number.isFinite(dur) || dur <= 0) return frames;
+                await new Promise((resolve) => {
+                    const onSeeked = () => resolve();
+                    video.addEventListener("seeked", onSeeked, { once: true });
+                    video.currentTime = Math.max(0, dur - 0.001);
+                });
+                const tail = captureVideoFrame();
+                if (!tail) return frames;
+                const tailSig = frameSignature(tail);
+                const lastSig = frames.length ? frameSignature(frames[frames.length - 1]) : "";
+                if (tailSig !== lastSig) frames.push(tail);
+            } catch (_) {
+                // Best effort only; keep decoded frames if seek fails on some browsers.
+            }
+            return frames;
+        };
 
         // Primary path: MediaStreamTrackProcessor frame-by-frame decode (more complete).
         if (typeof MediaStreamTrackProcessor !== "undefined") {
@@ -248,6 +297,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     value.close();
                     frames.push(c);
                 }
+                await appendGuaranteedTailFrame(frames);
                 URL.revokeObjectURL(url);
                 return frames;
             }
@@ -270,8 +320,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
             video.requestVideoFrameCallback(captureFrame);
             video.onended = () => {
-                URL.revokeObjectURL(url);
-                resolve(frames);
+                appendGuaranteedTailFrame(frames).finally(() => {
+                    URL.revokeObjectURL(url);
+                    resolve(frames);
+                });
             };
         });
     }

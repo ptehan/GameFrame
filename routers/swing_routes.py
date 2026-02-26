@@ -407,8 +407,15 @@ def delete_swing_clip(
     sid: str = Form(...)
 ):
     conn = db()
-    conn.execute("DELETE FROM swing_clips WHERE id=?", (id,))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("BEGIN")
+        conn.execute("DELETE FROM matchups WHERE swing_clip_id=?", (id,))
+        conn.execute("DELETE FROM swing_clips WHERE id=?", (id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
     return RedirectResponse(f"/library?sid={sid}&type=swing", status_code=303)
