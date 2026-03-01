@@ -3561,19 +3561,35 @@ async function runAutodetectFromManualSeed() {
         contactFrame = contactCandidates[0];
         provisionalDecision = Math.max(0, contactFrame - 5);
     } else {
-        // Backup #1: hand-position event (from hand X graph).
-        contactCandidates = detectContactCandidatesFromHandPairX(poseLandmarksFrames, 0, 3);
+        // Backup #1: hand-position event (from hand X graph), but only in a
+        // plausible post-onset contact window so setup movements are ignored.
+        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, 0);
+        const minHandXContact = Math.max(
+            0,
+            Math.min(n - 1, Math.max(handOnsetGate + 3, Math.floor(n * 0.35)))
+        );
+        contactCandidates = detectContactCandidatesFromHandPairX(
+            poseLandmarksFrames,
+            minHandXContact,
+            3
+        );
         if (contactCandidates.length) {
             contactMode = "hand-x-backup";
             contactFrame = contactCandidates[0];
-            const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, Math.max(0, contactFrame - 8));
-            provisionalDecision = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
+            provisionalDecision = detectDecisionFrameFromHandSeries(
+                decisionSeries,
+                contactFrame,
+                Math.max(0, contactFrame - 8)
+            );
         } else {
             // Backup #2: decision-first (legacy low-hip fallback).
             contactMode = "decision-first-low-hip";
-            const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, 0);
             const provisionalContact = Math.max(0, Math.min(n - 1, handOnsetGate + 5));
-            provisionalDecision = detectDecisionFrameFromHandSeries(decisionSeries, provisionalContact, handOnsetGate);
+            provisionalDecision = detectDecisionFrameFromHandSeries(
+                decisionSeries,
+                provisionalContact,
+                handOnsetGate
+            );
             const targetContact = Math.max(0, Math.min(n - 1, provisionalDecision + 5));
             contactCandidates = [
                 Math.max(0, targetContact - 1),
