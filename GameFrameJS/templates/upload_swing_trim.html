@@ -2421,6 +2421,142 @@ function detectContactCandidatesFromHandPairX(landmarks, minContactIdx = 0, coun
     return out.slice(0, count);
 }
 
+function computeHandXMotionSeries(landmarks) {
+    if (!landmarks || !landmarks.length) return [];
+    const handPair = buildPairXSeries(landmarks, 15, 16);
+    const left = handPair.left || [];
+    const right = handPair.right || [];
+    const n = Math.max(left.length, right.length);
+    if (!n) return [];
+
+    const center = new Array(n).fill(null);
+    const width = new Array(n).fill(null);
+    for (let i = 0; i < n; i += 1) {
+        const lx = left[i];
+        const rx = right[i];
+        if (Number.isFinite(lx) && Number.isFinite(rx)) {
+            center[i] = (lx + rx) * 0.5;
+            width[i] = Math.abs(lx - rx);
+        } else if (Number.isFinite(lx)) {
+            center[i] = lx;
+        } else if (Number.isFinite(rx)) {
+            center[i] = rx;
+        }
+    }
+
+    const centerSm = savgolSmooth(center, 5);
+    const widthSm = savgolSmooth(width, 5);
+    const motion = new Array(n).fill(0);
+    for (let i = 1; i < n; i += 1) {
+        const c0 = centerSm[i - 1];
+        const c1 = centerSm[i];
+        const w0 = widthSm[i - 1];
+        const w1 = widthSm[i];
+        const dc = (Number.isFinite(c0) && Number.isFinite(c1)) ? Math.abs(c1 - c0) : 0;
+        const dw = (Number.isFinite(w0) && Number.isFinite(w1)) ? Math.abs(w1 - w0) : 0;
+        motion[i] = dc + (dw * 0.6);
+    }
+    return smoothSeries(motion, 1);
+}
+
+function buildConsensusContactCandidates(opts) {
+    const n = opts.n || 0;
+    const count = opts.count || 3;
+    if (!n) return [];
+    const minIdx = Math.max(0, Math.min(n - 1, Math.round(opts.minIdx || 0)));
+    const maxIdx = Math.max(minIdx, Math.min(n - 1, Math.round(opts.maxIdx == null ? n - 1 : opts.maxIdx)));
+    const handX = opts.handXMotion || [];
+    const hipCurve = opts.hipCurve || [];
+    const handSpeed = opts.handSpeed || [];
+    const knee = opts.knee || [];
+    const seeds = (opts.seeds || []).filter(Number.isFinite).map((v) => Math.round(v));
+
+    const seriesPeak = (series) => {
+        let mx = 0;
+        for (let i = minIdx; i <= maxIdx; i += 1) {
+            const v = Number(series[i]);
+            if (Number.isFinite(v) && v > mx) mx = v;
+        }
+        return mx > 0 ? mx : 1;
+    };
+    const handXPeak = seriesPeak(handX);
+    const hipPeak = seriesPeak(hipCurve);
+    const speedPeak = seriesPeak(handSpeed);
+    const kneePeak = seriesPeak(knee);
+
+    const neighborhoodMax = (series, i) => {
+        let mx = 0;
+        for (let k = -1; k <= 1; k += 1) {
+            const j = i + k;
+            if (j < minIdx || j > maxIdx) continue;
+            const v = Number(series[j]);
+            if (Number.isFinite(v) && v > mx) mx = v;
+        }
+        return mx;
+    };
+
+    const pool = new Set();
+    const add = (idx) => {
+        const i = Math.max(minIdx, Math.min(maxIdx, Math.round(idx)));
+        pool.add(i);
+    };
+    for (const s of seeds) {
+        add(s);
+        add(s - 1);
+        add(s + 1);
+    }
+
+    const addTopPeaks = (series, k = 3) => {
+        const peaks = [];
+        for (let i = minIdx + 1; i <= maxIdx - 1; i += 1) {
+            const a = Number(series[i - 1]);
+            const b = Number(series[i]);
+            const c = Number(series[i + 1]);
+            if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) continue;
+            if (b >= a && b > c) peaks.push({ i, v: b });
+        }
+        peaks.sort((x, y) => y.v - x.v);
+        const chosen = [];
+        for (const p of peaks) {
+            if (chosen.some((x) => Math.abs(x - p.i) <= 2)) continue;
+            chosen.push(p.i);
+            add(p.i);
+            if (chosen.length >= k) break;
+        }
+    };
+    addTopPeaks(handX, 4);
+    addTopPeaks(hipCurve, 3);
+    addTopPeaks(knee, 2);
+
+    const scored = [];
+    for (const i of pool) {
+        const hx = neighborhoodMax(handX, i) / handXPeak;
+        const hp = neighborhoodMax(hipCurve, i) / hipPeak;
+        const hs = neighborhoodMax(handSpeed, i) / speedPeak;
+        const kn = neighborhoodMax(knee, i) / kneePeak;
+        const strength = (0.50 * hx) + (0.25 * hp) + (0.15 * kn) + (0.10 * hs);
+
+        // Require at least two meaningful signals around contact.
+        const signalHits = [hx, hp, kn, hs].filter((v) => v >= 0.28).length;
+        let score = strength + (signalHits >= 2 ? 0.15 : -0.35);
+
+        // Penalize very-early choices that commonly represent setup movement.
+        if (i < Math.floor(n * 0.40)) score -= 0.35;
+        if (i < Math.floor(n * 0.33)) score -= 0.45;
+
+        scored.push({ i, score });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    const out = [];
+    for (const s of scored) {
+        if (out.some((x) => Math.abs(x - s.i) <= 1)) continue;
+        out.push(s.i);
+        if (out.length >= count) break;
+    }
+    return out;
+}
+
 function detectHandOnsetForContactGate(series, fallbackIdx = 0) {
     // Onset gate only (used to block impossible early contact).
     // This is intentionally conservative: prefer a later, clearer onset over
@@ -3561,20 +3697,51 @@ async function runAutodetectFromManualSeed() {
         contactFrame = contactCandidates[0];
         provisionalDecision = Math.max(0, contactFrame - 5);
     } else {
-        // Backup #1: hand-position event (from hand X graph), but only in a
-        // plausible post-onset contact window so setup movements are ignored.
+        // Low-hip fallback with consensus scoring across hand/hip/knee signals.
         const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, 0);
         const minHandXContact = Math.max(
             0,
             Math.min(n - 1, Math.max(handOnsetGate + 3, Math.floor(n * 0.35)))
         );
-        contactCandidates = detectContactCandidatesFromHandPairX(
+        const rawHandXCandidates = detectContactCandidatesFromHandPairX(
             poseLandmarksFrames,
             minHandXContact,
             3
         );
+        const maxFallbackContact = Math.max(minHandXContact, Math.min(n - 1, Math.floor(n * 0.92)));
+        const handXMotion = computeHandXMotionSeries(poseLandmarksFrames);
+        const hipSm = contactSavgolSeries || savgolSmooth(contactSeries || [], 5);
+        const hipCurve = new Array(n).fill(0);
+        for (let i = 1; i < n - 1; i += 1) {
+            const a = hipSm[i - 1], b = hipSm[i], c = hipSm[i + 1];
+            if ([a, b, c].every(Number.isFinite)) hipCurve[i] = Math.abs(c - (2 * b) + a);
+        }
+        const kneeAbs = new Array(n).fill(0);
+        for (let i = 0; i < n; i += 1) {
+            const v = Number(startRawKneeSeries[i]);
+            kneeAbs[i] = Number.isFinite(v) ? Math.abs(v) : 0;
+        }
+        const decisionTarget = Math.max(0, Math.min(n - 1, handOnsetGate + 5));
+        const fallbackSeeds = [
+            ...rawHandXCandidates,
+            decisionTarget - 1,
+            decisionTarget,
+            decisionTarget + 1,
+        ];
+        contactCandidates = buildConsensusContactCandidates({
+            n,
+            minIdx: minHandXContact,
+            maxIdx: maxFallbackContact,
+            handXMotion,
+            hipCurve,
+            handSpeed: decisionSeries || [],
+            knee: kneeAbs,
+            seeds: fallbackSeeds,
+            count: 3,
+        });
+
         if (contactCandidates.length) {
-            contactMode = "hand-x-backup";
+            contactMode = "consensus-low-hip";
             contactFrame = contactCandidates[0];
             provisionalDecision = detectDecisionFrameFromHandSeries(
                 decisionSeries,
@@ -3582,7 +3749,7 @@ async function runAutodetectFromManualSeed() {
                 Math.max(0, contactFrame - 8)
             );
         } else {
-            // Backup #2: decision-first (legacy low-hip fallback).
+            // Final fallback: decision-first window.
             contactMode = "decision-first-low-hip";
             const provisionalContact = Math.max(0, Math.min(n - 1, handOnsetGate + 5));
             provisionalDecision = detectDecisionFrameFromHandSeries(
