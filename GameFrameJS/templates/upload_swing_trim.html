@@ -2348,6 +2348,79 @@ function evaluateHipVisibilityConsistency(landmarks) {
     return { consistent, visibleCount, visibleRatio, longestMissingRun };
 }
 
+function detectContactCandidatesFromHandPairX(landmarks, minContactIdx = 0, count = 3) {
+    // Backup contact detector from hand X graph:
+    // find strongest hand-position event (direction-agnostic), then offer nearby candidates.
+    if (!landmarks || !landmarks.length) return [];
+    const handPair = buildPairXSeries(landmarks, 15, 16);
+    const left = handPair.left || [];
+    const right = handPair.right || [];
+    const n = Math.max(left.length, right.length);
+    if (!n) return [];
+
+    const center = new Array(n).fill(null);
+    const width = new Array(n).fill(null);
+    for (let i = 0; i < n; i += 1) {
+        const lx = left[i];
+        const rx = right[i];
+        if (Number.isFinite(lx) && Number.isFinite(rx)) {
+            center[i] = (lx + rx) * 0.5;
+            width[i] = Math.abs(lx - rx);
+        } else if (Number.isFinite(lx)) {
+            center[i] = lx;
+        } else if (Number.isFinite(rx)) {
+            center[i] = rx;
+        }
+    }
+
+    const centerSm = savgolSmooth(center, 5);
+    const widthSm = savgolSmooth(width, 5);
+    const motion = new Array(n).fill(0);
+    for (let i = 1; i < n; i += 1) {
+        const c0 = centerSm[i - 1];
+        const c1 = centerSm[i];
+        const w0 = widthSm[i - 1];
+        const w1 = widthSm[i];
+        const dc = (Number.isFinite(c0) && Number.isFinite(c1)) ? Math.abs(c1 - c0) : 0;
+        const dw = (Number.isFinite(w0) && Number.isFinite(w1)) ? Math.abs(w1 - w0) : 0;
+        motion[i] = dc + (dw * 0.6);
+    }
+    const motionSm = smoothSeries(motion, 1);
+    const warmup = Math.max(2, Math.min(8, Math.floor(n * 0.1)));
+    const start = Math.max(warmup, minContactIdx);
+    const end = Math.max(start, Math.min(n - 1, Math.floor(n * 0.9)));
+
+    let primary = -1;
+    let best = -Infinity;
+    for (let i = start; i <= end; i += 1) {
+        const v = motionSm[i];
+        if (!Number.isFinite(v)) continue;
+        if (v > best) {
+            best = v;
+            primary = i;
+        }
+    }
+    if (!Number.isFinite(best) || best < 0.0015 || primary < 0) return [];
+
+    const out = [];
+    const seen = new Set();
+    const push = (idx) => {
+        const i = Math.max(0, Math.min(n - 1, Math.round(idx)));
+        if (i < minContactIdx || seen.has(i)) return;
+        seen.add(i);
+        out.push(i);
+    };
+    push(primary);
+    push(primary + 1);
+    push(primary - 1);
+    for (let k = 2; out.length < count && k <= 4; k += 1) {
+        push(primary + k);
+        if (out.length >= count) break;
+        push(primary - k);
+    }
+    return out.slice(0, count);
+}
+
 function detectHandOnsetForContactGate(series, fallbackIdx = 0) {
     // Onset gate only (used to block impossible early contact).
     // This is intentionally conservative: prefer a later, clearer onset over
@@ -3465,10 +3538,13 @@ async function runAutodetectFromManualSeed() {
     decisionDisplaySeries = buildDecisionDisplaySeries(poseLandmarksFrames);
 
     const hipStats = evaluateHipVisibilityConsistency(poseLandmarksFrames);
-    // Use a relaxed visibility gate for contact so we still honor hip-first logic
-    // when hips are visible but not perfectly consistent.
-    const hipsUsableForContact =
-        hipStats.visibleCount >= Math.max(8, Math.floor(n * 0.18));
+    // Hip-first only when hips are truly reliable. If not, use hand-X backup.
+    const maxMissingForReliable = Math.max(4, Math.floor(n * 0.10));
+    const hipsUsableForContact = (
+        hipStats.consistent &&
+        hipStats.visibleRatio >= 0.72 &&
+        hipStats.longestMissingRun <= maxMissingForReliable
+    );
     let contactMode = "hip";
     let provisionalDecision = 0;
     let contactCandidates = [];
@@ -3485,20 +3561,27 @@ async function runAutodetectFromManualSeed() {
         contactFrame = contactCandidates[0];
         provisionalDecision = Math.max(0, contactFrame - 5);
     } else {
-        // Low-hip-visibility fallback:
-        // 1) decision first from hand acceleration
-        // 2) build contact candidates around decision+5
-        contactMode = "decision-first-low-hip";
-        const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, 0);
-        const provisionalContact = Math.max(0, Math.min(n - 1, handOnsetGate + 5));
-        provisionalDecision = detectDecisionFrameFromHandSeries(decisionSeries, provisionalContact, handOnsetGate);
-        const targetContact = Math.max(0, Math.min(n - 1, provisionalDecision + 5));
-        contactCandidates = [
-            Math.max(0, targetContact - 1),
-            targetContact,
-            Math.min(n - 1, targetContact + 1),
-        ];
-        contactFrame = contactCandidates[0];
+        // Backup #1: hand-position event (from hand X graph).
+        contactCandidates = detectContactCandidatesFromHandPairX(poseLandmarksFrames, 0, 3);
+        if (contactCandidates.length) {
+            contactMode = "hand-x-backup";
+            contactFrame = contactCandidates[0];
+            const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, Math.max(0, contactFrame - 8));
+            provisionalDecision = detectDecisionFrameFromHandSeries(decisionSeries, contactFrame, handOnsetGate);
+        } else {
+            // Backup #2: decision-first (legacy low-hip fallback).
+            contactMode = "decision-first-low-hip";
+            const handOnsetGate = detectHandOnsetForContactGate(decisionSeries, 0);
+            const provisionalContact = Math.max(0, Math.min(n - 1, handOnsetGate + 5));
+            provisionalDecision = detectDecisionFrameFromHandSeries(decisionSeries, provisionalContact, handOnsetGate);
+            const targetContact = Math.max(0, Math.min(n - 1, provisionalDecision + 5));
+            contactCandidates = [
+                Math.max(0, targetContact - 1),
+                targetContact,
+                Math.min(n - 1, targetContact + 1),
+            ];
+            contactFrame = contactCandidates[0];
+        }
     }
     decisionFrame = provisionalDecision;
 
