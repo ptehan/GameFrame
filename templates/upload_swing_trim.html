@@ -19,14 +19,14 @@
 
 <div id="autodetect_splash" class="trim-splash" style="display:none;">
     <div class="trim-splash-card">
-        <h3 style="margin:0 0 10px 0;">Step 1: Pick The Batter</h3>
+        <h3 style="margin:0 0 10px 0;">Autodetect Flow</h3>
         <p style="margin:0 0 10px 0;">
             Autodetect is optional. You can trim manually right away, or run autodetect if you want pose analysis.
         </p>
         <p style="margin:0 0 14px 0; color:#d6d6d6; font-size:13px;">
-            If tracking misses, click Pick Batter and try again on an early frame.
+            If tracking misses, use Re-pick Batter and click the hitter again on an early frame.
         </p>
-        <button id="start_pick_flow_btn" class="trim-btn" style="font-size:15px;">Start Batter Selection</button>
+        <button id="start_pick_flow_btn" class="trim-btn" style="font-size:15px;">Start Autodetect</button>
     </div>
 </div>
 
@@ -328,7 +328,7 @@
 
     <div class="trim-controls-pane">
         <div class="trim-row-2">
-            <button id="pick_batter_btn" class="trim-btn">Pick Batter</button>
+            <button id="open_help_btn" class="trim-btn">Help</button>
             <button id="build_charts_btn" class="trim-btn">Autodetect</button>
         </div>
 
@@ -379,6 +379,28 @@
         <div id="upload_status"
              style="margin-top:10px;font-weight:bold;"></div>
 
+    </div>
+</div>
+
+<div id="swing_help_modal" class="frame-modal" style="display:none;">
+    <div class="frame-modal-card" style="max-width:760px;">
+        <div class="frame-modal-header">
+            <strong>Swing Trim Help</strong>
+            <button id="close_help_btn" class="trim-small-btn">Close</button>
+        </div>
+        <div style="padding:6px 2px 2px 2px;">
+            <ol style="margin:0 0 10px 18px; line-height:1.45;">
+                <li>Scrub to inspect the swing and set markers manually if needed.</li>
+                <li>Click <strong>Autodetect</strong>.</li>
+                <li>Click directly on the batter in the preview frame to lock the subject.</li>
+                <li>Autodetect will run automatically after you click the batter.</li>
+                <li>Choose the best contact-frame candidate.</li>
+                <li>Review Start, Decision, and Contact markers, then finalize.</li>
+            </ol>
+            <p style="margin:0; color:#cfcfcf;">
+                Tip: If tracking looks wrong, use <strong>Re-pick Batter</strong> and click the hitter again on an early frame.
+            </p>
+        </div>
     </div>
 </div>
 
@@ -479,8 +501,10 @@ const markerStatus = document.getElementById("marker_status");
 const swingDurationStatus = document.getElementById("swing_duration_status");
 const analyticsPanel = document.getElementById("analytics_panel");
 const toggleAnalyticsBtn = document.getElementById("toggle_analytics_btn");
-const pickBatterBtn = document.getElementById("pick_batter_btn");
 const buildChartsBtn = document.getElementById("build_charts_btn");
+const openHelpBtn = document.getElementById("open_help_btn");
+const closeHelpBtn = document.getElementById("close_help_btn");
+const swingHelpModal = document.getElementById("swing_help_modal");
 const stickCanvas = document.getElementById("stick_canvas");
 const stickCtx = stickCanvas ? stickCanvas.getContext("2d") : null;
 const toggleStickBtn = document.getElementById("toggle_stick_btn");
@@ -515,6 +539,7 @@ const contactCandidateLabel3 = document.getElementById("contact_candidate_label_
 const contactCandidatesRepickBtn = document.getElementById("contact_candidates_repick_btn");
 let showStickFigure = false;
 let autodetectRunning = false;
+let pendingAutodetectAfterPick = false;
 let pendingContactChoices = [];
 let pendingAutodetectContext = null;
 let scrubActive = false;
@@ -613,11 +638,14 @@ function hideAutodetectSplash() {
     autodetectSplash.style.display = "none";
 }
 
-function beginBatterPickFlow() {
+function beginBatterPickFlow(autoRunAfterPick = false) {
     hideContactCandidates();
     awaitingManualPick = true;
-    markerStatus.textContent = "Click directly on the batter to lock subject. Then click Autodetect only if you want analysis.";
-    if (pickBatterBtn) pickBatterBtn.textContent = "Click Batter In Preview";
+    pendingAutodetectAfterPick = !!autoRunAfterPick;
+    markerStatus.textContent = autoRunAfterPick
+        ? "Click directly on the batter to lock subject. Autodetect will start immediately."
+        : "Click directly on the batter to lock subject.";
+    if (buildChartsBtn && autoRunAfterPick) buildChartsBtn.textContent = "Click Batter In Preview";
 }
 
 function ensurePose() {
@@ -1333,8 +1361,8 @@ async function loadVideo() {
     info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
     updateSwingDurationDisplay();
     hideAutodetectSplash();
-    markerStatus.textContent = "Manual trim is ready. Autodetect is optional.";
-    if (pickBatterBtn) pickBatterBtn.textContent = "Pick Batter";
+    markerStatus.textContent = "Manual trim is ready. Click Autodetect if you want analysis.";
+    if (buildChartsBtn) buildChartsBtn.textContent = "Autodetect";
 }
 
 ////////////////////////////////////////////////////////////
@@ -3302,7 +3330,7 @@ function showContactCandidates(candidates, context) {
 if (contactCandidatesRepickBtn) {
     contactCandidatesRepickBtn.onclick = () => {
         hideContactCandidates();
-        beginBatterPickFlow();
+        beginBatterPickFlow(true);
     };
 }
 
@@ -3336,6 +3364,7 @@ document.getElementById("set_contact_btn").onclick = () => {
 async function runAutodetectFromManualSeed() {
     if (autodetectRunning) return;
     if (!frames.length) return;
+    if (buildChartsBtn) buildChartsBtn.textContent = "Autodetect";
     if (!manualSeedPoint) {
         markerStatus.textContent = "Click the batter on the preview to start autodetect.";
         return;
@@ -3500,15 +3529,7 @@ async function runAutodetectFromManualSeed() {
 if (startPickFlowBtn) {
     startPickFlowBtn.onclick = () => {
         hideAutodetectSplash();
-        beginBatterPickFlow();
-    };
-}
-
-if (pickBatterBtn) {
-    pickBatterBtn.onclick = () => {
-        if (!frames.length) return;
-        hideAutodetectSplash();
-        beginBatterPickFlow();
+        beginBatterPickFlow(true);
     };
 }
 
@@ -3536,18 +3557,41 @@ canvas.addEventListener("click", async (ev) => {
         y: Math.max(0, Math.min(1, ny)),
     };
     awaitingManualPick = false;
-    markerStatus.textContent = `Batter locked at frame ${i}. Manual trim is ready. Click Autodetect only if you want analysis.`;
+    if (pendingAutodetectAfterPick) {
+        pendingAutodetectAfterPick = false;
+        markerStatus.textContent = `Batter locked at frame ${i}. Starting autodetect...`;
+        runAutodetectFromManualSeed();
+        return;
+    }
+    markerStatus.textContent = `Batter locked at frame ${i}. Manual trim is ready.`;
 });
 
 if (buildChartsBtn) {
     buildChartsBtn.onclick = async () => {
         if (!manualSeedPoint) {
             hideAutodetectSplash();
-            beginBatterPickFlow();
+            beginBatterPickFlow(true);
             return;
         }
+        pendingAutodetectAfterPick = false;
         await runAutodetectFromManualSeed();
     };
+}
+
+if (openHelpBtn && swingHelpModal) {
+    openHelpBtn.onclick = () => {
+        swingHelpModal.style.display = "flex";
+    };
+}
+if (closeHelpBtn && swingHelpModal) {
+    closeHelpBtn.onclick = () => {
+        swingHelpModal.style.display = "none";
+    };
+}
+if (swingHelpModal) {
+    swingHelpModal.addEventListener("click", (ev) => {
+        if (ev.target === swingHelpModal) swingHelpModal.style.display = "none";
+    });
 }
 
 ////////////////////////////////////////////////////////////
