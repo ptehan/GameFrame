@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  #main {
+    height: 100vh;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .ev-import-shell {
+    height: calc(100vh - 40px);
+    display: grid;
+    align-content: center;
+    justify-items: start;
+    overflow: hidden;
+  }
+  .ev-import-card {
+    width: min(980px, calc(100vw - 320px));
+  }
+  .ev-form-row {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 900px) {
+    .ev-import-card {
+      width: min(980px, calc(100vw - 24px));
+    }
+    .ev-form-row {
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+  }
+</style>
+
+<div class="ev-import-shell">
+<div class="ev-import-card">
+<h2 style="margin-top:0;">Import Video From Link</h2>
+
+{% if error %}
+<div style="background:#3a1010; border:1px solid #7d2a2a; color:#ffd2d2; padding:10px; border-radius:8px; margin-bottom:14px;">
+  {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/external_video/fetch" style="max-width: 900px;">
+  <input type="hidden" name="sid" value="{{ sid }}">
+
+  <div class="ev-form-row">
+    <label for="video_url">Video Link:</label>
+    <input id="video_url" name="video_url" required
+           placeholder="https://youtube.com/... or x.com/... or instagram.com/... or tiktok.com/..."
+           value="{{ video_url or '' }}">
+  </div>
+
+  <div class="ev-form-row">
+    <label for="clip_type">Clip Type:</label>
+    <select id="clip_type" name="clip_type" required>
+      <option value="pitch" {% if clip_type == "pitch" %}selected{% endif %}>Pitch</option>
+      <option value="swing" {% if clip_type != "pitch" %}selected{% endif %}>Swing</option>
+    </select>
+  </div>
+
+  <button type="submit">Fetch Video</button>
+</form>
+
+<p style="margin-top:14px; color:#9e9e9e; max-width:900px;">
+  After fetch completes, you will get a timeline selector to pick an exact 5-second window.
+  That clip will then open in the matching upload flow.
+</p>
+
+</div>
+</div>
+{% endblock %}

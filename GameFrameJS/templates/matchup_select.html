@@ -1,0 +1,689 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2 style="margin-bottom:20px;">Create Matchup</h2>
+
+<div id="status" style="margin-bottom:10px; color:#ccc; font-weight:bold;">
+    Loading FFmpeg…
+</div>
+
+<!-- PROGRESS BAR (ADDED) -->
+<div id="progress-container" style="margin-top:15px; width:360px; display:none;">
+    <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
+        <div id="progress-bar" style="height:100%; width:0%; background:#ffdd00;"></div>
+    </div>
+    <div id="progress-label" style="margin-top:6px; font-size:13px; color:#ccc;">
+        Working…
+    </div>
+</div>
+
+<form id="matchupForm">
+    <input type="hidden" id="sid" value="{{ sid }}">
+
+    <div style="display:flex; gap:60px; align-items:flex-start;">
+
+        <!-- COLUMN 1: PITCH -->
+        <div style="width:300px;">
+            <h3>Pitch Selection</h3>
+
+            <label>Pitch Team</label>
+            <select id="pitch_team" style="width:100%; padding:8px; margin:8px 0;">
+                <option value="">Select Team</option>
+                {% for t in teams %}
+                    <option value="{{ t.id or t[0] }}">{{ t.name or t[1] }}</option>
+                {% endfor %}
+            </select>
+
+            <label>Pitcher</label>
+            <select id="pitch_pitcher" style="width:100%; padding:8px; margin:8px 0;"></select>
+
+            <label>Pitch Clip</label>
+            <select id="pitch_clip" style="width:100%; padding:8px; margin:8px 0;"></select>
+
+            <h3>Matchup Description</h3>
+
+            <input type="text" id="desc" placeholder="Description (optional)"
+                   style="width:100%; padding:10px; margin:8px 0;">
+
+            <button type="submit">
+                Create Matchup
+            </button>
+        </div>
+
+        <!-- COLUMN 2: SWING -->
+        <div style="width:300px;">
+            <h3>Swing Selection</h3>
+
+            <label>Swing Team</label>
+            <select id="swing_team" style="width:100%; padding:8px; margin:8px 0;">
+                <option value="">Select Team</option>
+                {% for t in teams %}
+                    <option value="{{ t.id or t[0] }}">{{ t.name or t[1] }}</option>
+                {% endfor %}
+            </select>
+
+            <label>Hitter</label>
+            <select id="swing_hitter" style="width:100%; padding:8px; margin:8px 0;"></select>
+
+            <label>Swing Clip</label>
+            <select id="swing_clip" style="width:100%; padding:8px; margin:8px 0;"></select>
+        </div>
+
+    </div>
+</form>
+
+
+
+<!-- FFmpeg override -->
+<script>
+
+function showProgress() {
+    document.getElementById("progress-container").style.display = "block";
+}
+
+function updateProgress(pct, msg = "") {
+    document.getElementById("progress-bar").style.width = pct + "%";
+    if (msg) document.getElementById("progress-label").innerText = msg;
+}
+
+window.FFMPEG_CORE_PATH   = "/static/js/ffmpeg/ffmpeg-core.js";
+window.FFMPEG_WASM_PATH   = "/static/js/ffmpeg/ffmpeg-core.wasm";
+window.FFMPEG_WORKER_PATH = "/static/js/ffmpeg/ffmpeg-core.worker.js";
+
+window.FFmpeg = window.FFmpeg || {};
+
+window.FFmpeg.getCreateFFmpegCore = () => ({
+    mainScriptUrlOrBlob: window.FFMPEG_CORE_PATH,
+    locateFile: (p) => {
+        if (p.endsWith(".wasm"))      return window.FFMPEG_WASM_PATH;
+        if (p.endsWith(".worker.js")) return window.FFMPEG_WORKER_PATH;
+        return p;
+    }
+});
+</script>
+
+<script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+
+    const { createFFmpeg, fetchFile } = FFmpeg;
+
+    const ffmpeg = createFFmpeg({
+        log: true,
+        corePath: window.FFMPEG_CORE_PATH
+    });
+
+    function log(msg) {
+        document.getElementById("status").innerText = msg;
+    }
+
+    log("Loading FFmpeg…");
+    await ffmpeg.load();
+    log("FFmpeg ready!");
+
+
+    //------------------------------------------------
+    // TEAM / CLIP MAPS
+    //------------------------------------------------
+    const pitcherMap   = {{ pitcher_map | tojson }};
+    const pitchClipMap = {{ pitch_clip_map | tojson }};
+    const hitterMap    = {{ hitter_map | tojson }};
+    const swingClipMap = {{ swing_clip_map | tojson }};
+
+    const ptTeam = document.getElementById("pitch_team");
+    const ptPitcher = document.getElementById("pitch_pitcher");
+    const ptClip = document.getElementById("pitch_clip");
+
+    const swTeam = document.getElementById("swing_team");
+    const swHitter = document.getElementById("swing_hitter");
+    const swClip = document.getElementById("swing_clip");
+
+    ptTeam.onchange = () => {
+        ptPitcher.innerHTML = "";
+        ptClip.innerHTML = "";
+    
+        const pitchers = pitcherMap[ptTeam.value] || [];
+        let added = 0;
+        // Prefer pitchers that already have clips.
+        pitchers.forEach(p => {
+            const clips = pitchClipMap[p.id] || [];
+            if (clips.length > 0) {
+                ptPitcher.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+                added += 1;
+            }
+        });
+
+        // Fallback: if none have clips yet, still show all pitchers for that team.
+        if (added === 0) {
+            pitchers.forEach(p => {
+                ptPitcher.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+            });
+        }
+    
+        // Auto-select the first valid pitcher
+        if (ptPitcher.options.length > 0) {
+            ptPitcher.selectedIndex = 0;
+            ptPitcher.onchange();
+        }
+    };
+
+
+    ptPitcher.onchange = () => {
+        ptClip.innerHTML = "";
+
+        const clips = pitchClipMap[ptPitcher.value] || [];
+        if (clips.length === 0) {
+            ptClip.innerHTML = `<option value="">No pitch clips for this pitcher</option>`;
+            return;
+        }
+    
+        // Add ALL clips for this pitcher
+        clips.forEach(c => {
+            ptClip.innerHTML += `<option value="${c.id}">${c.label}</option>`;
+        });
+    
+        // Auto-select MOST RECENT clip (last entry)
+        ptClip.selectedIndex = clips.length - 1;
+    };
+
+
+    swTeam.onchange = () => {
+        swHitter.innerHTML = "";
+        swClip.innerHTML = "";
+    
+        const hitters = hitterMap[swTeam.value] || [];
+        let added = 0;
+        // Prefer hitters that already have clips.
+        hitters.forEach(h => {
+            const clips = swingClipMap[h.id] || [];
+            if (clips.length > 0) {
+                swHitter.innerHTML += `<option value="${h.id}">${h.name}</option>`;
+                added += 1;
+            }
+        });
+
+        // Fallback: if none have clips yet, still show all hitters for that team.
+        if (added === 0) {
+            hitters.forEach(h => {
+                swHitter.innerHTML += `<option value="${h.id}">${h.name}</option>`;
+            });
+        }
+    
+        // Auto-select first valid hitter
+        if (swHitter.options.length > 0) {
+            swHitter.selectedIndex = 0;
+            swHitter.onchange();
+        }
+    };
+
+
+    swHitter.onchange = () => {
+        swClip.innerHTML = "";
+    
+        const clips = swingClipMap[swHitter.value] || [];
+        if (clips.length === 0) {
+            swClip.innerHTML = `<option value="">No swing clips for this hitter</option>`;
+            return;
+        }
+    
+        // Add ALL clips for this hitter
+        clips.forEach(c => {
+            swClip.innerHTML += `<option value="${c.id}">${c.label}</option>`;
+        });
+    
+        // Auto-select MOST RECENT
+        swClip.selectedIndex = clips.length - 1;
+    };
+
+    // Initialize dropdowns on first load.
+    const initPitchTeam = Array.from(ptTeam.options).find((opt) => {
+        if (!opt.value) return false;
+        const pitchers = pitcherMap[opt.value] || [];
+        return pitchers.some((p) => (pitchClipMap[p.id] || []).length > 0);
+    });
+    const initSwingTeam = Array.from(swTeam.options).find((opt) => {
+        if (!opt.value) return false;
+        const hitters = hitterMap[opt.value] || [];
+        return hitters.some((h) => (swingClipMap[h.id] || []).length > 0);
+    });
+    if (initPitchTeam) {
+        ptTeam.value = initPitchTeam.value;
+        ptTeam.onchange();
+    } else if (ptTeam.options.length > 1) {
+        ptTeam.selectedIndex = 1;
+        ptTeam.onchange();
+    }
+    if (initSwingTeam) {
+        swTeam.value = initSwingTeam.value;
+        swTeam.onchange();
+    } else if (swTeam.options.length > 1) {
+        swTeam.selectedIndex = 1;
+        swTeam.onchange();
+    }
+
+
+    //------------------------------------------------
+    // FRAME EXTRACTION
+    //------------------------------------------------
+    async function extractFramesFromVideo(arrayBuffer) {
+        const blob = new Blob([arrayBuffer], { type: "video/mp4" });
+        const url = URL.createObjectURL(blob);
+        const video = document.createElement("video");
+        video.src = url;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "auto";
+
+        const captureVideoFrame = () => {
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+            if (!vw || !vh) return null;
+            const c = document.createElement("canvas");
+            c.width = vw;
+            c.height = vh;
+            const ctx = c.getContext("2d");
+            ctx.drawImage(video, 0, 0, vw, vh);
+            return c;
+        };
+
+        const frameSignature = (c) => {
+            if (!c) return "";
+            const ctx = c.getContext("2d");
+            if (!ctx) return "";
+            const w = c.width, h = c.height;
+            if (!w || !h) return "";
+            const sample = (x, y) => {
+                const d = ctx.getImageData(x, y, 1, 1).data;
+                return `${d[0]},${d[1]},${d[2]}`;
+            };
+            const p1 = sample(0, 0);
+            const p2 = sample(Math.floor(w * 0.5), Math.floor(h * 0.5));
+            const p3 = sample(Math.max(0, w - 1), Math.max(0, h - 1));
+            return `${w}x${h}|${p1}|${p2}|${p3}`;
+        };
+
+        const appendGuaranteedTailFrame = async (frames) => {
+            try {
+                const dur = Number(video.duration);
+                if (!Number.isFinite(dur) || dur <= 0) return frames;
+                await new Promise((resolve) => {
+                    const onSeeked = () => resolve();
+                    video.addEventListener("seeked", onSeeked, { once: true });
+                    video.currentTime = Math.max(0, dur - 0.001);
+                });
+                const tail = captureVideoFrame();
+                if (!tail) return frames;
+                const tailSig = frameSignature(tail);
+                const lastSig = frames.length ? frameSignature(frames[frames.length - 1]) : "";
+                if (tailSig !== lastSig) frames.push(tail);
+            } catch (_) {
+                // Best effort only; keep decoded frames if seek fails on some browsers.
+            }
+            return frames;
+        };
+
+        // Primary path: MediaStreamTrackProcessor frame-by-frame decode (more complete).
+        if (typeof MediaStreamTrackProcessor !== "undefined") {
+            await video.play().catch(()=>{});
+            const stream = video.captureStream();
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+                const reader = new MediaStreamTrackProcessor(track).readable.getReader();
+                const frames = [];
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const bmp = await createImageBitmap(value);
+                    const c = document.createElement("canvas");
+                    c.width = bmp.width;
+                    c.height = bmp.height;
+                    const ctx = c.getContext("2d");
+                    ctx.drawImage(bmp, 0, 0);
+                    bmp.close();
+                    value.close();
+                    frames.push(c);
+                }
+                await appendGuaranteedTailFrame(frames);
+                URL.revokeObjectURL(url);
+                return frames;
+            }
+        }
+
+        // Fallback: requestVideoFrameCallback
+        return new Promise(async (resolve) => {
+            await video.play().catch(()=>{});
+            const frames = [];
+            function captureFrame() {
+                const vw = video.videoWidth;
+                const vh = video.videoHeight;
+                const c = document.createElement("canvas");
+                c.width = vw;
+                c.height = vh;
+                const ctx = c.getContext("2d");
+                ctx.drawImage(video, 0, 0, vw, vh);
+                frames.push(c);
+                video.requestVideoFrameCallback(captureFrame);
+            }
+            video.requestVideoFrameCallback(captureFrame);
+            video.onended = () => {
+                appendGuaranteedTailFrame(frames).finally(() => {
+                    URL.revokeObjectURL(url);
+                    resolve(frames);
+                });
+            };
+        });
+    }
+
+
+
+    //------------------------------------------------
+    // FORM SUBMIT
+    //------------------------------------------------
+    document.getElementById("matchupForm").onsubmit = async e => {
+        e.preventDefault();
+
+        showProgress();
+        updateProgress(2, "Downloading clips…");
+        log("Downloading clips…");
+
+        const pitch_id = ptClip.value;
+        const swing_id = swClip.value;
+        const desc = (document.getElementById("desc").value || "Matchup").replace(/"/g,"'");
+
+        const pitchBuf = await fetch(`/stream/pitch_clip?id=${pitch_id}`).then(r=>r.arrayBuffer());
+        const swingBuf = await fetch(`/stream/swing_clip?id=${swing_id}`).then(r=>r.arrayBuffer());
+
+        updateProgress(10, "Extracting frames…");
+
+        const pitchF = await extractFramesFromVideo(pitchBuf);
+        const swingF = await extractFramesFromVideo(swingBuf);
+
+        const meta = await fetch(`/api/swing_meta?id=${swing_id}`).then(r => r.json());
+        let decision_frame = Number(meta.decision_frame);
+
+        updateProgress(20, "Frames extracted…");
+
+
+        //------------------------------------------------------------
+        // MATCHUP LOGIC (UNCHANGED EXCEPT TITLE prepend)
+        //------------------------------------------------------------
+        const padCount = Math.max(0, pitchF.length - swingF.length);
+        const swingLastIdx = Math.max(0, swingF.length - 1);
+        const decisionLocal = Number.isFinite(decision_frame)
+            ? Math.max(0, Math.min(swingLastIdx, Math.round(decision_frame)))
+            : Math.max(0, swingLastIdx - 5);
+        let decisionGlobal = decisionLocal + padCount;
+        const contact = padCount + swingLastIdx;
+        if (decisionGlobal >= contact) {
+            decisionGlobal = Math.max(padCount, contact - 1);
+        }
+        const freeze = 60;
+
+        const outFrames = [];
+
+        function tintFrame(frame, r, g, b, a = 0.25) {
+            const c = document.createElement("canvas");
+            c.width = frame.width;
+            c.height = frame.height;
+            const ctx = c.getContext("2d");
+            ctx.drawImage(frame, 0, 0);
+            ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+            ctx.fillRect(0, 0, c.width, c.height);
+            return c;
+        }
+
+        function getSwing(i) {
+            if (i < padCount) return swingF[0];
+            // clamp index so it never exceeds swingF length
+            const idx = Math.min(i - padCount, swingF.length - 1);
+            return swingF[idx];
+        }
+        function getPitch(i) {
+            const idx = Math.max(0, Math.min(pitchF.length - 1, i));
+            return pitchF[idx];
+        }
+
+
+        function letterbox(frame, boxW, boxH) {
+            const srcW = frame.width;
+            const srcH = frame.height;
+        
+            const srcAR = srcW / srcH;
+            const boxAR = boxW / boxH;
+        
+            let drawW, drawH;
+        
+            if (srcAR > boxAR) {
+                // wider than box
+                drawW = boxW;
+                drawH = boxW / srcAR;
+            } else {
+                // taller than box
+                drawH = boxH;
+                drawW = boxH * srcAR;
+            }
+        
+            const c = document.createElement("canvas");
+            c.width = boxW;
+            c.height = boxH;
+            const ctx = c.getContext("2d");
+        
+            // fill with black letterbox
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, boxW, boxH);
+        
+            // center the frame
+            const x = (boxW - drawW) / 2;
+            const y = (boxH - drawH) / 2;
+        
+            ctx.drawImage(frame, x, y, drawW, drawH);
+        
+            return c;
+        }
+
+
+        function compose(pitch, swing, tintColor = null) {
+            if (!pitch) pitch = pitchF[pitchF.length - 1];
+            if (!swing) swing = swingF[swingF.length - 1];
+        
+            // Tint if needed
+            if (tintColor) {
+                pitch = tintFrame(pitch, ...tintColor);
+                swing = tintFrame(swing, ...tintColor);
+            }
+        
+            // NEW — letterbox to preserve aspect ratio
+            const pitchBox = letterbox(pitch, 640, 720);
+            const swingBox = letterbox(swing, 640, 720);
+        
+            // Output canvas
+            const c = document.createElement("canvas");
+            c.width = 1280;
+            c.height = 720;
+        
+            const ctx = c.getContext("2d");
+            ctx.drawImage(pitchBox, 0, 0);
+            ctx.drawImage(swingBox, 640, 0);
+        
+            return c;
+        }
+
+
+
+        const yellow = [255,255,0,0.25];
+        const green  = [0,255,0,0.25];
+
+        // PHASES:
+        for (let i = 0; i < padCount; i++)
+            outFrames.push(compose(getPitch(i), swingF[0]));
+
+        for (let i = 0; i < freeze; i++)
+            outFrames.push(compose(getPitch(padCount), swingF[0], yellow));
+
+        for (let i = padCount + 1; i < decisionGlobal; i++)
+            outFrames.push(compose(getPitch(i), getSwing(i)));
+
+        for (let i = 0; i < freeze; i++)
+            outFrames.push(compose(getPitch(decisionGlobal), getSwing(decisionGlobal), green));
+
+        for (let i = decisionGlobal + 1; i <= contact; i++)
+            outFrames.push(compose(getPitch(i), getSwing(i)));
+
+        const finalSwing = swingF[swingF.length - 1];
+        for (let i = contact + 1; i < pitchF.length; i++)
+            outFrames.push(compose(getPitch(i), finalSwing));
+
+        // --------------------------------------------------------
+        // NEW: freeze final frame for 2 seconds (60 frames)
+        // --------------------------------------------------------
+        const FINAL_FREEZE = 60;
+        const lastPitch = pitchF[pitchF.length - 1];
+        for (let i = 0; i < FINAL_FREEZE; i++) {
+            outFrames.push(compose(lastPitch, finalSwing));
+        }
+
+
+        //------------------------------------------------------------
+        // TITLE SCREEN (120 frames @ 30fps)
+        //------------------------------------------------------------
+        const titleFrames = [];
+        const TITLE_W = 1280;
+        const TITLE_H = 720;
+        const TITLE_COUNT = 120;
+
+        const matchupDate   = new Date().toLocaleDateString();
+        const swingDuration = Number.isFinite(Number(meta.swing_seconds))
+            ? Number(meta.swing_seconds).toFixed(2)
+            : (swingF.length / 30).toFixed(2);
+        const hitterName    = swHitter.options[swHitter.selectedIndex].text;
+        const pitcherName   = ptPitcher.options[ptPitcher.selectedIndex].text;
+
+        for (let i = 0; i < TITLE_COUNT; i++) {
+            const c = document.createElement("canvas");
+            c.width = TITLE_W;
+            c.height = TITLE_H;
+            const ctx = c.getContext("2d");
+
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, TITLE_W, TITLE_H);
+
+            ctx.fillStyle = "white";
+            ctx.textAlign = "center";
+
+            ctx.font = "48px Arial";
+            ctx.fillText(desc || "Matchup", TITLE_W/2, 180);
+
+            ctx.font = "42px Arial";
+            ctx.fillText(`${hitterName} vs ${pitcherName}`, TITLE_W/2, 260);
+
+            ctx.font = "36px Arial";
+            ctx.fillText(`Swing Duration: ${swingDuration}s`, TITLE_W/2, 340);
+
+            ctx.font = "32px Arial";
+            ctx.fillText(matchupDate, TITLE_W/2, 420);
+
+            titleFrames.push(c);
+        }
+
+        //------------------------------------------------------------
+        // FINAL FRAME LIST
+        //------------------------------------------------------------
+        const framesToEncode = [...titleFrames, ...outFrames];
+
+
+        //------------------------------------------------------------
+        // ENCODE — ***ONLY ONE LOOP*** (FIXED)
+        //------------------------------------------------------------
+        updateProgress(30, "Packing raw RGB…");
+        log("Packing raw RGB…");
+
+        const W = 1280, H = 720;
+        const raw = new Uint8Array(W * H * 3 * framesToEncode.length);
+
+        let offset = 0;
+
+        for (let i = 0; i < framesToEncode.length; i++) {
+
+            const src = framesToEncode[i];
+
+            const c = document.createElement("canvas");
+            c.width = W;
+            c.height = H;
+            const ctx = c.getContext("2d");
+            ctx.drawImage(src, 0, 0, W, H);
+
+            const data = ctx.getImageData(0,0,W,H).data;
+
+            for (let j=0;j<data.length;j+=4) {
+                raw[offset++] = data[j];
+                raw[offset++] = data[j+1];
+                raw[offset++] = data[j+2];
+            }
+
+            if (i % 20 === 0) {
+                const pct = 30 + Math.floor((i / framesToEncode.length) * 40);
+                updateProgress(pct, `Packing ${i}/${framesToEncode.length} frames…`);
+            }
+        }
+
+        ffmpeg.FS("writeFile", "input.raw", raw);
+
+
+        //------------------------------------------------------------
+        // H.264 ENCODE
+        //------------------------------------------------------------
+        updateProgress(75, "Encoding video…");
+
+        await ffmpeg.run(
+            "-y",
+            "-f", "rawvideo",
+            "-pix_fmt", "rgb24",
+            "-s:v", "1280x720",
+            "-r:v", "30",
+            "-i", "input.raw",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "matchup.mp4"
+        );
+
+        const out = ffmpeg.FS("readFile", "matchup.mp4");
+        const blob = new Blob([out], {type:"video/mp4"});
+
+        updateProgress(90, "Uploading…");
+
+        const fd = new FormData();
+        fd.append("sid", document.getElementById("sid").value);
+        fd.append("pitch_id", pitch_id);
+        fd.append("swing_id", swing_id);
+        fd.append("description", desc);
+        fd.append("file", new File([blob], "matchup.mp4", {type:"video/mp4"}));
+
+        const resp = await fetch("/matchup/create", {
+            method: "POST",
+            body: fd
+        });
+
+        if (!resp.ok) {
+            log("Upload failed.");
+            return;
+        }
+
+        const data = await resp.json();
+        const newId = data.id;
+
+        updateProgress(100, "Done!");
+
+        window.location.href =
+            `/play/matchup?id=${newId}&sid=${document.getElementById("sid").value}`;
+    };
+
+});
+</script>
+
+
+{% endblock %}

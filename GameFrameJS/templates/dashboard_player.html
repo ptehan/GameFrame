@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.dash-wrap {
+    max-width: 1280px;
+}
+.dash-title {
+    margin: 0 0 14px 0;
+}
+.dash-panel {
+    border: 1px solid #2f2f2f;
+    border-radius: 10px;
+    background: #121212;
+    padding: 14px;
+    margin-bottom: 14px;
+}
+.dash-row {
+    display: grid;
+    grid-template-columns: 220px 1fr 1fr;
+    gap: 10px;
+    align-items: center;
+}
+.dash-row label {
+    font-weight: 700;
+}
+.dash-select {
+    width: 100%;
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #191919;
+    color: #fff;
+    padding: 0 10px;
+}
+.dash-input {
+    width: 100%;
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #191919;
+    color: #fff;
+    padding: 0 10px;
+}
+.hitter-grid {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 8px;
+}
+.hitter-group-title {
+    margin: 12px 0 6px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #8fd7ff;
+}
+.hitter-chip {
+    display: block;
+    text-decoration: none;
+    color: #fff;
+    background: #1c1c1c;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+.hitter-chip.active {
+    border-color: #3dc3ff;
+    box-shadow: 0 0 0 1px #3dc3ff inset;
+}
+.hitter-sub {
+    font-size: 12px;
+    color: #bcbcbc;
+    margin-top: 2px;
+}
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+}
+.kpi {
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 10px;
+    background: #171717;
+}
+.kpi-label {
+    font-size: 12px;
+    color: #b4b4b4;
+}
+.kpi-value {
+    margin-top: 4px;
+    font-size: 18px;
+    font-weight: 700;
+}
+.dash-links {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+.dash-link-btn {
+    display: inline-block;
+    text-decoration: none;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 13px;
+}
+.dash-table-wrap {
+    overflow-x: auto;
+}
+.dash-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1000px;
+}
+.dash-table th,
+.dash-table td {
+    border: 1px solid #303030;
+    padding: 7px 8px;
+    text-align: left;
+    font-size: 13px;
+}
+.dash-table th {
+    background: #1e1e1e;
+}
+.dash-chart {
+    width: 100%;
+    max-width: 620px;
+    border: 1px solid #2f2f2f;
+    border-radius: 8px;
+    background: #101010;
+}
+.duration-filter-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.duration-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #3a3a3a;
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: #181818;
+    font-size: 12px;
+}
+@media (max-width: 980px) {
+    .dash-row {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="dash-wrap">
+    <h2 class="dash-title">Player Dashboard</h2>
+
+    <div class="dash-panel">
+        <form id="player_form" method="get" action="/dashboard/player">
+            <input type="hidden" name="sid" value="{{ sid }}">
+            <div class="dash-row">
+                <label for="team_select">Team</label>
+                <select id="team_select" class="dash-select" name="tid" onchange="onTeamChange()">
+                    <option value="0">All Teams</option>
+                    {% for t in teams %}
+                    <option value="{{ t[0] }}" {% if t[0] == tid %}selected{% endif %}>{{ t[1] }}</option>
+                    {% endfor %}
+                </select>
+                <input id="hitter_filter" class="dash-input" name="pq" value="{{ pq or '' }}" type="text" placeholder="Search players..." oninput="filterHitters()">
+            </div>
+
+            {% if hitters %}
+            <div class="dash-row" style="margin-top:10px;">
+                <label for="hitter_select">Player</label>
+                <select id="hitter_select" class="dash-select" name="hid" onchange="document.getElementById('player_form').submit()">
+                    <option value="0">Select Player</option>
+                    {% for h in hitters %}
+                    <option value="{{ h[0] }}" data-name="{{ h[1]|lower }}" data-team="{{ h[3]|lower }}" {% if h[0] == hid %}selected{% endif %}>
+                        {{ h[1] }} - {{ h[3] }} ({{ h[4] }} swings)
+                    </option>
+                    {% endfor %}
+                </select>
+                <div style="font-size:12px;color:#b4b4b4;">Search works across all teams; team filter narrows the list.</div>
+            </div>
+            {% endif %}
+        </form>
+
+        {% if hitters %}
+        {% set ns = namespace(team='') %}
+        <div id="hitter_grid">
+            {% for h in hitters %}
+            {% if ns.team != h[3] %}
+            {% set ns.team = h[3] %}
+            <div class="hitter-group-title" data-team="{{ h[3]|lower }}">{{ h[3] }}</div>
+            <div class="hitter-grid" data-team-group="{{ h[3]|lower }}">
+            {% endif %}
+                <a class="hitter-chip {% if h[0] == hid %}active{% endif %}"
+                   data-name="{{ h[1]|lower }}"
+                   data-team="{{ h[3]|lower }}"
+                   href="/dashboard/player?sid={{ sid }}&tid={{ tid }}&hid={{ h[0] }}">
+                    <div>{{ h[1] }}</div>
+                    <div class="hitter-sub">{{ h[4] }} swings{% if h[5] %} | last {{ h[5] }}{% endif %}</div>
+                </a>
+            {% set next_team = hitters[loop.index][3] if not loop.last else '' %}
+            {% if loop.last or next_team != h[3] %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if selected_hitter and summary %}
+    <div class="dash-panel">
+        <h3 style="margin:0 0 10px 0;">{{ selected_hitter[1] }} ({{ selected_hitter[2] }}): Swing Consistency</h3>
+        <div class="kpi-grid">
+            <div class="kpi"><div class="kpi-label">Total Swings</div><div class="kpi-value">{{ summary.count }}</div></div>
+            <div class="kpi"><div class="kpi-label">Consistency Score</div><div class="kpi-value">{{ "%.1f"|format(summary.consistency_score) }}</div></div>
+            <div class="kpi"><div class="kpi-label">Average (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.avg) }}</div></div>
+            <div class="kpi"><div class="kpi-label">Median (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.median) }}</div></div>
+            <div class="kpi"><div class="kpi-label">Std Dev (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.stddev) }}</div></div>
+            <div class="kpi"><div class="kpi-label">CV</div><div class="kpi-value">{{ "%.2f"|format(summary.cv * 100) }}%</div></div>
+            <div class="kpi"><div class="kpi-label">P10 / P90 (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.p10) }} / {{ "%.3f"|format(summary.p90) }}</div></div>
+            <div class="kpi"><div class="kpi-label">IQR (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.iqr) }}</div></div>
+            <div class="kpi"><div class="kpi-label">Range (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.range) }}</div></div>
+            <div class="kpi"><div class="kpi-label">Outliers</div><div class="kpi-value">{{ summary.outlier_count }}</div></div>
+            <div class="kpi"><div class="kpi-label">Last 10 Avg (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.last10_avg) }}</div></div>
+            <div class="kpi"><div class="kpi-label">Trend / Swing</div><div class="kpi-value">{{ "%.4f"|format(summary.trend_per_swing) }}s</div></div>
+        </div>
+        <div class="dash-links">
+            <a class="dash-link-btn" href="/library?sid={{ sid }}&type=swing&hitter={{ selected_hitter[1]|lower }}">Open Swing Library</a>
+            <a class="dash-link-btn" href="/library?sid={{ sid }}&type=matchup&hitter={{ selected_hitter[1]|lower }}">Open Matchup Library</a>
+        </div>
+    </div>
+
+    <div class="dash-panel">
+        <h3 style="margin:0 0 10px 0;">Swing Duration Columns (Newest to Oldest)</h3>
+        <canvas id="duration_chart" class="dash-chart" width="620" height="150"></canvas>
+    </div>
+    {% endif %}
+
+    {% if results %}
+    <div class="dash-panel">
+        <h3 style="margin:0 0 10px 0;">Full Swing Data</h3>
+        <div class="duration-filter-row">
+            <label class="duration-pill"><input type="checkbox" id="dur_all" checked onchange="applyDurationFilter()"> All swings</label>
+            <label class="duration-pill"><input type="checkbox" class="dur_band" value="lt080" onchange="applyDurationFilter()"> &lt; 0.80s</label>
+            <label class="duration-pill"><input type="checkbox" class="dur_band" value="080_090" onchange="applyDurationFilter()"> 0.80 - 0.90s</label>
+            <label class="duration-pill"><input type="checkbox" class="dur_band" value="090_100" onchange="applyDurationFilter()"> 0.90 - 1.00s</label>
+            <label class="duration-pill"><input type="checkbox" class="dur_band" value="gte100" onchange="applyDurationFilter()"> &ge; 1.00s</label>
+        </div>
+        <div class="dash-table-wrap">
+            <table class="dash-table" id="swings_table">
+                <thead>
+                    <tr>
+                        <th>Swing ID</th>
+                        <th>Description</th>
+                        <th>Created</th>
+                        <th>Frames</th>
+                        <th>FPS</th>
+                        <th>Swing Time (s)</th>
+                        <th>Decision Frame</th>
+                        <th>Decision Time (s)</th>
+                        <th>Decision %</th>
+                        <th>Swing</th>
+                        <th>Matchups</th>
+                        <th>Pose Data</th>
+                        <th>Delete</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in results %}
+                    <tr data-swing-seconds="{{ "%.6f"|format(r.swing_seconds or 0) }}">
+                        <td>{{ r.id }}</td>
+                        <td>{{ r.description }}</td>
+                        <td>{{ r.created_at or "" }}</td>
+                        <td>{{ r.frame_count }}</td>
+                        <td>{{ "%.2f"|format(r.fps) if r.fps else "" }}</td>
+                        <td>{{ "%.3f"|format(r.swing_seconds) }}</td>
+                        <td>{{ r.decision_frame if r.decision_frame is not none else "" }}</td>
+                        <td>{{ "%.3f"|format(r.decision_seconds) if r.decision_seconds is not none else "" }}</td>
+                        <td>{{ "%.1f"|format(r.decision_pct) ~ "%" if r.decision_pct is not none else "" }}</td>
+                        <td><a href="/play/swing?sid={{ sid }}&id={{ r.id }}">Open Swing</a></td>
+                        <td>
+                            {% if r.matchup_count and r.latest_matchup_id %}
+                            <a href="/play/matchup?sid={{ sid }}&id={{ r.latest_matchup_id }}">Latest Matchup</a>
+                            <span style="color:#999;"> ({{ r.matchup_count }})</span>
+                            {% else %}
+                            <span style="color:#777;">None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.has_pose_data %}
+                            <button type="button" onclick="copyPoseData({{ r.id }})" style="border:1px solid #444;border-radius:6px;padding:4px 8px;background:#1f1f1f;color:#fff;cursor:pointer;">Copy Pose</button>
+                            {% else %}
+                            <span style="color:#777;">None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="post" action="/dashboard/player/swing/delete" onsubmit="return confirm('Delete this swing video?');" style="margin:0;">
+                                <input type="hidden" name="sid" value="{{ sid }}">
+                                <input type="hidden" name="tid" value="{{ tid }}">
+                                <input type="hidden" name="hid" value="{{ hid }}">
+                                <input type="hidden" name="swing_id" value="{{ r.id }}">
+                                <button type="submit" style="background:#a12828;color:#fff;border:1px solid #7a1f1f;border-radius:6px;padding:4px 8px;cursor:pointer;">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function onTeamChange() {
+    const form = document.getElementById("player_form");
+    const hitter = document.getElementById("hitter_select");
+    if (hitter) hitter.value = "0";
+    form.submit();
+}
+
+function filterHitters() {
+    const q = (document.getElementById("hitter_filter").value || "").toLowerCase().trim();
+    const select = document.getElementById("hitter_select");
+    if (select) {
+        for (const opt of select.options) {
+            if (!opt.value || opt.value === "0") continue;
+            const ok = !q || (opt.dataset.name || "").includes(q);
+            opt.hidden = !ok;
+        }
+    }
+    const cards = document.querySelectorAll("#hitter_grid .hitter-chip");
+    for (const card of cards) {
+        const ok = !q || (card.dataset.name || "").includes(q);
+        card.style.display = ok ? "block" : "none";
+    }
+    const titles = document.querySelectorAll("#hitter_grid .hitter-group-title");
+    const groups = document.querySelectorAll("#hitter_grid [data-team-group]");
+    groups.forEach((group) => {
+        const visibleCards = Array.from(group.querySelectorAll(".hitter-chip"))
+            .filter((c) => c.style.display !== "none");
+        const hasVisible = visibleCards.length > 0;
+        group.style.display = hasVisible ? "grid" : "none";
+        const team = group.getAttribute("data-team-group");
+        const title = Array.from(titles).find((t) => t.getAttribute("data-team") === team);
+        if (title) title.style.display = hasVisible ? "block" : "none";
+    });
+}
+
+function swingDurationBand(seconds) {
+    const s = Number(seconds || 0);
+    if (s < 0.80) return "lt080";
+    if (s < 0.90) return "080_090";
+    if (s < 1.00) return "090_100";
+    return "gte100";
+}
+
+function applyDurationFilter() {
+    const all = document.getElementById("dur_all");
+    const checkedBands = Array.from(document.querySelectorAll(".dur_band:checked")).map((e) => e.value);
+    if (all && all.checked) {
+        document.querySelectorAll(".dur_band").forEach((e) => { e.checked = false; });
+    } else if (checkedBands.length > 0 && all) {
+        all.checked = false;
+    } else if (all && !all.checked && checkedBands.length === 0) {
+        all.checked = true;
+    }
+
+    const useAll = all ? all.checked : true;
+    const active = new Set(Array.from(document.querySelectorAll(".dur_band:checked")).map((e) => e.value));
+    const rows = document.querySelectorAll("#swings_table tbody tr");
+    rows.forEach((row) => {
+        const s = Number(row.getAttribute("data-swing-seconds") || 0);
+        const band = swingDurationBand(s);
+        const show = useAll || active.has(band);
+        row.style.display = show ? "" : "none";
+    });
+}
+
+async function copyPoseData(swingId) {
+    try {
+        const r = await fetch(`/swing/pose-data?id=${swingId}`);
+        const data = await r.json();
+        if (!r.ok || !data.ok || !data.pose_data) {
+            alert(data && data.error ? data.error : "No pose data available.");
+            return;
+        }
+        await navigator.clipboard.writeText(data.pose_data);
+        alert("Pose data copied.");
+    } catch (e) {
+        alert("Failed to copy pose data.");
+    }
+}
+
+(() => {
+    const chart = document.getElementById("duration_chart");
+    if (!chart) return;
+    const series = [{% if summary %}{% for v in summary.series_desc %}{{ "%.6f"|format(v) }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}];
+    if (!series.length) return;
+
+    const ctx = chart.getContext("2d");
+    const W = chart.width;
+    const H = chart.height;
+    const pad = { l: 40, r: 12, t: 12, b: 24 };
+    const pw = W - pad.l - pad.r;
+    const ph = H - pad.t - pad.b;
+    const minV = Math.min(...series);
+    const maxV = Math.max(...series);
+    const top = maxV + ((maxV - minV) * 0.06 || 0.015);
+    const bot = Math.max(0, minV - ((maxV - minV) * 0.04 || 0.01));
+    const yScale = ph / Math.max(1e-6, top - bot);
+    const toY = (v) => pad.t + ((top - v) * yScale);
+
+    ctx.fillStyle = "#101010";
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "#303030";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, pad.t);
+    ctx.lineTo(pad.l, H - pad.b);
+    ctx.lineTo(W - pad.r, H - pad.b);
+    ctx.stroke();
+
+    const avg = series.reduce((a, b) => a + b, 0) / series.length;
+    ctx.strokeStyle = "#6e6e6e";
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(pad.l, toY(avg));
+    ctx.lineTo(W - pad.r, toY(avg));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const gap = 1;
+    const barW = Math.max(1, Math.floor((pw - (series.length - 1) * gap) / Math.max(1, series.length)));
+    let x = pad.l;
+    for (let i = 0; i < series.length; i += 1) {
+        const v = series[i];
+        const y = toY(v);
+        const y0 = toY(bot);
+        const h = Math.max(1, y0 - y);
+        ctx.fillStyle = (v >= avg) ? "#41d1ff" : "#2d7fa0";
+        ctx.fillRect(x, y, barW, h);
+        x += barW + gap;
+    }
+
+    ctx.fillStyle = "#d7d7d7";
+    ctx.font = "11px monospace";
+    ctx.fillText(top.toFixed(3) + "s", 4, pad.t + 4);
+    ctx.fillText(bot.toFixed(3) + "s", 4, H - pad.b - 2);
+    ctx.fillText("Newest", pad.l, H - 8);
+    ctx.fillText("Oldest", W - 58, H - 8);
+    ctx.fillText("avg " + avg.toFixed(3) + "s", W - 128, toY(avg) - 6);
+})();
+
+filterHitters();
+applyDurationFilter();
+</script>
+
+{% endblock %}
