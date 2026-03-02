@@ -2534,10 +2534,10 @@ function buildConsensusContactCandidates(opts) {
         const hp = neighborhoodMax(hipCurve, i) / hipPeak;
         const hs = neighborhoodMax(handSpeed, i) / speedPeak;
         const kn = neighborhoodMax(knee, i) / kneePeak;
-        const strength = (0.50 * hx) + (0.25 * hp) + (0.15 * kn) + (0.10 * hs);
+        const strength = (0.35 * hx) + (0.40 * hp) + (0.15 * kn) + (0.10 * hs);
 
         // Require at least two meaningful signals around contact.
-        const signalHits = [hx, hp, kn, hs].filter((v) => v >= 0.28).length;
+        const signalHits = [hx, hp, kn, hs].filter((v) => v >= 0.24).length;
         let score = strength + (signalHits >= 2 ? 0.15 : -0.35);
 
         // Penalize very-early choices that commonly represent setup movement.
@@ -3674,12 +3674,15 @@ async function runAutodetectFromManualSeed() {
     decisionDisplaySeries = buildDecisionDisplaySeries(poseLandmarksFrames);
 
     const hipStats = evaluateHipVisibilityConsistency(poseLandmarksFrames);
-    // Hip-first only when hips are truly reliable. If not, use hand-X backup.
-    const maxMissingForReliable = Math.max(4, Math.floor(n * 0.10));
+    // Hip-first with a relaxed reliability gate so we keep using hips more often.
+    const maxMissingForReliable = Math.max(8, Math.floor(n * 0.22));
+    const minVisibleForHip = Math.max(10, Math.floor(n * 0.24));
     const hipsUsableForContact = (
-        hipStats.consistent &&
-        hipStats.visibleRatio >= 0.72 &&
-        hipStats.longestMissingRun <= maxMissingForReliable
+        hipStats.consistent || (
+            hipStats.visibleCount >= minVisibleForHip &&
+            hipStats.visibleRatio >= 0.58 &&
+            hipStats.longestMissingRun <= maxMissingForReliable
+        )
     );
     let contactMode = "hip";
     let provisionalDecision = 0;
