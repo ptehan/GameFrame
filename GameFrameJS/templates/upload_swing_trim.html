@@ -4094,6 +4094,11 @@ async function trimAndUpload() {
         alert("Contact must be after start.");
         return;
     }
+    if (!manualSeedPoint) {
+        beginBatterPickFlow(false);
+        markerStatus.textContent = "Tap the batter in the preview, then click Finalize Swing again.";
+        return;
+    }
 
     showProgress();
     updateProgress(6, "Preparing pose data...");
