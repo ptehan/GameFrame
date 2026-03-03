@@ -2790,13 +2790,17 @@ function detectStartFrameFromLeadMotion(landmarks, leadIdx, decisionIdx, contact
             }
 
             if (sustainedStart >= 0) {
-                // Return first frame of lift onset by backtracking from sustained run.
-                const backThresh = Math.max(onsetThresh * 0.70, strongLiftThresh * 0.30);
-                for (let j = sustainedStart; j >= Math.max(winStart + 1, 1); j -= 1) {
+                // Prefer a clearly-lifting frame, not the earliest tiny movement.
+                const clearLiftLevel = Math.max(sustainLevel, strongLiftThresh * 0.78);
+                for (let j = Math.max(winStart + 1, sustainedStart); j <= Math.min(winEnd - 1, peakIdx); j += 1) {
                     const v0 = heelLift[j - 1];
                     const v1 = heelLift[j];
-                    if (![v0, v1].every(Number.isFinite)) continue;
-                    if ((v1 - v0) >= riseThresh && v0 <= backThresh && v1 > backThresh) return j;
+                    const v2 = heelLift[j + 1];
+                    if (![v0, v1, v2].every(Number.isFinite)) continue;
+                    const crossesClear = v0 < clearLiftLevel && v1 >= clearLiftLevel;
+                    const rising = (v1 - v0) >= riseThresh * 0.9;
+                    const holds = v2 >= v1 * 0.90;
+                    if (crossesClear && rising && holds) return j;
                 }
                 return sustainedStart;
             }
