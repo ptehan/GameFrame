@@ -563,6 +563,7 @@ let startRawHeelYSeries = null;
 let bodyPartPlotSeries = null;
 let poseLandmarksFrames = null;
 let manualSeedPoint = null;
+let batterTapConfirmed = false;
 let awaitingManualPick = false;
 let leadSide = "left";
 const GRAPH_W = 1000;
@@ -640,6 +641,7 @@ function hideAutodetectSplash() {
 function beginBatterPickFlow(autoRunAfterPick = false) {
     hideContactCandidates();
     awaitingManualPick = true;
+    batterTapConfirmed = false;
     pendingAutodetectAfterPick = !!autoRunAfterPick;
     markerStatus.textContent = autoRunAfterPick
         ? "Click directly on the batter to lock subject. Autodetect will start immediately."
@@ -1303,6 +1305,10 @@ async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
 ////////////////////////////////////////////////////////////
 async function loadVideo() {
     // Browser-side decode pipeline: fetch MP4, decode to per-frame ImageBitmaps for scrubbing.
+    manualSeedPoint = null;
+    batterTapConfirmed = false;
+    poseLandmarksFrames = null;
+    bodyPartPlotSeries = null;
     showProgress();
     updateProgress(5, "Fetching video...");
 
@@ -3828,6 +3834,7 @@ canvas.addEventListener("click", async (ev) => {
         x: Math.max(0, Math.min(1, nx)),
         y: Math.max(0, Math.min(1, ny)),
     };
+    batterTapConfirmed = true;
     awaitingManualPick = false;
     if (pendingAutodetectAfterPick) {
         pendingAutodetectAfterPick = false;
@@ -3979,21 +3986,34 @@ async function ensurePoseDataForFinalize() {
     if (!pose) return false;
 
     const n = frames.length;
-    const candidatesByFrame = new Array(n).fill(null);
-    for (let i = 0; i < n; i += 1) {
-        candidatesByFrame[i] = await detectAllPoseCandidatesForFrame(frames[i]);
-        if (i % 8 === 0) {
-            updateProgress(8 + (i / Math.max(1, n - 1)) * 20, `Preparing pose data ${i + 1}/${n}`);
+
+    // Fast path: track from user-selected batter tap.
+    if (manualSeedPoint) {
+        updateProgress(8, "Preparing pose data: tracking selected batter...");
+        const tracked = await trackBatterFromManualSeed(manualSeedPoint, (ratio, msg) => {
+            const pct = 8 + Math.max(0, Math.min(1, ratio)) * 20;
+            updateProgress(pct, msg || "Preparing pose data...");
+        });
+        if (tracked && tracked.some((lm) => !!lm)) {
+            poseLandmarksFrames = tracked;
         }
     }
 
-    let chosen = chooseBatterLandmarks(candidatesByFrame, n, manualSeedPoint || null);
-    if (!chosen || !chosen.some((lm) => !!lm)) {
-        chosen = chooseBatterLandmarks(candidatesByFrame, n, null);
+    // Lightweight fallback: one full-frame pose per frame (no multi-crop candidate search).
+    if (!poseLandmarksFrames || !poseLandmarksFrames.some((lm) => !!lm)) {
+        updateProgress(8, "Preparing pose data: lightweight full pass...");
+        const quick = new Array(n).fill(null);
+        for (let i = 0; i < n; i += 1) {
+            quick[i] = await runPoseOnBitmap(frames[i]);
+            if (i % 10 === 0) {
+                const pct = 8 + (i / Math.max(1, n - 1)) * 20;
+                updateProgress(pct, `Preparing pose data ${i + 1}/${n}`);
+            }
+        }
+        poseLandmarksFrames = quick;
     }
-    if (!chosen || !chosen.some((lm) => !!lm)) {
-        chosen = candidatesByFrame.map((cands) => (cands && cands.length ? cands[0] : null));
-    }
+
+    const chosen = poseLandmarksFrames || new Array(n).fill(null);
 
     poseLandmarksFrames = chosen;
     bodyPartPlotSeries = null;
@@ -4094,7 +4114,7 @@ async function trimAndUpload() {
         alert("Contact must be after start.");
         return;
     }
-    if (!manualSeedPoint) {
+    if (!batterTapConfirmed || !manualSeedPoint) {
         beginBatterPickFlow(false);
         markerStatus.textContent = "Tap the batter in the preview, then click Finalize Swing again.";
         return;
