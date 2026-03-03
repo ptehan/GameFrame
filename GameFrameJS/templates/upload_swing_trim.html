@@ -3968,6 +3968,53 @@ function buildPortraitCropSeries(landmarksSeq) {
     return smooth;
 }
 
+async function ensurePoseDataForFinalize() {
+    // Guarantee poseLandmarksFrames exists even if user skipped autodetect.
+    if (poseLandmarksFrames && poseLandmarksFrames.length === frames.length) {
+        return poseLandmarksFrames.some((lm) => !!lm);
+    }
+    if (!frames || !frames.length) return false;
+
+    const pose = await ensurePose();
+    if (!pose) return false;
+
+    const n = frames.length;
+    const candidatesByFrame = new Array(n).fill(null);
+    for (let i = 0; i < n; i += 1) {
+        candidatesByFrame[i] = await detectAllPoseCandidatesForFrame(frames[i]);
+        if (i % 8 === 0) {
+            updateProgress(8 + (i / Math.max(1, n - 1)) * 20, `Preparing pose data ${i + 1}/${n}`);
+        }
+    }
+
+    let chosen = chooseBatterLandmarks(candidatesByFrame, n, manualSeedPoint || null);
+    if (!chosen || !chosen.some((lm) => !!lm)) {
+        chosen = chooseBatterLandmarks(candidatesByFrame, n, null);
+    }
+    if (!chosen || !chosen.some((lm) => !!lm)) {
+        chosen = candidatesByFrame.map((cands) => (cands && cands.length ? cands[0] : null));
+    }
+
+    poseLandmarksFrames = chosen;
+    bodyPartPlotSeries = null;
+
+    // Build hand-speed series for CSV export if autodetect was skipped.
+    decisionSeries = new Array(n).fill(0);
+    for (let i = 1; i < n; i += 1) {
+        const prev = poseLandmarksFrames[i - 1];
+        const curr = poseLandmarksFrames[i];
+        if (!prev || !curr) continue;
+        const w0l = prev[15], w1l = curr[15];
+        const w0r = prev[16], w1r = curr[16];
+        let handSpeed = 0;
+        if (w0l && w1l) handSpeed = Math.max(handSpeed, Math.hypot(w1l.x - w0l.x, w1l.y - w0l.y));
+        if (w0r && w1r) handSpeed = Math.max(handSpeed, Math.hypot(w1r.x - w0r.x, w1r.y - w0r.y));
+        decisionSeries[i] = handSpeed;
+    }
+    decisionDisplaySeries = buildDecisionDisplaySeries(poseLandmarksFrames);
+    return poseLandmarksFrames.some((lm) => !!lm);
+}
+
 function computePortraitCropFromManualSeed(seedPoint) {
     // Fallback crop when user manually picked batter but did not run autodetect.
     if (!seedPoint || !Number.isFinite(seedPoint.x) || !Number.isFinite(seedPoint.y)) return null;
@@ -4049,6 +4096,8 @@ async function trimAndUpload() {
     }
 
     showProgress();
+    updateProgress(6, "Preparing pose data...");
+    await ensurePoseDataForFinalize();
     updateProgress(10, "Loading FFmpeg...");
 
     const ffmpeg = createFFmpeg({
