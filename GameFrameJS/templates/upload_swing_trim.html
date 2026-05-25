@@ -2,7 +2,7 @@
 {% block content %}
 
 <!-- PROGRESS BAR -->
-<div id="progress-container" style="margin-top:15px; width:360px; display:none;">
+<div id="progress-container" style="display:none;">
     <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
         <div id="progress-bar" style="height:100%; width:0%; background:#ffdd00;"></div>
     </div>
@@ -14,6 +14,9 @@
 <h2>Trim Swing Clip</h2>
 
 <p id="info">Loading video...</p>
+<p id="pose_gate_notice" style="display:none; margin-top:8px; color:#ffd27a; font-size:13px;">
+    Pose tools stay off unless the camera auto-check sees a side view facing the hitter's chest.
+</p>
 
 
 
@@ -36,6 +39,13 @@
     align-items: flex-start;
     gap: 18px;
     flex-wrap: wrap;
+}
+#trim_workspace,
+h2,
+#info,
+#pose_gate_notice,
+#autodetect_splash {
+    display: none !important;
 }
 .trim-preview-pane {
     display: inline-flex;
@@ -91,6 +101,12 @@
 .trim-row-2 {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.trim-row-1 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     margin-top: 8px;
 }
@@ -244,6 +260,9 @@
     width: 100%;
     margin: 0;
 }
+.trim-workspace.is-minimized {
+    display: none;
+}
 .frame-modal-controls input[type="range"].frame-modal-slider {
     width: 100% !important;
     height: 34px;
@@ -294,7 +313,7 @@
 }
 </style>
 
-    <div class="trim-workspace">
+    <div id="trim_workspace" class="trim-workspace is-minimized">
     <div class="trim-preview-pane">
         <!-- PREVIEW -->
         <div class="trim-preview-canvas-wrap">
@@ -329,8 +348,9 @@
     <div class="trim-controls-pane">
         <div class="trim-row-2">
             <button id="open_help_btn" class="trim-btn">Help</button>
-            <button id="build_charts_btn" class="trim-btn">Autodetect</button>
+            <button id="repick_batter_btn" class="trim-btn">Re-pick Batter</button>
         </div>
+        <button id="build_charts_btn" class="trim-btn" style="display:none;" aria-hidden="true">Autodetect</button>
 
         <!-- MARKERS -->
         <div class="trim-row-3" style="margin-top:12px;">
@@ -398,15 +418,26 @@
                 <button id="frame_modal_next_btn" class="trim-icon-btn" title="Next Frame" aria-label="Next Frame">&#9654;</button>
             </div>
             <div class="trim-row-3" style="margin-top:8px;">
-                <button id="frame_modal_goto_start_btn" class="trim-btn">Go to Start</button>
-                <button id="frame_modal_goto_decision_btn" class="trim-btn">Go to Decision</button>
-                <button id="frame_modal_goto_contact_btn" class="trim-btn">Go to Contact</button>
-            </div>
-            <div class="trim-row-3" style="margin-top:8px;">
                 <button id="frame_modal_set_start_btn" class="trim-btn">Set Start</button>
                 <button id="frame_modal_set_decision_btn" class="trim-btn">Set Decision</button>
                 <button id="frame_modal_set_contact_btn" class="trim-btn">Set Contact</button>
             </div>
+            <div class="trim-row-3" style="margin-top:8px;">
+                <button id="frame_modal_goto_start_btn" class="trim-btn">Go to Start</button>
+                <button id="frame_modal_goto_decision_btn" class="trim-btn">Go to Decision</button>
+                <button id="frame_modal_goto_contact_btn" class="trim-btn">Go to Contact</button>
+            </div>
+            <div class="trim-row-2" style="margin-top:8px;">
+                <button id="frame_modal_finalize_btn" class="trim-btn">Finalize Swing</button>
+                <button id="frame_modal_help_btn" class="trim-btn">Help</button>
+            </div>
+            <div id="frame_modal_progress" style="display:none; margin-top:8px;">
+                <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
+                    <div id="frame_modal_progress_bar" style="height:100%; width:0%; background:#ffdd00;"></div>
+                </div>
+                <div id="frame_modal_progress_label" style="margin-top:6px; font-size:13px;">Working...</div>
+            </div>
+            <div id="frame_modal_status" style="margin-top:8px; font-weight:bold; min-height:22px;"></div>
         </div>
     </div>
 </div>
@@ -419,13 +450,12 @@
         </div>
         <div style="padding:6px 2px 2px 2px;">
             <ol style="margin:0 0 10px 18px; line-height:1.45;">
-                <li>Use <strong>Autodetect</strong> to suggest frames, or set them manually.</li>
-                <li>For autodetect: click <strong>Autodetect</strong>, then click the hitter in the preview.</li>
-                <li>Choose the contact frame that looks right.</li>
-                <li>Manual Start: first move (front foot lift, or first lateral hip move in a no-stride swing).</li>
+                <li>Scrub frame by frame until Start, Decision, and Contact look right.</li>
+                <li>Manual Start: first move, usually front foot lift or the first clear lateral move in a no-stride swing.</li>
                 <li>Manual Decision: when the hands launch.</li>
-                <li>Manual Contact: where the bat would hit the ball.</li>
-                <li>Finalize when Start, Decision, and Contact look correct.</li>
+                <li>Manual Contact: where the bat would meet the ball.</li>
+                <li>Use <strong>Show Stick Figure</strong> and <strong>Show Graphs + CSV</strong> when you want pose visualization.</li>
+                <li>Finalize when all three markers look correct.</li>
             </ol>
         </div>
     </div>
@@ -481,6 +511,8 @@ const SID         = "{{ sid }}";
 const TEAM_ID     = "{{ team_id }}";
 const HITTER_ID   = "{{ hitter_id }}";
 const DESCRIPTION = "{{ description }}";
+const AUTO_CAMERA_VIEW_SIDE_CHEST = "side_hitter_chest";
+const AUTO_CAMERA_VIEW_OTHER = "other";
 
 let frames = [];
 let fps = 30;
@@ -495,13 +527,16 @@ const BASE_SIZE = 320;
 const slider  = document.getElementById("frame_slider");
 const canvas  = document.getElementById("preview");
 const ctx     = canvas.getContext("2d");
+const trimWorkspace = document.getElementById("trim_workspace");
 const info    = document.getElementById("info");
 const markerStatus = document.getElementById("marker_status");
 const swingDurationStatus = document.getElementById("swing_duration_status");
+const poseGateNotice = document.getElementById("pose_gate_notice");
 const analyticsPanel = document.getElementById("analytics_panel");
 const toggleAnalyticsBtn = document.getElementById("toggle_analytics_btn");
 const buildChartsBtn = document.getElementById("build_charts_btn");
 const openHelpBtn = document.getElementById("open_help_btn");
+const repickBatterBtn = document.getElementById("repick_batter_btn");
 const closeHelpBtn = document.getElementById("close_help_btn");
 const swingHelpModal = document.getElementById("swing_help_modal");
 const stickCanvas = document.getElementById("stick_canvas");
@@ -525,6 +560,12 @@ const frameModalGotoContactBtn = document.getElementById("frame_modal_goto_conta
 const frameModalSetStartBtn = document.getElementById("frame_modal_set_start_btn");
 const frameModalSetDecisionBtn = document.getElementById("frame_modal_set_decision_btn");
 const frameModalSetContactBtn = document.getElementById("frame_modal_set_contact_btn");
+const frameModalFinalizeBtn = document.getElementById("frame_modal_finalize_btn");
+const frameModalHelpBtn = document.getElementById("frame_modal_help_btn");
+const frameModalProgress = document.getElementById("frame_modal_progress");
+const frameModalProgressBar = document.getElementById("frame_modal_progress_bar");
+const frameModalProgressLabel = document.getElementById("frame_modal_progress_label");
+const frameModalStatus = document.getElementById("frame_modal_status");
 const contactCandidatesPanel = document.getElementById("contact_candidates_panel");
 const contactCandidateBtn1 = document.getElementById("contact_candidate_1");
 const contactCandidateBtn2 = document.getElementById("contact_candidate_2");
@@ -539,12 +580,14 @@ const contactCandidatesRepickBtn = document.getElementById("contact_candidates_r
 let showStickFigure = false;
 let autodetectRunning = false;
 let pendingAutodetectAfterPick = false;
+let pendingFinalizeAfterPick = false;
 let pendingContactChoices = [];
 let pendingAutodetectContext = null;
 let scrubActive = false;
 let scrubLastX = 0;
 let scrubFrameFloat = 0;
 let frameModalOpen = false;
+let referencePoseGuide = null;
 
 let analysisFrames = null;
 let graphReady = false;
@@ -562,10 +605,18 @@ let startRawHipSeries = null;
 let startRawHeelYSeries = null;
 let bodyPartPlotSeries = null;
 let poseLandmarksFrames = null;
+let poseQualitySummary = null;
 let manualSeedPoint = null;
 let batterTapConfirmed = false;
 let awaitingManualPick = false;
+let finalizeRunning = false;
 let leadSide = "left";
+let poseViewVerification = {
+    status: "unknown",
+    score: null,
+    reasons: [],
+    metrics: null,
+};
 const GRAPH_W = 1000;
 const GRAPH_H = 220;
 
@@ -601,16 +652,27 @@ const POSE_LANDMARK_NAMES = [
 // PROGRESS
 ////////////////////////////////////////////////////////////
 function showProgress() {
-    document.getElementById("progress-container").style.display = "block";
+    const main = document.getElementById("progress-container");
+    if (main) main.style.display = "block";
+    if (frameModalProgress) frameModalProgress.style.display = "block";
 }
 
 function hideProgress() {
-    document.getElementById("progress-container").style.display = "none";
+    const main = document.getElementById("progress-container");
+    if (main) main.style.display = "none";
+    if (frameModalProgress) frameModalProgress.style.display = "none";
 }
 
 function updateProgress(pct, msg = "") {
-    document.getElementById("progress-bar").style.width = pct + "%";
-    if (msg) document.getElementById("progress-label").innerText = msg;
+    const mainBar = document.getElementById("progress-bar");
+    const mainLabel = document.getElementById("progress-label");
+    if (mainBar) mainBar.style.width = pct + "%";
+    if (frameModalProgressBar) frameModalProgressBar.style.width = pct + "%";
+    if (msg) {
+        if (mainLabel) mainLabel.innerText = msg;
+        if (frameModalProgressLabel) frameModalProgressLabel.innerText = msg;
+        if (frameModalStatus) frameModalStatus.textContent = msg;
+    }
 }
 
 function updateSwingDurationDisplay() {
@@ -630,7 +692,7 @@ function updateSwingDurationDisplay() {
 
 function showAutodetectSplash() {
     if (!autodetectSplash) return;
-    autodetectSplash.style.display = "none";
+    autodetectSplash.style.display = "block";
 }
 
 function hideAutodetectSplash() {
@@ -638,15 +700,103 @@ function hideAutodetectSplash() {
     autodetectSplash.style.display = "none";
 }
 
-function beginBatterPickFlow(autoRunAfterPick = false) {
+function beginBatterPickFlow(autoRunAfterPick = false, autoFinalizeAfterPick = false) {
     hideContactCandidates();
+    resetPoseViewVerification();
+    poseLandmarksFrames = null;
+    poseQualitySummary = null;
     awaitingManualPick = true;
     batterTapConfirmed = false;
     pendingAutodetectAfterPick = !!autoRunAfterPick;
-    markerStatus.textContent = autoRunAfterPick
-        ? "Click directly on the batter to lock subject. Autodetect will start immediately."
-        : "Click directly on the batter to lock subject.";
+    pendingFinalizeAfterPick = !!autoFinalizeAfterPick;
+    markerStatus.textContent = autoFinalizeAfterPick
+        ? "Click directly on the batter to lock subject. Save will start immediately."
+        : (autoRunAfterPick
+            ? "Click directly on the batter to lock subject. Autodetect will start immediately."
+            : "Click directly on the batter to lock subject.");
     if (buildChartsBtn && autoRunAfterPick) buildChartsBtn.textContent = "Click Batter In Preview";
+}
+
+function poseViewIsApproved() {
+    return poseViewVerification.status === "approved";
+}
+
+function currentDetectedCameraView() {
+    return poseViewIsApproved() ? AUTO_CAMERA_VIEW_SIDE_CHEST : AUTO_CAMERA_VIEW_OTHER;
+}
+
+function resetPoseViewVerification() {
+    poseViewVerification = {
+        status: "unknown",
+        score: null,
+        reasons: [],
+        metrics: null,
+    };
+    if (poseGateNotice) poseGateNotice.style.display = "none";
+    if (analyticsPanel) analyticsPanel.style.display = "none";
+    if (toggleAnalyticsBtn) toggleAnalyticsBtn.textContent = "Show Graphs + CSV";
+    if (stickCanvas) stickCanvas.style.display = "none";
+}
+
+function updatePoseViewGateNotice() {
+    if (!poseGateNotice) return;
+    if (poseViewVerification.status === "rejected") {
+        const reason = poseViewVerification.reasons && poseViewVerification.reasons.length
+            ? ` ${poseViewVerification.reasons.join("; ")}.`
+            : "";
+        poseGateNotice.textContent = `Pose tools are off because the camera check did not look like a side view facing the hitter's chest.${reason}`;
+        poseGateNotice.style.display = "block";
+        return;
+    }
+    if (poseViewVerification.status === "approved") {
+        poseGateNotice.textContent = "Camera angle verified for pose tools.";
+        poseGateNotice.style.display = "block";
+        return;
+    }
+    poseGateNotice.textContent = "Pose tools stay off unless the camera auto-check sees a side view facing the hitter's chest.";
+    poseGateNotice.style.display = "none";
+}
+
+function applyPoseFeatureGate() {
+    updatePoseViewGateNotice();
+    if (poseViewVerification.status === "rejected") {
+        if (autodetectSplash) autodetectSplash.style.display = "none";
+        if (analyticsPanel) analyticsPanel.style.display = "none";
+    }
+}
+
+async function loadReferencePoseGuide() {
+    try {
+        const q = new URLSearchParams();
+        if (HITTER_ID) q.set("hitter_id", String(HITTER_ID));
+        else if (TEAM_ID) q.set("team_id", String(TEAM_ID));
+        const r = await fetch(`/swing/reference-guide?${q.toString()}`);
+        const data = await r.json();
+        if (!r.ok || !data.ok || !data.guide) {
+            referencePoseGuide = null;
+            return;
+        }
+        referencePoseGuide = {
+            count: Number(data.count || 0),
+            contactRatio: Number(data.guide.contact_ratio),
+            decisionToContactFrames: Number(data.guide.decision_to_contact_frames),
+            startToContactFrames: Number(data.guide.start_to_contact_frames),
+        };
+    } catch (_) {
+        referencePoseGuide = null;
+    }
+}
+
+function rankContactCandidatesByReference(candidates, n) {
+    const clean = (candidates || [])
+        .filter((v) => Number.isFinite(v))
+        .map((v) => Math.round(v));
+    if (!clean.length || !referencePoseGuide || !Number.isFinite(referencePoseGuide.contactRatio) || !Number.isFinite(n) || n <= 1) {
+        return clean;
+    }
+    const target = Math.max(0, Math.min(n - 1, Math.round(referencePoseGuide.contactRatio * (n - 1))));
+    clean.sort((a, b) => Math.abs(a - target) - Math.abs(b - target));
+    return clean;
 }
 
 function ensurePose() {
@@ -857,6 +1007,111 @@ function rearShoulderMetrics(lm) {
         shoulderMidY,
         hipMidY,
         sideOffset,
+    };
+}
+
+function evaluateSideChestViewFromLandmarks(landmarks) {
+    const seq = Array.isArray(landmarks) ? landmarks : [];
+    if (!seq.length) {
+        return {
+            approved: false,
+            score: 0,
+            reasons: ["No batter track found"],
+            metrics: null,
+        };
+    }
+
+    const earlyEnd = Math.max(8, Math.min(seq.length, Math.floor(seq.length * 0.4)));
+    let measured = 0;
+    let setupCount = 0;
+    let strongSetupCount = 0;
+    let sideOffsetSum = 0;
+    let shoulderRatioSum = 0;
+    let hipRatioSum = 0;
+    let torsoVisibleCount = 0;
+
+    for (let i = 0; i < earlyEnd; i += 1) {
+        const lm = seq[i];
+        const m = rearShoulderMetrics(lm);
+        if (!m) continue;
+        measured += 1;
+        sideOffsetSum += m.sideOffset;
+
+        const ls = lm[11], rs = lm[12], lh = lm[23], rh = lm[24];
+        const shoulderMidY = (ls.y + rs.y) * 0.5;
+        const hipMidY = (lh.y + rh.y) * 0.5;
+        const torsoH = Math.max(0.001, hipMidY - shoulderMidY);
+        const shoulderW = Math.abs(ls.x - rs.x);
+        const hipW = Math.abs(lh.x - rh.x);
+        shoulderRatioSum += shoulderW / torsoH;
+        hipRatioSum += hipW / torsoH;
+        torsoVisibleCount += 1;
+
+        const isSetup =
+            m.handsTogether <= 0.34 &&
+            m.nearRearShoulder <= 0.30 &&
+            m.wristMidY <= (m.hipMidY - 0.02) &&
+            m.sideOffset >= 0.02;
+        const isStrongSetup =
+            m.handsTogether <= 0.25 &&
+            m.nearRearShoulder <= 0.22 &&
+            m.wristMidY <= (m.shoulderMidY + 0.12) &&
+            m.wristMidY <= (m.hipMidY - 0.06) &&
+            m.sideOffset >= 0.04 &&
+            (shoulderW / torsoH) >= 0.32 &&
+            (hipW / torsoH) >= 0.20;
+
+        if (isSetup) setupCount += 1;
+        if (isStrongSetup) strongSetupCount += 1;
+    }
+
+    const visibleRatio = measured / Math.max(1, earlyEnd);
+    const setupRatio = setupCount / Math.max(1, measured);
+    const strongSetupRatio = strongSetupCount / Math.max(1, measured);
+    const avgSideOffset = measured ? (sideOffsetSum / measured) : 0;
+    const avgShoulderRatio = torsoVisibleCount ? (shoulderRatioSum / torsoVisibleCount) : 0;
+    const avgHipRatio = torsoVisibleCount ? (hipRatioSum / torsoVisibleCount) : 0;
+
+    let score = 0;
+    const reasons = [];
+    if (visibleRatio >= 0.7) score += 25;
+    else if (visibleRatio >= 0.45) score += 14;
+    else reasons.push("not enough clear early torso frames");
+
+    if (setupRatio >= 0.35) score += 28;
+    else if (setupRatio >= 0.2) score += 18;
+    else reasons.push("early setup does not look chest-facing enough");
+
+    if (strongSetupRatio >= 0.15) score += 20;
+    else if (strongSetupRatio >= 0.08) score += 12;
+    else reasons.push("rear-shoulder hand load is weak");
+
+    if (avgShoulderRatio >= 0.34) score += 15;
+    else if (avgShoulderRatio >= 0.26) score += 9;
+    else reasons.push("shoulders look too narrow for a chest-facing side view");
+
+    if (avgHipRatio >= 0.18) score += 7;
+    else if (avgHipRatio >= 0.13) score += 4;
+
+    if (avgSideOffset >= 0.045) score += 5;
+    else if (avgSideOffset >= 0.028) score += 3;
+    else reasons.push("hand position stays too centered");
+
+    const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+    return {
+        approved: finalScore >= 60,
+        score: finalScore,
+        reasons,
+        metrics: {
+            measured,
+            earlyEnd,
+            visibleRatio,
+            setupRatio,
+            strongSetupRatio,
+            avgSideOffset,
+            avgShoulderRatio,
+            avgHipRatio,
+        },
     };
 }
 
@@ -1300,6 +1555,66 @@ async function trackBatterFromManualSeed(manualSeed, onProgress = null) {
     return chosen;
 }
 
+async function ensurePoseViewApproved(options = {}) {
+    const {
+        statusPrefix = "Checking camera angle",
+        keepProgressOpen = false,
+    } = options;
+    if (poseViewIsApproved() && poseLandmarksFrames && poseLandmarksFrames.length === frames.length) {
+        return { ok: true, landmarks: poseLandmarksFrames, verification: poseViewVerification };
+    }
+    if (!manualSeedPoint) {
+        return { ok: false, landmarks: null, verification: poseViewVerification };
+    }
+
+    showProgress();
+    updateProgress(4, `${statusPrefix}: loading pose model...`);
+    await resetPoseInstance();
+    const pose = await ensurePose();
+    if (!pose) {
+        poseViewVerification = {
+            status: "rejected",
+            score: 0,
+            reasons: ["pose library unavailable"],
+            metrics: null,
+        };
+        poseLandmarksFrames = null;
+        applyPoseFeatureGate();
+        if (!keepProgressOpen) hideProgress();
+        return { ok: false, landmarks: null, verification: poseViewVerification };
+    }
+
+    updateProgress(14, `${statusPrefix}: tracking batter...`);
+    const tracked = await trackBatterFromManualSeed(manualSeedPoint, (ratio) => {
+        const pct = 14 + Math.max(0, Math.min(1, ratio)) * 46;
+        updateProgress(pct, `${statusPrefix}: tracking batter...`);
+    });
+    if (!tracked) {
+        poseViewVerification = {
+            status: "rejected",
+            score: 0,
+            reasons: ["could not lock onto the hitter"],
+            metrics: null,
+        };
+        poseLandmarksFrames = null;
+        applyPoseFeatureGate();
+        if (!keepProgressOpen) hideProgress();
+        return { ok: false, landmarks: null, verification: poseViewVerification };
+    }
+
+    const verification = evaluateSideChestViewFromLandmarks(tracked);
+    poseViewVerification = {
+        status: verification.approved ? "approved" : "rejected",
+        score: verification.score,
+        reasons: verification.reasons || [],
+        metrics: verification.metrics || null,
+    };
+    poseLandmarksFrames = verification.approved ? tracked : null;
+    applyPoseFeatureGate();
+    if (!keepProgressOpen) hideProgress();
+    return { ok: verification.approved, landmarks: tracked, verification: poseViewVerification };
+}
+
 ////////////////////////////////////////////////////////////
 // LOAD + DECODE VIDEO
 ////////////////////////////////////////////////////////////
@@ -1307,13 +1622,28 @@ async function loadVideo() {
     // Browser-side decode pipeline: fetch MP4, decode to per-frame ImageBitmaps for scrubbing.
     manualSeedPoint = null;
     batterTapConfirmed = false;
+    pendingFinalizeAfterPick = false;
     poseLandmarksFrames = null;
+    poseQualitySummary = null;
     bodyPartPlotSeries = null;
+    resetPoseViewVerification();
     showProgress();
     updateProgress(5, "Fetching video...");
 
     const resp = await fetch(`/raw/swing?id=${TEMP_ID}`);
     const buf  = await resp.arrayBuffer();
+    let meta = { fps: 0, frame_count: 0, duration: 0 };
+    try {
+        const metaResp = await fetch(`/api/raw/swing-meta?id=${TEMP_ID}`);
+        const metaJson = await metaResp.json();
+        if (metaResp.ok && metaJson && metaJson.ok) {
+            meta = {
+                fps: Number(metaJson.fps || 0),
+                frame_count: Number(metaJson.frame_count || 0),
+                duration: Number(metaJson.duration || 0),
+            };
+        }
+    } catch (_) {}
 
     updateProgress(20, "Preparing video...");
 
@@ -1323,34 +1653,87 @@ async function loadVideo() {
     video.muted = true;
     video.playsInline = true;
 
-    await video.play().catch(() => {});
-    updateProgress(35, "Initializing decoder...");
-
-    const stream = video.captureStream();
-    const track  = stream.getVideoTracks()[0];
-    if (!track) {
-        info.textContent = "Cannot decode this MP4.";
-        return;
+    await new Promise((resolve, reject) => {
+        const onLoaded = () => {
+            cleanup();
+            resolve();
+        };
+        const onError = () => {
+            cleanup();
+            reject(new Error("Video metadata unavailable."));
+        };
+        const cleanup = () => {
+            video.removeEventListener("loadedmetadata", onLoaded);
+            video.removeEventListener("error", onError);
+        };
+        video.addEventListener("loadedmetadata", onLoaded, { once: true });
+        video.addEventListener("error", onError, { once: true });
+    }).catch(() => {});
+    if (video.readyState < 2) {
+        await new Promise((resolve) => {
+            const onLoadedData = () => {
+                video.removeEventListener("loadeddata", onLoadedData);
+                resolve();
+            };
+            video.addEventListener("loadeddata", onLoadedData, { once: true });
+        }).catch(() => {});
     }
 
-    const processor = new MediaStreamTrackProcessor(track);
-    const reader    = processor.readable.getReader();
+    updateProgress(35, "Initializing decoder...");
 
     frames = [];
+    fps = meta.fps > 0 ? meta.fps : Math.max(1, Number({{ fps|tojson }} || 0) || 30);
+    const duration = Number.isFinite(video.duration) && video.duration > 0
+        ? Number(video.duration)
+        : Number(meta.duration || 0);
+    let exactFrameCount = Number(meta.frame_count || 0);
+    if (!exactFrameCount && fps > 0 && duration > 0) {
+        exactFrameCount = Math.max(1, Math.round(fps * duration));
+    }
+    if (!exactFrameCount) {
+        exactFrameCount = Math.max(1, Math.round(duration * 30));
+    }
     updateProgress(40, "Decoding frames...");
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    const captureCanvas = document.createElement("canvas");
+    const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: false });
+    captureCanvas.width = Math.max(1, video.videoWidth || 1);
+    captureCanvas.height = Math.max(1, video.videoHeight || 1);
 
-        const bmp = await createImageBitmap(value);
+    const seekTo = (timeSec) => new Promise((resolve, reject) => {
+        const onSeeked = () => {
+            cleanup();
+            resolve();
+        };
+        const onError = () => {
+            cleanup();
+            reject(new Error("Seek failed"));
+        };
+        const cleanup = () => {
+            video.removeEventListener("seeked", onSeeked);
+            video.removeEventListener("error", onError);
+        };
+        video.addEventListener("seeked", onSeeked, { once: true });
+        video.addEventListener("error", onError, { once: true });
+        const clamped = Math.max(0, Math.min(duration > 0 ? Math.max(0, duration - 0.0005) : timeSec, timeSec));
+        if (Math.abs((video.currentTime || 0) - clamped) < 0.00025) {
+            cleanup();
+            resolve();
+            return;
+        }
+        video.currentTime = clamped;
+    });
+
+    for (let fi = 0; fi < exactFrameCount; fi += 1) {
+        const frameTime = fps > 0 ? (fi / fps) : (duration > 0 ? (fi / exactFrameCount) * duration : 0);
+        await seekTo(frameTime);
+        captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+        const bmp = await createImageBitmap(captureCanvas);
         frames.push(bmp);
-        value.close();
-
-        if (frames.length % 20 === 0) {
+        if (fi % 10 === 0 || fi === exactFrameCount - 1) {
             updateProgress(
-                Math.min(40 + (frames.length / 5000) * 40, 80),
-                `Decoding... ${frames.length} frames`
+                Math.min(40 + ((fi + 1) / Math.max(1, exactFrameCount)) * 40, 80),
+                `Decoding... ${fi + 1}/${exactFrameCount} frames`
             );
         }
     }
@@ -1362,12 +1745,14 @@ async function loadVideo() {
 
     updateProgress(100, "Done!");
     hideProgress();
+    openFrameModal();
 
-    info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
+    info.textContent = `Frames: ${frames.length} | FPS: ${fps.toFixed(2)}`;
     updateSwingDurationDisplay();
     hideAutodetectSplash();
-    markerStatus.textContent = "Manual trim is ready. Click Autodetect if you want analysis.";
+    markerStatus.textContent = "Manual trim is ready. Use Show Stick Figure or Show Graphs + CSV for pose analysis.";
     if (buildChartsBtn) buildChartsBtn.textContent = "Autodetect";
+    loadReferencePoseGuide();
 }
 
 ////////////////////////////////////////////////////////////
@@ -1572,23 +1957,33 @@ function updateFrameModalUI(i) {
     }
 }
 
+function openFrameModal() {
+    frameModalOpen = true;
+    frameModal.style.display = "flex";
+    if (trimWorkspace) trimWorkspace.classList.add("is-minimized");
+    syncFrameModalStatus();
+    updateFrameModalUI(+slider.value || 0);
+}
+
+function closeFrameModal() {
+    frameModalOpen = false;
+    frameModal.style.display = "none";
+}
+
+function syncFrameModalStatus() {
+    if (!frameModalStatus || !markerStatus) return;
+    frameModalStatus.textContent = markerStatus.textContent || "";
+}
+
 function setupFrameModal() {
     if (!openFrameModalBtn || !frameModal || !frameModalCanvas) return;
-    openFrameModalBtn.onclick = () => {
-        frameModalOpen = true;
-        frameModal.style.display = "flex";
-        updateFrameModalUI(+slider.value || 0);
-    };
+    openFrameModalBtn.onclick = () => openFrameModal();
     if (closeFrameModalBtn) {
-        closeFrameModalBtn.onclick = () => {
-            frameModalOpen = false;
-            frameModal.style.display = "none";
-        };
+        closeFrameModalBtn.onclick = () => closeFrameModal();
     }
     frameModal.onclick = (ev) => {
         if (ev.target === frameModal) {
-            frameModalOpen = false;
-            frameModal.style.display = "none";
+            closeFrameModal();
         }
     };
     if (frameModalSlider) {
@@ -1602,6 +1997,22 @@ function setupFrameModal() {
     if (frameModalSetStartBtn) frameModalSetStartBtn.onclick = () => document.getElementById("set_start_btn").click();
     if (frameModalSetDecisionBtn) frameModalSetDecisionBtn.onclick = () => document.getElementById("set_decision_btn").click();
     if (frameModalSetContactBtn) frameModalSetContactBtn.onclick = () => document.getElementById("set_contact_btn").click();
+    if (frameModalFinalizeBtn) {
+        frameModalFinalizeBtn.onclick = async () => {
+            if (!manualSeedPoint) {
+                beginBatterPickFlow(false, true);
+                markerStatus.textContent = "Click directly on the batter in the full screen frame to save.";
+                syncFrameModalStatus();
+                return;
+            }
+            await trimAndUpload();
+        };
+    }
+    if (frameModalHelpBtn) frameModalHelpBtn.onclick = () => document.getElementById("open_help_btn").click();
+    if (markerStatus && frameModalStatus && typeof MutationObserver !== "undefined") {
+        const observer = new MutationObserver(() => syncFrameModalStatus());
+        observer.observe(markerStatus, { childList: true, characterData: true, subtree: true });
+    }
 }
 
 function drawStickFigureFrame(i) {
@@ -1734,6 +2145,110 @@ function median(values) {
     const mid = Math.floor(nums.length / 2);
     if (nums.length % 2 === 1) return nums[mid];
     return (nums[mid - 1] + nums[mid]) * 0.5;
+}
+
+function evaluatePoseQuality(landmarks) {
+    if (!landmarks || !landmarks.length) {
+        return {
+            usable: false,
+            label: "weak",
+            score: 0,
+            metrics: {
+                coverage: 0,
+                coreCoverage: 0,
+                avgConfidence: 0,
+                avgJitter: 1,
+                geometryBadRate: 1,
+            },
+        };
+    }
+
+    const requiredIdx = [11, 12, 23, 24, 15, 16];
+    let framesWithPose = 0;
+    let framesWithCore = 0;
+    let confidenceSum = 0;
+    let confidenceCount = 0;
+    let jitterSum = 0;
+    let jitterCount = 0;
+    let badGeometry = 0;
+    let prevCenter = null;
+
+    for (const lm of landmarks) {
+        if (!lm) continue;
+        framesWithPose += 1;
+
+        let coreOk = true;
+        for (const idx of requiredIdx) {
+            const p = lm[idx];
+            if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+                coreOk = false;
+                continue;
+            }
+            const conf = Number.isFinite(p.score) ? p.score : 0.5;
+            confidenceSum += conf;
+            confidenceCount += 1;
+            if (conf < 0.35) coreOk = false;
+        }
+        if (coreOk) framesWithCore += 1;
+
+        const ls = lm[11], rs = lm[12], lh = lm[23], rh = lm[24];
+        if (ls && rs && lh && rh) {
+            const shoulderWidth = Math.hypot(ls.x - rs.x, ls.y - rs.y);
+            const hipWidth = Math.hypot(lh.x - rh.x, lh.y - rh.y);
+            if (shoulderWidth < 0.02 || hipWidth < 0.02 || shoulderWidth > 0.45 || hipWidth > 0.45) {
+                badGeometry += 1;
+            }
+
+            const center = {
+                x: (ls.x + rs.x + lh.x + rh.x) * 0.25,
+                y: (ls.y + rs.y + lh.y + rh.y) * 0.25,
+            };
+            if (prevCenter) {
+                const jump = Math.hypot(center.x - prevCenter.x, center.y - prevCenter.y);
+                jitterSum += jump;
+                jitterCount += 1;
+            }
+            prevCenter = center;
+        }
+    }
+
+    const n = landmarks.length;
+    const coverage = framesWithPose / Math.max(1, n);
+    const coreCoverage = framesWithCore / Math.max(1, n);
+    const avgConfidence = confidenceCount ? confidenceSum / confidenceCount : 0;
+    const avgJitter = jitterCount ? jitterSum / jitterCount : 1;
+    const geometryBadRate = framesWithPose ? badGeometry / framesWithPose : 1;
+
+    let score = 100;
+    score -= (1 - coverage) * 35;
+    score -= (1 - coreCoverage) * 30;
+    score -= Math.max(0, 0.6 - avgConfidence) * 50;
+    score -= Math.max(0, avgJitter - 0.03) * 400;
+    score -= geometryBadRate * 20;
+    score = Math.max(0, Math.round(score));
+
+    let label = "weak";
+    if (score >= 80 && coverage >= 0.72 && coreCoverage >= 0.58) label = "good";
+    else if (score >= 60 && coverage >= 0.6 && coreCoverage >= 0.45) label = "usable";
+
+    return {
+        usable: label !== "weak",
+        label,
+        score,
+        metrics: {
+            coverage,
+            coreCoverage,
+            avgConfidence,
+            avgJitter,
+            geometryBadRate,
+        },
+    };
+}
+
+function formatPoseQualitySummary(summary) {
+    if (!summary) return "pose quality unavailable";
+    const m = summary.metrics || {};
+    return `Pose quality ${summary.label} (${summary.score}/100, coverage=${Math.round((m.coverage || 0) * 100)}%, core=${Math.round((m.coreCoverage || 0) * 100)}%, conf=${(m.avgConfidence || 0).toFixed(2)}, jitter=${(m.avgJitter || 0).toFixed(3)})`;
 }
 
 function savgolSmooth(series, windowSize = 5) {
@@ -2350,6 +2865,11 @@ function evaluateHipVisibilityConsistency(landmarks) {
     const maxMissingAllowed = Math.max(6, Math.floor(n * 0.14));
     const consistent = visibleRatio >= 0.62 && longestMissingRun <= maxMissingAllowed;
     return { consistent, visibleCount, visibleRatio, longestMissingRun };
+}
+
+function refreshPoseQualitySummary() {
+    poseQualitySummary = evaluatePoseQuality(poseLandmarksFrames || []);
+    return poseQualitySummary;
 }
 
 function detectContactCandidatesFromHandPairX(landmarks, minContactIdx = 0, count = 3) {
@@ -3424,6 +3944,10 @@ document.getElementById("goto_contact_btn").onclick = () => {
 
 if (toggleAnalyticsBtn && analyticsPanel) {
     toggleAnalyticsBtn.onclick = () => {
+        if (poseViewVerification.status === "rejected") {
+            markerStatus.textContent = "Camera check did not approve pose graphs for this swing.";
+            return;
+        }
         const isHidden = analyticsPanel.style.display === "none" || !analyticsPanel.style.display;
         analyticsPanel.style.display = isHidden ? "block" : "none";
         toggleAnalyticsBtn.textContent = isHidden ? "Hide Graphs + CSV" : "Show Graphs + CSV";
@@ -3432,6 +3956,12 @@ if (toggleAnalyticsBtn && analyticsPanel) {
 
 if (toggleStickBtn && stickCanvas) {
     toggleStickBtn.onclick = () => {
+        if (!poseViewIsApproved()) {
+            markerStatus.textContent = poseViewVerification.status === "rejected"
+                ? "Camera check did not approve stick figure view for this swing."
+                : "Build pose data first. The camera angle will be checked automatically.";
+            return;
+        }
         if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
             markerStatus.textContent = "Build charts first to generate stick figure data.";
             return;
@@ -3495,6 +4025,10 @@ async function applySelectedContactFrame(selectedContactFrame) {
         const minDecision = Math.max(0, contactFrame - 7);
         const maxDecision = Math.max(minDecision, contactFrame - 4);
         const defaultDecision = Math.max(minDecision, Math.min(maxDecision, contactFrame - 5));
+        if (referencePoseGuide && Number.isFinite(referencePoseGuide.decisionToContactFrames)) {
+            const guided = Math.round(contactFrame - referencePoseGuide.decisionToContactFrames);
+            decisionFrame = guided;
+        }
         if (!Number.isFinite(decisionFrame)) {
             decisionFrame = defaultDecision;
         } else {
@@ -3589,32 +4123,23 @@ async function runAutodetectFromManualSeed() {
     }
 
     autodetectRunning = true;
+    pendingFinalizeAfterPick = false;
     hideContactCandidates();
-    showProgress();
-    updateProgress(2, "Autodetect: initializing...");
-    markerStatus.textContent = "Building pose charts...";
-    await resetPoseInstance();
-    updateProgress(8, "Autodetect: loading pose model...");
-    const pose = await ensurePose();
-    if (!pose) {
-        markerStatus.textContent = "Pose library unavailable.";
-        hideProgress();
-        autodetectRunning = false;
-        return;
-    }
-    markerStatus.textContent = `Building pose charts... tracking locked batter ${manualSeedPoint.frame + 1}/${frames.length}`;
-    updateProgress(14, "Autodetect: tracking batter...");
-    const landmarks = await trackBatterFromManualSeed(manualSeedPoint, (ratio, msg) => {
-        const pct = 14 + Math.max(0, Math.min(1, ratio)) * 46;
-        updateProgress(pct, msg);
+    markerStatus.textContent = "Checking camera angle...";
+    const approved = await ensurePoseViewApproved({
+        statusPrefix: "Camera check",
+        keepProgressOpen: true,
     });
-    if (!landmarks) {
-        markerStatus.textContent = "Manual batter lock failed. Re-pick batter on frame 0-5.";
+    if (!approved.ok || !approved.landmarks) {
+        markerStatus.textContent = "Camera check failed for pose tools. Manual trim can still be saved without pose data.";
         hideProgress();
         autodetectRunning = false;
         return;
     }
-    poseLandmarksFrames = landmarks;
+    poseLandmarksFrames = approved.landmarks;
+    updateProgress(64, "Autodetect: building signals...");
+    markerStatus.textContent = `Building pose charts... tracking locked batter ${manualSeedPoint.frame + 1}/${frames.length}`;
+    const poseQuality = refreshPoseQualitySummary();
 
     const n = poseLandmarksFrames.length;
     contactSeries = new Array(n).fill(null);
@@ -3651,7 +4176,6 @@ async function runAutodetectFromManualSeed() {
         contactSeries[0] = computeContactSignal(poseLandmarksFrames[0]);
     }
 
-    updateProgress(64, "Autodetect: building signals...");
     for (let i = 1; i < n; i += 1) {
         const prev = poseLandmarksFrames[i - 1];
         const curr = poseLandmarksFrames[i];
@@ -3777,7 +4301,12 @@ async function runAutodetectFromManualSeed() {
             contactFrame = contactCandidates[0];
         }
     }
+    contactCandidates = rankContactCandidatesByReference(contactCandidates, n);
+    if (contactCandidates.length) contactFrame = contactCandidates[0];
     decisionFrame = provisionalDecision;
+    if (referencePoseGuide && Number.isFinite(referencePoseGuide.decisionToContactFrames)) {
+        decisionFrame = Math.round(contactFrame - referencePoseGuide.decisionToContactFrames);
+    }
 
     updateProgress(90, "Autodetect: preparing contact choices...");
     ensureGraphCanvas("graph-contact", "analytics_graph_anchor");
@@ -3798,7 +4327,10 @@ async function runAutodetectFromManualSeed() {
         contactMode,
         hipsUsableForContact,
     });
-    markerStatus.textContent = `Autodetect ready: choose contact frame (${contactCandidates.map((v) => Math.round(v)).join(" / ")}), then decision/start will be set.`;
+    const guideTag = referencePoseGuide && Number.isFinite(referencePoseGuide.contactRatio)
+        ? ` guided by ${Math.max(0, Math.round(referencePoseGuide.count || 0))} saved swing(s)`
+        : "";
+    markerStatus.textContent = `Autodetect ready: choose contact frame (${contactCandidates.map((v) => Math.round(v)).join(" / ")}), then decision/start will be set${guideTag}. ${formatPoseQualitySummary(poseQuality)}.`;
     updateProgress(100, "Autodetect complete.");
     setTimeout(() => hideProgress(), 350);
     autodetectRunning = false;
@@ -3811,31 +4343,46 @@ if (startPickFlowBtn) {
     };
 }
 
-canvas.addEventListener("click", async (ev) => {
-    if (!awaitingManualPick || !frames.length || autodetectRunning) return;
+if (repickBatterBtn) {
+    repickBatterBtn.onclick = () => {
+        hideAutodetectSplash();
+        beginBatterPickFlow(false, false);
+    };
+}
+
+async function handleBatterPickOnCanvas(canvasEl, offsetX, offsetY) {
+    if (!canvasEl || !awaitingManualPick || !frames.length || autodetectRunning) return;
     const i = +slider.value || 0;
     const f = frames[i];
     if (!f) return;
 
-    const size = canvas.width;
-    const scale = Math.min(size / f.width, size / f.height);
+    const dstW = canvasEl.width;
+    const dstH = canvasEl.height;
+    const scale = Math.min(dstW / f.width, dstH / f.height);
     const w = Math.round(f.width * scale);
     const h = Math.round(f.height * scale);
-    const drawX = Math.round((size - w) / 2);
-    const drawY = Math.round((size - h) / 2);
+    const drawX = Math.round((dstW - w) / 2);
+    const drawY = Math.round((dstH - h) / 2);
 
-    const rx = ev.offsetX;
-    const ry = ev.offsetY;
-    const nx = (rx - drawX) / Math.max(1, w);
-    const ny = (ry - drawY) / Math.max(1, h);
+    const nx = (offsetX - drawX) / Math.max(1, w);
+    const ny = (offsetY - drawY) / Math.max(1, h);
 
     manualSeedPoint = {
         frame: i,
         x: Math.max(0, Math.min(1, nx)),
         y: Math.max(0, Math.min(1, ny)),
     };
+    poseLandmarksFrames = null;
+    poseQualitySummary = null;
+    resetPoseViewVerification();
     batterTapConfirmed = true;
     awaitingManualPick = false;
+    if (pendingFinalizeAfterPick) {
+        pendingFinalizeAfterPick = false;
+        markerStatus.textContent = `Batter locked at frame ${i}. Saving...`;
+        await trimAndUpload();
+        return;
+    }
     if (pendingAutodetectAfterPick) {
         pendingAutodetectAfterPick = false;
         markerStatus.textContent = `Batter locked at frame ${i}. Starting autodetect...`;
@@ -3843,7 +4390,23 @@ canvas.addEventListener("click", async (ev) => {
         return;
     }
     markerStatus.textContent = `Batter locked at frame ${i}. Manual trim is ready.`;
+}
+
+canvas.addEventListener("click", async (ev) => {
+    await handleBatterPickOnCanvas(canvas, ev.offsetX, ev.offsetY);
 });
+if (frameModalCanvas) {
+    frameModalCanvas.addEventListener("click", async (ev) => {
+        const rect = frameModalCanvas.getBoundingClientRect();
+        const scaleX = frameModalCanvas.width / Math.max(1, rect.width);
+        const scaleY = frameModalCanvas.height / Math.max(1, rect.height);
+        await handleBatterPickOnCanvas(
+            frameModalCanvas,
+            (ev.clientX - rect.left) * scaleX,
+            (ev.clientY - rect.top) * scaleY
+        );
+    });
+}
 
 if (buildChartsBtn) {
     buildChartsBtn.onclick = async () => {
@@ -3881,6 +4444,7 @@ const PORTRAIT_OUT_W = 720;
 const PORTRAIT_OUT_H = 1280;
 const PORTRAIT_ASPECT = PORTRAIT_OUT_W / PORTRAIT_OUT_H;
 const PORTRAIT_SOURCE_BYPASS_TOL = 0.06;
+const ENABLE_BATTER_PORTRAIT_CROP = false;
 
 async function bitmapToPNG(bitmap) {
     const off = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -3915,10 +4479,10 @@ function computePortraitCropFromLandmarks(lm, fallback = null) {
     const boxW = Math.max(0.001, maxX - minX);
     const boxH = Math.max(0.001, maxY - minY);
     const cx = (minX + maxX) * 0.5;
-    const cy = ((minY + maxY) * 0.5) - (boxH * 0.08);
+    const cy = ((minY + maxY) * 0.5) - (boxH * 0.03);
 
     // Keep batter framed with more context (less zoomed-in) in portrait output.
-    let cropH = Math.max(boxH * 2.15, 0.68);
+    let cropH = Math.max(boxH * 2.55, 0.78);
     let cropW = cropH * PORTRAIT_ASPECT;
     cropW = Math.max(cropW, boxW * 1.95);
     cropH = cropW / PORTRAIT_ASPECT;
@@ -3976,6 +4540,7 @@ function buildPortraitCropSeries(landmarksSeq) {
 }
 
 async function ensurePoseDataForFinalize() {
+    if (!poseViewIsApproved()) return false;
     // Guarantee poseLandmarksFrames exists even if user skipped autodetect.
     if (poseLandmarksFrames && poseLandmarksFrames.length === frames.length) {
         return poseLandmarksFrames.some((lm) => !!lm);
@@ -3990,9 +4555,9 @@ async function ensurePoseDataForFinalize() {
     // Fast path: track from user-selected batter tap.
     if (manualSeedPoint) {
         updateProgress(8, "Preparing pose data: tracking selected batter...");
-        const tracked = await trackBatterFromManualSeed(manualSeedPoint, (ratio, msg) => {
+        const tracked = await trackBatterFromManualSeed(manualSeedPoint, (ratio) => {
             const pct = 8 + Math.max(0, Math.min(1, ratio)) * 20;
-            updateProgress(pct, msg || "Preparing pose data...");
+            updateProgress(pct, "Preparing pose data...");
         });
         if (tracked && tracked.some((lm) => !!lm)) {
             poseLandmarksFrames = tracked;
@@ -4016,6 +4581,7 @@ async function ensurePoseDataForFinalize() {
     const chosen = poseLandmarksFrames || new Array(n).fill(null);
 
     poseLandmarksFrames = chosen;
+    refreshPoseQualitySummary();
     bodyPartPlotSeries = null;
 
     // Build hand-speed series for CSV export if autodetect was skipped.
@@ -4038,7 +4604,7 @@ async function ensurePoseDataForFinalize() {
 function computePortraitCropFromManualSeed(seedPoint) {
     // Fallback crop when user manually picked batter but did not run autodetect.
     if (!seedPoint || !Number.isFinite(seedPoint.x) || !Number.isFinite(seedPoint.y)) return null;
-    let cropH = 0.76;
+    let cropH = 0.86;
     let cropW = cropH * PORTRAIT_ASPECT;
     const maxW = 0.95;
     const maxH = 0.95;
@@ -4049,7 +4615,7 @@ function computePortraitCropFromManualSeed(seedPoint) {
     cropH *= scale;
 
     const cx = Math.max(0, Math.min(1, seedPoint.x));
-    const cy = Math.max(0, Math.min(1, seedPoint.y + 0.06));
+    const cy = Math.max(0, Math.min(1, seedPoint.y + 0.09));
     let x = cx - cropW * 0.5;
     let y = cy - cropH * 0.5;
     x = Math.max(0, Math.min(1 - cropW, x));
@@ -4114,132 +4680,168 @@ async function trimAndUpload() {
         alert("Contact must be after start.");
         return;
     }
-    if (!batterTapConfirmed || !manualSeedPoint) {
-        beginBatterPickFlow(false);
-        markerStatus.textContent = "Tap the batter in the preview, then click Finalize Swing again.";
+    if (finalizeRunning) return;
+    if (!manualSeedPoint) {
+        beginBatterPickFlow(false, true);
+        markerStatus.textContent = "Tap the batter in the preview to save.";
         return;
     }
 
-    showProgress();
-    updateProgress(6, "Preparing pose data...");
-    await ensurePoseDataForFinalize();
-    updateProgress(10, "Loading FFmpeg...");
-
-    const ffmpeg = createFFmpeg({
-        corePath: "/static/js/ffmpeg/ffmpeg-core.js",
-        log: true
-    });
-    await ffmpeg.load();
-
-    const contactBufferFrames = Math.max(0, Math.round((Number(fps) || 0) * 0.5));
-    const libraryEndFrame = Math.min(frames.length - 1, contactFrame + contactBufferFrames);
-    const selected = frames.slice(startFrame, contactFrame + 1);
-    const librarySelected = frames.slice(startFrame, libraryEndFrame + 1);
-    const selectedLandmarks = poseLandmarksFrames
-        ? poseLandmarksFrames.slice(startFrame, contactFrame + 1)
-        : [];
-    const librarySelectedLandmarks = poseLandmarksFrames
-        ? poseLandmarksFrames.slice(startFrame, libraryEndFrame + 1)
-        : [];
-    const usePosePortraitCrop = librarySelectedLandmarks.some((lm) => !!lm);
-    const manualSeedCrop = (!usePosePortraitCrop) ? computePortraitCropFromManualSeed(manualSeedPoint) : null;
-    const portraitCrops = usePosePortraitCrop
-        ? buildPortraitCropSeries(librarySelectedLandmarks)
-        : (manualSeedCrop ? librarySelected.map(() => manualSeedCrop) : null);
-    const usePortraitCrop = !!portraitCrops;
-
-    updateProgress(25, usePortraitCrop ? "Preparing portrait frames..." : "Preparing frames...");
-
-    const trimmedDecision = decisionFrame - startFrame;
-
-    for (let i = 0; i < librarySelected.length; i++) {
-        const framePng = usePortraitCrop
-            ? await bitmapToPortraitPNG(librarySelected[i], portraitCrops ? portraitCrops[i] : null)
-            : await bitmapToPNG(librarySelected[i]);
-        ffmpeg.FS("writeFile", `f_${i}.png`,
-            framePng);
-        if (i % 5 === 0) {
-            updateProgress(25 + (i / librarySelected.length) * 30,
-                `Preparing frame ${i}/${librarySelected.length}`);
+    finalizeRunning = true;
+    try {
+        showProgress();
+        const approved = await ensurePoseViewApproved({
+            statusPrefix: "Camera check",
+            keepProgressOpen: true,
+        });
+        if (approved.ok) {
+            updateProgress(62, "Preparing pose data...");
+            await ensurePoseDataForFinalize();
+        } else {
+            updateProgress(62, "Skipping pose data for this camera angle...");
         }
-    }
-
-    updateProgress(60, "Encoding MP4...");
-
-    await ffmpeg.run(
-        "-framerate", String(fps),
-        "-i", "f_%d.png",
-        "-frames:v", String(selected.length),
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-preset", "fast",
-        "-crf", "23",
-        "out.mp4"
-    );
-
-    await ffmpeg.run(
-        "-framerate", String(fps),
-        "-i", "f_%d.png",
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-preset", "fast",
-        "-crf", "23",
-        "library_out.mp4"
-    );
-
-    updateProgress(90, "Uploading...");
-
-    const out = ffmpeg.FS("readFile", "out.mp4");
-    const blob = new Blob([out.buffer], { type: "video/mp4" });
-    const libraryOut = ffmpeg.FS("readFile", "library_out.mp4");
-    const libraryBlob = new Blob([libraryOut.buffer], { type: "video/mp4" });
-
-    const form = new FormData();
-    form.append("sid", SID);
-    form.append("team_id", TEAM_ID);
-    form.append("hitter_id", HITTER_ID);
-    form.append("description", DESCRIPTION);
-    form.append("fps", fps);
-    form.append("decision_frame", trimmedDecision);
-    let poseData = "";
-    if (poseLandmarksFrames && poseLandmarksFrames.length) {
-        try {
-            poseData = (buildPoseTableCSV().csv || "").trim();
-        } catch (e) {
-            poseData = "";
+        if (poseViewIsApproved() && poseQualitySummary && poseQualitySummary.label === "weak") {
+            markerStatus.textContent = `Finalize is using weak pose data. ${formatPoseQualitySummary(poseQualitySummary)}.`;
         }
-    }
-    form.append("pose_data", poseData);
-    form.append("file", blob, "trimmed_swing.mp4");
-    form.append("library_file", libraryBlob, "library_swing.mp4");
+        updateProgress(68, "Loading FFmpeg...");
 
-    const r = await fetch(`/upload/swing/finalize`, {
-        method: "POST",
-        body: form
-    });
+        const ffmpeg = createFFmpeg({
+            corePath: "/static/js/ffmpeg/ffmpeg-core.js",
+            log: true
+        });
+        await ffmpeg.load();
 
-    if (r.ok) {
-        updateProgress(100, "Saved!");
-        window.location.href = `/library?sid=${SID}&type=swing`;
-    } else {
-        alert("Upload failed.");
+        const contactBufferFrames = Math.max(0, Math.round((Number(fps) || 0) * 0.5));
+        const libraryEndFrame = Math.min(frames.length - 1, contactFrame + contactBufferFrames);
+        const selected = frames.slice(startFrame, contactFrame + 1);
+        const librarySelected = frames.slice(startFrame, libraryEndFrame + 1);
+        const selectedLandmarks = poseLandmarksFrames
+            ? poseLandmarksFrames.slice(startFrame, contactFrame + 1)
+            : [];
+        const librarySelectedLandmarks = poseLandmarksFrames
+            ? poseLandmarksFrames.slice(startFrame, libraryEndFrame + 1)
+            : [];
+        const usePosePortraitCrop = librarySelectedLandmarks.some((lm) => !!lm);
+        const manualSeedCrop = (!usePosePortraitCrop) ? computePortraitCropFromManualSeed(manualSeedPoint) : null;
+        const portraitCrops = usePosePortraitCrop
+            ? buildPortraitCropSeries(librarySelectedLandmarks)
+            : (manualSeedCrop ? librarySelected.map(() => manualSeedCrop) : null);
+        const usePortraitCrop = false;
+
+        updateProgress(25, "Preparing frames...");
+
+        const trimmedDecision = decisionFrame - startFrame;
+
+        for (let i = 0; i < librarySelected.length; i++) {
+            const framePng = usePortraitCrop
+                ? await bitmapToPortraitPNG(librarySelected[i], portraitCrops ? portraitCrops[i] : null)
+                : await bitmapToPNG(librarySelected[i]);
+            ffmpeg.FS("writeFile", `f_${i}.png`,
+                framePng);
+            if (i % 5 === 0) {
+                updateProgress(25 + (i / librarySelected.length) * 30,
+                    `Preparing frame ${i}/${librarySelected.length}`);
+            }
+        }
+
+        updateProgress(60, "Encoding MP4...");
+
+        await ffmpeg.run(
+            "-framerate", String(fps),
+            "-i", "f_%d.png",
+            "-frames:v", String(selected.length),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-preset", "fast",
+            "-crf", "23",
+            "out.mp4"
+        );
+
+        await ffmpeg.run(
+            "-framerate", String(fps),
+            "-i", "f_%d.png",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-preset", "fast",
+            "-crf", "23",
+            "library_out.mp4"
+        );
+
+        updateProgress(90, "Uploading...");
+
+        const out = ffmpeg.FS("readFile", "out.mp4");
+        const blob = new Blob([out.buffer], { type: "video/mp4" });
+        const libraryOut = ffmpeg.FS("readFile", "library_out.mp4");
+        const libraryBlob = new Blob([libraryOut.buffer], { type: "video/mp4" });
+
+        const form = new FormData();
+        form.append("sid", SID);
+        form.append("team_id", TEAM_ID);
+        form.append("hitter_id", HITTER_ID);
+        form.append("description", DESCRIPTION);
+        form.append("camera_view", currentDetectedCameraView());
+        form.append("fps", fps);
+        form.append("frame_count", selected.length);
+        form.append("swing_seconds", fps > 0 ? Math.max(0, (selected.length - 1) / fps) : 0);
+        form.append("decision_frame", trimmedDecision);
+        let poseData = "";
+        if (poseViewIsApproved() && poseLandmarksFrames && poseLandmarksFrames.length) {
+            try {
+                poseData = (buildPoseTableCSV().csv || "").trim();
+            } catch (e) {
+                poseData = "";
+            }
+        }
+        form.append("pose_data", poseData);
+        form.append("file", blob, "trimmed_swing.mp4");
+        form.append("library_file", libraryBlob, "library_swing.mp4");
+
+        const r = await fetch(`/upload/swing/finalize`, {
+            method: "POST",
+            body: form
+        });
+
+        if (r.ok) {
+            updateProgress(100, "Saved!");
+            window.location.href = `/library?sid=${SID}&type=swing`;
+        } else {
+            alert("Upload failed.");
+        }
+    } catch (e) {
+        alert("Finalize failed.");
+        console.error(e);
+    } finally {
+        finalizeRunning = false;
     }
 }
 
 document.getElementById("finalize_btn").onclick = trimAndUpload;
 
 document.getElementById("export_pose_table_btn").onclick = () => {
-    if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
-        markerStatus.textContent = "No pose data yet. Click Autodetect first.";
+    if (!poseViewIsApproved()) {
+        markerStatus.textContent = poseViewVerification.status === "rejected"
+            ? "Camera check did not approve pose CSV export for this swing."
+            : "Build pose data first. The camera angle will be checked automatically.";
         return;
     }
+    if (!poseLandmarksFrames || !poseLandmarksFrames.length) {
+        markerStatus.textContent = "No pose data yet. Build pose data first with Show Graphs + CSV or finalize.";
+        return;
+    }
+    refreshPoseQualitySummary();
     const out = buildPoseTableCSV();
     const ta = document.getElementById("pose_table_output");
     ta.value = out.csv;
-    markerStatus.textContent = `Pose table ready: frames 0-${out.exportEnd} x ${POSE_LANDMARK_NAMES.length} landmarks.`;
+    markerStatus.textContent = `Pose table ready: frames 0-${out.exportEnd} x ${POSE_LANDMARK_NAMES.length} landmarks. ${formatPoseQualitySummary(poseQualitySummary)}.`;
 };
 
 document.getElementById("copy_pose_table_btn").onclick = async () => {
+    if (!poseViewIsApproved()) {
+        markerStatus.textContent = poseViewVerification.status === "rejected"
+            ? "Camera check did not approve pose CSV copy for this swing."
+            : "Build pose data first. The camera angle will be checked automatically.";
+        return;
+    }
     const ta = document.getElementById("pose_table_output");
     if (!ta.value) {
         markerStatus.textContent = "Nothing to copy yet. Click Export Pose Table CSV.";
@@ -4247,11 +4849,14 @@ document.getElementById("copy_pose_table_btn").onclick = async () => {
     }
     try {
         await navigator.clipboard.writeText(ta.value);
-        markerStatus.textContent = "Pose table copied to clipboard.";
+        refreshPoseQualitySummary();
+        markerStatus.textContent = `Pose table copied to clipboard. ${formatPoseQualitySummary(poseQualitySummary)}.`;
     } catch (e) {
         markerStatus.textContent = "Clipboard copy failed. Select and copy the text area manually.";
     }
 };
+
+applyPoseFeatureGate();
 
 ////////////////////////////////////////////////////////////
 // START

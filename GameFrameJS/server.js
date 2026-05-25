@@ -29,6 +29,7 @@ app.use("/static", express.static(path.join(ROOT, "static")));
 const env = nunjucks.configure(path.join(ROOT, "templates"), {
   autoescape: true,
   express: app,
+  noCache: true,
 });
 env.addFilter("tojson", (v) => new nunjucks.runtime.SafeString(JSON.stringify(v)));
 env.addFilter("format", (fmt, value) => {
@@ -78,6 +79,19 @@ function isSupportedImportUrl(raw) {
 
 function importKind(raw) {
   return raw === "pitch" ? "pitch" : "swing";
+}
+
+const SWING_CAMERA_VIEW_SIDE_CHEST = "side_hitter_chest";
+
+function normalizeSwingCameraView(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === SWING_CAMERA_VIEW_SIDE_CHEST) return SWING_CAMERA_VIEW_SIDE_CHEST;
+  if (value === "other") return "other";
+  return "unknown";
+}
+
+function swingCameraViewAllowsPose(cameraView) {
+  return normalizeSwingCameraView(cameraView) === SWING_CAMERA_VIEW_SIDE_CHEST;
 }
 
 function downloadExternalVideo(url, outputPath) {
@@ -150,6 +164,158 @@ function ffprobeMeta(filePath) {
   }
 }
 
+function swingEventSeconds(frameCount, fps, fallback = null) {
+  const n = Number(frameCount || 0);
+  const f = Number(fps || 0);
+  if (Number.isFinite(n) && n > 1 && Number.isFinite(f) && f > 0) {
+    return (n - 1) / f;
+  }
+  if (Number.isFinite(n) && n === 1 && Number.isFinite(f) && f > 0) {
+    return 0;
+  }
+  const fb = Number(fallback);
+  return Number.isFinite(fb) ? fb : null;
+}
+
+function parseCsvLine(line) {
+  const out = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "\"") {
+      if (inQuotes && line[i + 1] === "\"") {
+        cur += "\"";
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function parsePoseCsvRows(poseData) {
+  const lines = String(poseData || "").split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return { headers: [], rows: [] };
+  const headers = parseCsvLine(lines[0]).map((h) => String(h || "").trim());
+  const rows = [];
+  for (let i = 1; i < lines.length; i += 1) {
+    const cols = parseCsvLine(lines[i]);
+    const row = {};
+    for (let h = 0; h < headers.length; h += 1) row[headers[h]] = cols[h] == null ? "" : cols[h];
+    rows.push(row);
+  }
+  return { headers, rows };
+}
+
+function poseGuideFromRows(rows) {
+  if (!rows || !rows.length) return null;
+  const n = rows.length;
+  const toNum = (v) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : null;
+  };
+  let startIdx = -1;
+  let decisionIdx = -1;
+  let contactIdx = -1;
+  let handSpeedPeak = 0;
+  let visibleFrames = 0;
+  for (let i = 0; i < n; i += 1) {
+    const r = rows[i];
+    if (startIdx < 0 && Number(r.event_swing_start || 0) === 1) startIdx = i;
+    if (decisionIdx < 0 && Number(r.event_decision || 0) === 1) decisionIdx = i;
+    if (contactIdx < 0 && Number(r.event_contact || 0) === 1) contactIdx = i;
+    const hs = toNum(r.hand_speed);
+    if (hs != null) handSpeedPeak = Math.max(handSpeedPeak, hs);
+    const shoulder1x = toNum(r.shoulder1_x);
+    const shoulder2x = toNum(r.shoulder2_x);
+    const hip1x = toNum(r.hip1_x);
+    const hip2x = toNum(r.hip2_x);
+    if ([shoulder1x, shoulder2x, hip1x, hip2x].every((v) => v != null)) visibleFrames += 1;
+  }
+  const contactRatio = n > 1 && contactIdx >= 0 ? contactIdx / (n - 1) : null;
+  const decisionToContactFrames = (decisionIdx >= 0 && contactIdx >= 0) ? (contactIdx - decisionIdx) : null;
+  const startToContactFrames = (startIdx >= 0 && contactIdx >= 0) ? (contactIdx - startIdx) : null;
+  return {
+    frameCount: n,
+    startIdx,
+    decisionIdx,
+    contactIdx,
+    contactRatio,
+    decisionToContactFrames,
+    startToContactFrames,
+    handSpeedPeak,
+    torsoVisibleRatio: n > 0 ? (visibleFrames / n) : 0,
+  };
+}
+
+function evaluatePoseDataQuality(poseData) {
+  const parsed = parsePoseCsvRows(poseData);
+  const rows = parsed.rows;
+  if (!rows.length) {
+    return {
+      score: 0,
+      status: "bad",
+      reasons: ["No pose rows found"],
+      metrics: null,
+    };
+  }
+  const g = poseGuideFromRows(rows);
+  const reasons = [];
+  let score = 0;
+
+  if (g.frameCount >= 35) score += 15;
+  else if (g.frameCount >= 20) score += 8;
+  else reasons.push("Too few frames");
+
+  if (g.torsoVisibleRatio >= 0.75) score += 20;
+  else if (g.torsoVisibleRatio >= 0.55) score += 12;
+  else reasons.push("Low torso landmark visibility");
+
+  const eventsOrdered = g.startIdx >= 0 && g.decisionIdx >= 0 && g.contactIdx >= 0
+    && g.startIdx < g.decisionIdx && g.decisionIdx < g.contactIdx;
+  if (eventsOrdered) score += 20;
+  else reasons.push("Start/decision/contact markers are missing or out of order");
+
+  if (g.decisionToContactFrames != null) {
+    if (g.decisionToContactFrames >= 3 && g.decisionToContactFrames <= 10) score += 15;
+    else if (g.decisionToContactFrames >= 2 && g.decisionToContactFrames <= 14) score += 8;
+    else reasons.push("Decision-to-contact gap looks unrealistic");
+  }
+
+  if (g.startToContactFrames != null) {
+    if (g.startToContactFrames >= 8 && g.startToContactFrames <= 35) score += 15;
+    else if (g.startToContactFrames >= 5 && g.startToContactFrames <= 45) score += 8;
+    else reasons.push("Start-to-contact span looks unrealistic");
+  }
+
+  if (g.contactRatio != null) {
+    if (g.contactRatio >= 0.45 && g.contactRatio <= 0.92) score += 10;
+    else reasons.push("Contact appears too early/late in clip");
+  }
+
+  if (g.handSpeedPeak > 0.01) score += 5;
+  else reasons.push("Hand-speed signal is too flat");
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+  let status = "bad";
+  if (finalScore >= 65) status = "good";
+  else if (finalScore >= 45) status = "review";
+  return {
+    score: finalScore,
+    status,
+    reasons,
+    metrics: g,
+  };
+}
+
 function extractLastFrameJpeg(filePath) {
   try {
     const r = runCmd("ffmpeg", [
@@ -220,6 +386,7 @@ function ensureBaseSchema() {
       team_id INTEGER,
       hitter_id INTEGER,
       description TEXT,
+      camera_view TEXT,
       clip_blob BLOB,
       library_clip_blob BLOB,
       thumb BLOB,
@@ -255,6 +422,9 @@ function ensureSchemaCompatibility() {
   ensureColumn("swing_clips", "frame_count", "INTEGER");
   ensureColumn("swing_clips", "swing_seconds", "REAL");
   ensureColumn("swing_clips", "library_clip_blob", "BLOB");
+  ensureColumn("swing_clips", "pose_quality_score", "REAL");
+  ensureColumn("swing_clips", "pose_quality_status", "TEXT");
+  ensureColumn("swing_clips", "camera_view", "TEXT");
 }
 
 function safeIdent(name) {
@@ -648,12 +818,15 @@ app.get("/library/data", async (req, res) => {
     const hasSwingSeconds = hasColumn("swing_clips", "swing_seconds");
     const hasFrameCount = hasColumn("swing_clips", "frame_count");
     const hasPoseData = hasColumn("swing_clips", "pose_data");
+    const hasPoseQualityScore = hasColumn("swing_clips", "pose_quality_score");
+    const hasPoseQualityStatus = hasColumn("swing_clips", "pose_quality_status");
     const rows = db.prepare(`
       SELECT sc.id, sc.description, sc.created_at, t.name AS team_name, h.name AS hitter_name, sc.fps,
              ${hasSwingSeconds ? "sc.swing_seconds" : "NULL"} AS swing_seconds,
              ${hasFrameCount ? "sc.frame_count" : "NULL"} AS frame_count,
              ${hasPoseData ? "CASE WHEN sc.pose_data IS NOT NULL AND TRIM(sc.pose_data) <> '' THEN 1 ELSE 0 END" : "0"} AS has_pose_data,
-             sc.clip_blob
+             ${hasPoseQualityScore ? "sc.pose_quality_score" : "NULL"} AS pose_quality_score,
+             ${hasPoseQualityStatus ? "sc.pose_quality_status" : "NULL"} AS pose_quality_status
       FROM swing_clips sc
       JOIN hitters h ON h.id = sc.hitter_id
       JOIN teams t ON t.id = h.team_id
@@ -665,16 +838,8 @@ app.get("/library/data", async (req, res) => {
       let fps = Number(r.fps || 0);
       let swingSeconds = r.swing_seconds == null ? null : Number(r.swing_seconds);
       let frameCount = r.frame_count == null ? null : Number(r.frame_count);
-      if (swingSeconds == null && frameCount != null && fps > 0) {
-        swingSeconds = frameCount / fps;
-      } else if (swingSeconds == null && r.clip_blob) {
-        const p = path.join(TMP_DIR, `gf_probe_${crypto.randomUUID()}.mp4`);
-        await fsp.writeFile(p, r.clip_blob);
-        const meta = ffprobeMeta(p);
-        await fsp.unlink(p).catch(() => {});
-        if (!frameCount && meta.frameCount > 0) frameCount = meta.frameCount;
-        if (fps <= 0 && meta.fps > 0) fps = meta.fps;
-        if (fps > 0 && frameCount && frameCount > 0) swingSeconds = frameCount / fps;
+      if (frameCount != null && fps > 0) {
+        swingSeconds = swingEventSeconds(frameCount, fps, swingSeconds);
       }
       out.push({
         type: "swing",
@@ -686,6 +851,8 @@ app.get("/library/data", async (req, res) => {
         hitter_name: r.hitter_name,
         swing_duration_seconds: swingSeconds,
         has_pose_data: Number(r.has_pose_data || 0),
+        pose_quality_score: r.pose_quality_score == null ? null : Number(r.pose_quality_score),
+        pose_quality_status: r.pose_quality_status == null ? null : String(r.pose_quality_status || ""),
         thumbnail: `/thumbnail/swing?id=${r.id}`,
         play: `/play/swing?id=${r.id}&sid=${encodeURIComponent(sid)}`,
         delete: "/library/swing/delete",
@@ -872,6 +1039,18 @@ app.get("/raw/swing", (req, res) => {
   res.type("video/mp4").sendFile(p);
 });
 
+app.get("/api/raw/swing-meta", (req, res) => {
+  const p = tempPath(req.query.id);
+  if (!fs.existsSync(p)) return res.status(404).json({ ok: false, error: "not found" });
+  const meta = ffprobeMeta(p);
+  res.json({
+    ok: true,
+    fps: Number(meta.fps || 0),
+    frame_count: Number(meta.frameCount || 0),
+    duration: Number(meta.duration || 0),
+  });
+});
+
 app.get("/import/youtube/tempfile", (req, res) => {
   const p = tempPath(req.query.temp_id);
   if (!fs.existsSync(p)) return res.status(404).send("not found");
@@ -906,19 +1085,31 @@ app.post("/upload/swing/finalize", upload.fields([{ name: "file", maxCount: 1 },
   const thumbBlob = extractLastFrameJpeg(mainFile.path);
   await fsp.unlink(mainFile.path).catch(() => {});
   if (libraryFile) await fsp.unlink(libraryFile.path).catch(() => {});
+  const cameraView = normalizeSwingCameraView(req.body.camera_view);
+  const poseData = swingCameraViewAllowsPose(cameraView) ? String(req.body.pose_data || "") : "";
+  const poseQuality = evaluatePoseDataQuality(poseData);
+  const fps = Number(req.body.fps || 0);
+  const frameCount = Number(req.body.frame_count || 0);
+  const swingSeconds = Number(req.body.swing_seconds || 0);
   db.prepare(`
     INSERT INTO swing_clips
-    (team_id, hitter_id, description, decision_frame, clip_blob, library_clip_blob, thumb, pose_data, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    (team_id, hitter_id, description, camera_view, decision_frame, clip_blob, library_clip_blob, thumb, pose_data, pose_quality_score, pose_quality_status, frame_count, swing_seconds, fps, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `).run(
     Number(req.body.team_id),
     Number(req.body.hitter_id),
     req.body.description || "",
+    cameraView,
     Number(req.body.decision_frame || 0),
     blob,
     libraryBlob,
     thumbBlob,
-    req.body.pose_data || ""
+    poseData,
+    poseData.trim() ? Number(poseQuality.score || 0) : null,
+    poseData.trim() ? String(poseQuality.status || "") : null,
+    Number.isFinite(frameCount) && frameCount > 0 ? frameCount : null,
+    Number.isFinite(swingSeconds) && swingSeconds > 0 ? swingSeconds : null,
+    Number.isFinite(fps) && fps > 0 ? fps : null
   );
   res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}`);
 });
@@ -990,14 +1181,101 @@ app.get("/swing/pose-data", (req, res) => {
   res.json({ ok: true, pose_data: row.pose_data || "" });
 });
 
+app.get("/swing/pose-quality", (req, res) => {
+  if (!hasColumn("swing_clips", "pose_data")) return res.status(404).json({ ok: false, error: "pose_data field not available." });
+  const id = Number(req.query.id);
+  const row = db.prepare(`
+    SELECT pose_data,
+           ${hasColumn("swing_clips", "pose_quality_score") ? "pose_quality_score" : "NULL"} AS pose_quality_score,
+           ${hasColumn("swing_clips", "pose_quality_status") ? "pose_quality_status" : "NULL"} AS pose_quality_status
+    FROM swing_clips
+    WHERE id=?
+  `).get(id);
+  if (!row) return res.status(404).json({ ok: false, error: "Swing not found." });
+  const poseData = String(row.pose_data || "");
+  if (!poseData.trim()) {
+    return res.json({ ok: true, score: null, status: "none", reasons: ["No pose data"], metrics: null });
+  }
+  const quality = evaluatePoseDataQuality(poseData);
+  if (hasColumn("swing_clips", "pose_quality_score") && hasColumn("swing_clips", "pose_quality_status")) {
+    db.prepare("UPDATE swing_clips SET pose_quality_score=?, pose_quality_status=? WHERE id=?")
+      .run(Number(quality.score || 0), String(quality.status || ""), id);
+  }
+  res.json({
+    ok: true,
+    score: Number(quality.score || 0),
+    status: String(quality.status || ""),
+    reasons: quality.reasons || [],
+    metrics: quality.metrics || null,
+  });
+});
+
+app.post("/swing/pose-data/delete", upload.none(), (req, res) => {
+  const id = Number(req.body.id);
+  if (!id) return res.status(400).json({ ok: false, error: "Missing id." });
+  const hasScore = hasColumn("swing_clips", "pose_quality_score");
+  const hasStatus = hasColumn("swing_clips", "pose_quality_status");
+  if (hasScore && hasStatus) {
+    db.prepare("UPDATE swing_clips SET pose_data='', pose_quality_score=NULL, pose_quality_status=NULL WHERE id=?").run(id);
+  } else {
+    db.prepare("UPDATE swing_clips SET pose_data='' WHERE id=?").run(id);
+  }
+  res.json({ ok: true });
+});
+
+app.get("/swing/reference-guide", (req, res) => {
+  const hitterId = Number(req.query.hitter_id || 0);
+  const teamId = Number(req.query.team_id || 0);
+  let where = "WHERE pose_data IS NOT NULL AND TRIM(pose_data) <> ''";
+  const args = [];
+  if (hitterId > 0) {
+    where += " AND hitter_id=?";
+    args.push(hitterId);
+  } else if (teamId > 0) {
+    where += " AND team_id=?";
+    args.push(teamId);
+  }
+  if (hasColumn("swing_clips", "pose_quality_status")) {
+    where += " AND (pose_quality_status='good' OR pose_quality_status='review')";
+  }
+  const rows = db.prepare(`
+    SELECT id, pose_data
+    FROM swing_clips
+    ${where}
+    ORDER BY created_at DESC
+    LIMIT 50
+  `).all(...args);
+  const guides = [];
+  for (const r of rows) {
+    const parsed = parsePoseCsvRows(String(r.pose_data || ""));
+    const g = poseGuideFromRows(parsed.rows || []);
+    if (!g || g.frameCount < 15 || g.contactRatio == null || g.decisionToContactFrames == null) continue;
+    guides.push(g);
+  }
+  if (!guides.length) return res.json({ ok: true, count: 0, guide: null });
+  const avg = (arr) => arr.reduce((a, b) => a + b, 0) / Math.max(1, arr.length);
+  const contactRatio = avg(guides.map((g) => g.contactRatio).filter(Number.isFinite));
+  const decisionToContactFrames = avg(guides.map((g) => g.decisionToContactFrames).filter(Number.isFinite));
+  const startToContactFrames = avg(guides.map((g) => g.startToContactFrames).filter(Number.isFinite));
+  res.json({
+    ok: true,
+    count: guides.length,
+    guide: {
+      contact_ratio: Number.isFinite(contactRatio) ? contactRatio : null,
+      decision_to_contact_frames: Number.isFinite(decisionToContactFrames) ? decisionToContactFrames : null,
+      start_to_contact_frames: Number.isFinite(startToContactFrames) ? startToContactFrames : null,
+    },
+  });
+});
+
 app.get("/api/swing_meta", async (req, res) => {
   const row = db.prepare("SELECT fps, decision_frame, swing_seconds, frame_count, clip_blob FROM swing_clips WHERE id=?").get(Number(req.query.id));
   if (!row) return res.json({ error: "bad_meta" });
   let fps = Number(row.fps || 0);
   let swingSeconds = row.swing_seconds == null ? null : Number(row.swing_seconds);
   let frameCount = row.frame_count == null ? null : Number(row.frame_count);
-  if (swingSeconds == null && frameCount != null && fps > 0) {
-    swingSeconds = frameCount / fps;
+  if (frameCount != null && fps > 0) {
+    swingSeconds = swingEventSeconds(frameCount, fps, swingSeconds);
   } else if (swingSeconds == null && row.clip_blob) {
     const p = path.join(TMP_DIR, `gf_meta_${crypto.randomUUID()}.mp4`);
     await fsp.writeFile(p, row.clip_blob);
@@ -1005,7 +1283,7 @@ app.get("/api/swing_meta", async (req, res) => {
     await fsp.unlink(p).catch(() => {});
     if (!frameCount && meta.frameCount > 0) frameCount = meta.frameCount;
     if (fps <= 0 && meta.fps > 0) fps = meta.fps;
-    if (frameCount && fps > 0) swingSeconds = frameCount / fps;
+    if (frameCount && fps > 0) swingSeconds = swingEventSeconds(frameCount, fps, swingSeconds);
   }
   res.json({
     fps,
@@ -1186,7 +1464,7 @@ app.get("/dashboard/player", async (req, res) => {
         await fsp.unlink(p).catch(() => {});
         frameCount = meta.frameCount || frameCount;
         fps = meta.fps || fps || 30;
-        swingSeconds = frameCount > 0 && fps > 0 ? frameCount / fps : 0;
+        swingSeconds = swingEventSeconds(frameCount, fps, 0) || 0;
         updateStmt.run(frameCount, fps, swingSeconds, Number(row.id));
       }
 

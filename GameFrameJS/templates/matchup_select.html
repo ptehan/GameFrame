@@ -484,7 +484,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
 
-        function compose(pitch, swing, tintColor = null) {
+        function compose(pitch, swing, tintColor = null, overlayLabel = "") {
             if (!pitch) pitch = pitchF[pitchF.length - 1];
             if (!swing) swing = swingF[swingF.length - 1];
         
@@ -506,6 +506,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             const ctx = c.getContext("2d");
             ctx.drawImage(pitchBox, 0, 0);
             ctx.drawImage(swingBox, 640, 0);
+
+            if (overlayLabel) {
+                const label = String(overlayLabel);
+                ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+                ctx.fillRect(470, 652, 340, 46);
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 28px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(label, 640, 675);
+            }
         
             return c;
         }
@@ -536,12 +547,22 @@ document.addEventListener("DOMContentLoaded", async () => {
             outFrames.push(compose(getPitch(i), finalSwing));
 
         // --------------------------------------------------------
-        // NEW: freeze final frame for 2 seconds (60 frames)
+        // End sequence:
+        // 1) hold on contact for 2 seconds
+        // 2) replay the first-move matchup frame for 3 seconds
         // --------------------------------------------------------
-        const FINAL_FREEZE = 60;
-        const lastPitch = pitchF[pitchF.length - 1];
-        for (let i = 0; i < FINAL_FREEZE; i++) {
-            outFrames.push(compose(lastPitch, finalSwing));
+        const END_CONTACT_FREEZE = 60;
+        const contactPitch = getPitch(contact);
+        const contactSwing = getSwing(contact);
+        for (let i = 0; i < END_CONTACT_FREEZE; i++) {
+            outFrames.push(compose(contactPitch, contactSwing, null, "Contact"));
+        }
+
+        const END_FIRST_MOVE_FREEZE = 90;
+        const firstMovePitch = getPitch(padCount);
+        const firstMoveSwing = swingF[0];
+        for (let i = 0; i < END_FIRST_MOVE_FREEZE; i++) {
+            outFrames.push(compose(firstMovePitch, firstMoveSwing, null, "First Move"));
         }
 
 

@@ -35,6 +35,9 @@
 }
 .trim-controls-pane {
     width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 .trim-preview-controls {
     display: flex;
@@ -128,6 +131,48 @@
     font-size: 12px;
     white-space: pre-wrap;
 }
+.trim-controls-card {
+    border: 1px solid #2f2f2f;
+    border-radius: 12px;
+    background: #111;
+    padding: 14px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+.trim-controls-title {
+    margin: 0 0 6px;
+    font-size: 16px;
+}
+.trim-controls-copy {
+    margin: 0;
+    color: #b7b7b7;
+    font-size: 13px;
+    line-height: 1.45;
+}
+.trim-primary-actions {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+}
+.trim-status-stack {
+    display: grid;
+    gap: 10px;
+}
+.trim-status-box {
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #262626;
+    background: #171717;
+    font-weight: 600;
+}
+.trim-hidden-panel {
+    display: none !important;
+}
+@media (max-width: 900px) {
+    .trim-controls-pane {
+        width: min(100%, 420px);
+    }
+}
 .frame-modal {
     position: fixed;
     inset: 0;
@@ -212,50 +257,33 @@
  </div>
 
 <div class="trim-controls-pane">
-<div class="trim-row-2">
-    <button id="pick_pitcher_btn" class="trim-btn">Pick Pitcher</button>
-    <button id="auto_plate_btn" class="trim-btn">Auto Detect Plate</button>
-</div>
-<div class="trim-row-2">
-    <button id="set_contact_btn" class="trim-btn">Set Contact Manually</button>
-    <div></div>
-</div>
-<div class="trim-row-2">
-    <button id="toggle_pose_btn" class="trim-btn">Show Pose Landmarks</button>
+<div class="trim-controls-card">
+    <h3 class="trim-controls-title">Trim Controls</h3>
+    <p class="trim-controls-copy">Use the frame scrubber or arrow buttons to move to ball contact, set the contact frame, then finalize the pitch clip.</p>
+    <div class="trim-primary-actions">
+        <button id="set_contact_btn" class="trim-btn">Set Contact Manually</button>
+    </div>
 </div>
 
-<div style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-    <label for="pitch_level">Pitch Type</label>
-    <select id="pitch_level">
-        <option value="softball35">Softball Youth (35 ft)</option>
-        <option value="softball43">Softball HS/College (43 ft)</option>
-        <option value="ll46">Little League (46 ft)</option>
-        <option value="ll50">Little League 50/70 or 50/90 (50 ft)</option>
-        <option value="baseball60" selected>Baseball Full Field (60 ft 6 in)</option>
-    </select>
-    <label for="speed_guess_mph">Speed Guess (mph)</label>
-    <input id="speed_guess_mph" type="number" min="20" max="105" step="1" value="55" style="width:74px;">
-</div>
-<div class="trim-help">
-    Contact estimate uses: frames = (58 x fps) / (mph x 1.46667), then release + frames.
-</div>
-<div class="trim-help">
-    Release detection uses: throwing-hand wrist-speed spike + arm-extension threshold.
+<div class="trim-controls-card">
+    <h3 class="trim-controls-title">Status</h3>
+    <div class="trim-status-stack">
+        <div id="marker_status" class="trim-status-box">Select the contact frame, then finalize the clip.</div>
+        <div id="upload_status" class="trim-status-box">Trim status will appear here.</div>
+    </div>
 </div>
 
-<div id="marker_status"
-     style="margin-top:10px;font-weight:bold;"></div>
-
-<div id="release_status" class="trim-release-box">Release debug: n/a</div>
-
-<button id="finalize_btn"
-        class="trim-btn"
-        style="margin-top:16px;font-size:18px;">
-    Finalize Pitch
-</button>
-
-<div id="upload_status"
-     style="margin-top:10px;font-weight:bold;"></div>
+<div class="trim-controls-card">
+    <h3 class="trim-controls-title">Finalize</h3>
+    <p class="trim-controls-copy">When the contact frame looks right, save the trimmed pitch clip.</p>
+    <div class="trim-primary-actions">
+        <button id="finalize_btn"
+                class="trim-btn"
+                style="font-size:18px;">
+            Finalize Pitch
+        </button>
+    </div>
+</div>
 
 </div>
 </div>
@@ -1401,7 +1429,9 @@ nextBtn.onclick = () => {
     drawFrame(+slider.value);
 };
 
-autoPlateBtn.onclick = autoDetectPlateFrame;
+if (autoPlateBtn) {
+    autoPlateBtn.onclick = autoDetectPlateFrame;
+}
 
 if (pickPitcherBtn) {
     pickPitcherBtn.onclick = () => {
