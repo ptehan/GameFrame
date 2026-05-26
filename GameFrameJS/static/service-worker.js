@@ -54,6 +54,18 @@ self.addEventListener("fetch", event => {
   const accept = req.headers.get("accept") || "";
   const isHtml = req.mode === "navigate" || accept.includes("text/html");
 
+  if (req.method !== "GET") {
+    event.respondWith(
+      fetch(req).catch(() =>
+        new Response(JSON.stringify({ error: "Network request failed." }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" }
+        })
+      )
+    );
+    return;
+  }
+
   if (isHtml || url.pathname.startsWith("/static/js/")) {
     event.respondWith(
       fetch(req)
@@ -71,7 +83,7 @@ self.addEventListener("fetch", event => {
 
   event.respondWith(
     caches.match(req).then(cached => {
-      return cached || fetch(req).catch(() => cached);
+      return cached || fetch(req).catch(() => new Response("Offline", { status: 503, statusText: "Offline" }));
     })
   );
 });

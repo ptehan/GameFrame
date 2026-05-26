@@ -16,6 +16,9 @@
 <p id="info">Loading video…</p>
 
 <style>
+.trim-page-shell {
+    display: none;
+}
 .trim-workspace {
     display: flex;
     align-items: flex-start;
@@ -227,8 +230,18 @@
     box-sizing: border-box;
     margin: 0;
 }
+.frame-modal-progress {
+    display: none;
+    margin-top: 8px;
+}
+.frame-modal-status {
+    margin-top: 8px;
+    min-height: 22px;
+    font-weight: 600;
+}
 </style>
 
+<div class="trim-page-shell">
 <div class="trim-workspace">
 <div class="trim-preview-pane">
 
@@ -287,12 +300,12 @@
 
 </div>
 </div>
+</div>
 
 <div id="frame_modal" class="frame-modal">
   <div class="frame-modal-card">
     <div class="frame-modal-header">
-      <h3 style="margin:0;">Full Screen Frame Controls</h3>
-      <button id="close_frame_modal_btn" class="trim-small-btn">Close</button>
+      <h3 style="margin:0;"></h3>
     </div>
     <div class="frame-modal-stage">
       <canvas id="frame_modal_canvas" class="frame-modal-canvas" width="920" height="920"></canvas>
@@ -307,6 +320,16 @@
         <button id="frame_modal_set_contact_btn" class="trim-btn">Set Contact</button>
         <button id="frame_modal_goto_contact_btn" class="trim-btn">Go to Contact</button>
       </div>
+      <div class="trim-row-2" style="margin-top:8px;">
+        <button id="frame_modal_finalize_btn" class="trim-btn">Finalize Pitch</button>
+      </div>
+      <div id="frame_modal_progress" class="frame-modal-progress">
+        <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
+          <div id="frame_modal_progress_bar" style="height:100%; width:0%; background:#ffdd00;"></div>
+        </div>
+        <div id="frame_modal_progress_label" style="margin-top:6px; font-size:13px;">Working...</div>
+      </div>
+      <div id="frame_modal_status" class="frame-modal-status"></div>
     </div>
   </div>
 </div>
@@ -366,13 +389,17 @@ const smoothScrubFill = document.getElementById("smooth_scrub_fill");
 const smoothScrubHandle = document.getElementById("smooth_scrub_handle");
 const openFrameModalBtn = document.getElementById("open_frame_modal_btn");
 const frameModal = document.getElementById("frame_modal");
-const closeFrameModalBtn = document.getElementById("close_frame_modal_btn");
 const frameModalCanvas = document.getElementById("frame_modal_canvas");
 const frameModalSlider = document.getElementById("frame_modal_slider");
 const frameModalPrevBtn = document.getElementById("frame_modal_prev_btn");
 const frameModalNextBtn = document.getElementById("frame_modal_next_btn");
 const frameModalSetContactBtn = document.getElementById("frame_modal_set_contact_btn");
 const frameModalGotoContactBtn = document.getElementById("frame_modal_goto_contact_btn");
+const frameModalFinalizeBtn = document.getElementById("frame_modal_finalize_btn");
+const frameModalProgress = document.getElementById("frame_modal_progress");
+const frameModalProgressBar = document.getElementById("frame_modal_progress_bar");
+const frameModalProgressLabel = document.getElementById("frame_modal_progress_label");
+const frameModalStatus = document.getElementById("frame_modal_status");
 let autoDetectBusy = false;
 let releaseFrame = null;
 let manualPitcherSeed = null;
@@ -436,17 +463,27 @@ function estimatePlateFrameFromRelease(releaseFrame, fpsVal) {
 function showProgress() {
     // Display shared progress widget.
     document.getElementById("progress-container").style.display = "block";
+    if (frameModalProgress) frameModalProgress.style.display = "block";
 }
 
 function hideProgress() {
     // Hide shared progress widget.
     document.getElementById("progress-container").style.display = "none";
+    if (frameModalProgress) frameModalProgress.style.display = "none";
 }
 
 function updateProgress(pct, msg = "") {
     // Update progress bar percent and optional text.
     document.getElementById("progress-bar").style.width = pct + "%";
-    if (msg) document.getElementById("progress-label").innerText = msg;
+    if (frameModalProgressBar) frameModalProgressBar.style.width = pct + "%";
+    if (msg) {
+        document.getElementById("progress-label").innerText = msg;
+        if (frameModalProgressLabel) frameModalProgressLabel.innerText = msg;
+    }
+}
+
+function setModalStatus(msg = "") {
+    if (frameModalStatus) frameModalStatus.textContent = msg;
 }
 
 async function ensurePose() {
@@ -1151,6 +1188,12 @@ async function loadVideo() {
     hideProgress();
 
     info.textContent = `Frames: ${frames.length}  |  FPS approx: ${fps}`;
+    setModalStatus("Set the contact frame, then finalize the pitch.");
+    if (frameModal && !frameModalOpen) {
+        frameModalOpen = true;
+        frameModal.style.display = "flex";
+        updateFrameModalUI(0);
+    }
 }
 
 ////////////////////////////////////////////////////////////
@@ -1362,16 +1405,8 @@ function setupFrameModal() {
         frameModal.style.display = "flex";
         updateFrameModalUI(+slider.value || 0);
     };
-    const close = () => {
-        frameModalOpen = false;
-        frameModal.style.display = "none";
-    };
 
     openFrameModalBtn.onclick = open;
-    if (closeFrameModalBtn) closeFrameModalBtn.onclick = close;
-    frameModal.addEventListener("click", (ev) => {
-        if (ev.target === frameModal) close();
-    });
 
     if (frameModalSlider) {
         frameModalSlider.oninput = () => {
@@ -1403,6 +1438,9 @@ function setupFrameModal() {
             slider.value = Math.max(0, Math.min(maxIdx, Number.isFinite(contactFrame) ? contactFrame : 0));
             drawFrame(+slider.value || 0);
         };
+    }
+    if (frameModalFinalizeBtn) {
+        frameModalFinalizeBtn.onclick = trimAndUpload;
     }
 }
 
@@ -1466,6 +1504,7 @@ canvas.addEventListener("click", (ev) => {
 contactBtn.onclick = () => {
     contactFrame = +slider.value;
     markerStatus.textContent = `Contact Frame = ${contactFrame}`;
+    setModalStatus(`Contact frame set to ${contactFrame}. Finalize when ready.`);
 };
 
 ////////////////////////////////////////////////////////////
@@ -1617,10 +1656,12 @@ async function bitmapToLandscapePNG(bitmap, crop) {
 async function trimAndUpload() {
     // Finalization pipeline: trim -> encode MP4 -> upload endpoint.
     if (contactFrame <= 0) {
+        setModalStatus("Set the contact frame before finalizing.");
         alert("Set contact frame first.");
         return;
     }
 
+    setModalStatus("Finalizing pitch...");
     showProgress();
     updateProgress(10, "Loading FFmpeg…");
 
@@ -1678,8 +1719,10 @@ async function trimAndUpload() {
 
     if (r.ok) {
         updateProgress(100, "Saved!");
+        setModalStatus("Pitch saved.");
         window.location.href = `/library?sid=${SID}&type=pitch`;
     } else {
+        setModalStatus("Upload failed.");
         alert("Upload failed.");
     }
 }

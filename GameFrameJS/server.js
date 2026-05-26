@@ -427,6 +427,288 @@ function ensureSchemaCompatibility() {
   ensureColumn("swing_clips", "camera_view", "TEXT");
 }
 
+function ffmpegDrawtextEscape(text) {
+  return String(text == null ? "" : text)
+    .replace(/\\/g, "\\\\")
+    .replace(/:/g, "\\:")
+    .replace(/'/g, "\\'")
+    .replace(/%/g, "\\%")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]")
+    .replace(/,/g, "\\,");
+}
+
+function matchupFontFile() {
+  const custom = process.env.GAMEFRAME_FONT_FILE;
+  if (custom && fs.existsSync(custom)) return custom;
+  const win = process.env.WINDIR || "C:\\Windows";
+  const arial = path.join(win, "Fonts", "arial.ttf");
+  return fs.existsSync(arial) ? arial : "";
+}
+
+function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitterName, pitcherName, swingSeconds, decisionFrame, swingContactFrame }) {
+  const jobId = `gf_matchup_${crypto.randomUUID()}`;
+  const dir = path.join(TMP_DIR, jobId);
+  fs.mkdirSync(dir, { recursive: true });
+  const pitchPath = path.join(dir, "pitch.mp4");
+  const swingPath = path.join(dir, "swing.mp4");
+  const titlePath = path.join(dir, "title.mp4");
+  const outputPath = path.join(dir, "matchup.mp4");
+  const fontfile = matchupFontFile().replace(/\\/g, "/");
+  const segmentPaths = [];
+
+  try {
+    fs.writeFileSync(pitchPath, pitchBlob);
+    fs.writeFileSync(swingPath, swingBlob);
+
+    const pitchMeta = ffprobeMeta(pitchPath);
+    const swingMeta = ffprobeMeta(swingPath);
+    const commonFps = 30;
+    const pitchFrameCount = Number(pitchMeta.frameCount || 0);
+    const swingFrameCount = Number(swingMeta.frameCount || 0);
+    if (!pitchFrameCount || !swingFrameCount) {
+      throw new Error("Unable to read matchup clip timing.");
+    }
+
+    const pitchContactFrame = Math.max(0, pitchFrameCount - 1);
+    const visualSwingLastIdx = Math.max(0, swingFrameCount - 1);
+    const swingContactIdx = Number.isFinite(Number(swingContactFrame))
+      ? Math.max(0, Math.min(visualSwingLastIdx, Math.round(Number(swingContactFrame))))
+      : visualSwingLastIdx;
+    const padCount = Math.max(0, pitchContactFrame - swingContactIdx);
+    const rawDecisionFrame = Number(decisionFrame);
+    const decisionLocal = Number.isFinite(rawDecisionFrame)
+      ? Math.max(0, Math.min(swingContactIdx, Math.round(rawDecisionFrame)))
+      : Math.max(0, swingContactIdx - 5);
+    let decisionGlobal = decisionLocal + padCount;
+    const contactGlobal = pitchContactFrame;
+    if (decisionGlobal >= contactGlobal) {
+      decisionGlobal = Math.max(padCount, contactGlobal - 1);
+    }
+
+    const FREEZE_FRAMES = 60;
+    const END_DECISION_FREEZE_FRAMES = 90;
+    const TITLE_SECONDS = 4;
+    const OUTPUT_W = 1280;
+    const OUTPUT_H = 720;
+    const HALF_W = 640;
+    const labelBoxW = 420;
+    const labelBoxH = 72;
+    const safeDesc = ffmpegDrawtextEscape(description || "Matchup");
+    const safeTitle = ffmpegDrawtextEscape(`${hitterName} vs ${pitcherName}`);
+    const safeSwingDuration = ffmpegDrawtextEscape(`Swing Duration: ${Number.isFinite(Number(swingSeconds)) ? Number(swingSeconds).toFixed(2) : "0.00"}s`);
+    const safeDate = ffmpegDrawtextEscape(new Date().toLocaleDateString("en-US"));
+    const labelX = `(w-${labelBoxW})/2`;
+    const labelY = `h-${labelBoxH + 22}`;
+
+    const drawtextBase = fontfile ? `fontfile='${ffmpegDrawtextEscape(fontfile)}':` : "";
+
+    function framesToCloneSeconds(frameCount) {
+      return Math.max(0, (Number(frameCount || 0) - 1) / commonFps);
+    }
+
+    function sideChain(inputIndex, sourceFrameCount, startFrame, endFrameExclusive, freezeFrames = 0, tint = null, outLabel = "tmp") {
+      const desiredFrames = Math.max(1, endFrameExclusive - startFrame);
+      const clampedStart = Math.max(0, Math.min(sourceFrameCount - 1, startFrame));
+      const clampedEndExclusive = Math.max(
+        clampedStart + 1,
+        Math.min(sourceFrameCount, Math.max(startFrame + 1, endFrameExclusive))
+      );
+      const sourceFrames = Math.max(1, clampedEndExclusive - clampedStart);
+      const outputFrames = freezeFrames > 0 ? freezeFrames : desiredFrames;
+      const extraCloneFrames = Math.max(0, outputFrames - sourceFrames);
+      let chain = `[${inputIndex}:v]trim=start_frame=${clampedStart}:end_frame=${clampedEndExclusive},setpts=PTS-STARTPTS`;
+      if (extraCloneFrames > 0) {
+        chain += `,tpad=stop_mode=clone:stop_duration=${framesToCloneSeconds(extraCloneFrames + 1)}`;
+      }
+      if (tint) {
+        chain += `,drawbox=x=0:y=0:w=iw:h=ih:color=${tint}@0.25:t=fill`;
+      }
+      chain += `,fps=${commonFps},scale=${HALF_W}:${OUTPUT_H}:force_original_aspect_ratio=decrease,pad=${HALF_W}:${OUTPUT_H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+      return `${chain}[${outLabel}]`;
+    }
+
+    function pushSegment(filters, segments, key, pitchSpec, swingSpec, labelText = "") {
+      const left = `${key}_l`;
+      const right = `${key}_r`;
+      const stacked = `${key}_s`;
+      const out = `${key}_o`;
+      filters.push(sideChain(0, pitchFrameCount, pitchSpec.start, pitchSpec.end, pitchSpec.freezeFrames || 0, pitchSpec.tint || null, left));
+      filters.push(sideChain(1, swingFrameCount, swingSpec.start, swingSpec.end, swingSpec.freezeFrames || 0, swingSpec.tint || null, right));
+      filters.push(`[${left}][${right}]hstack=inputs=2[${stacked}]`);
+      if (labelText) {
+        const safeLabel = ffmpegDrawtextEscape(labelText);
+        filters.push(
+          `[${stacked}]drawbox=x=${labelX}:y=${labelY}:w=${labelBoxW}:h=${labelBoxH}:color=black@0.72:t=fill,` +
+          `drawtext=${drawtextBase}text='${safeLabel}':fontcolor=white:fontsize=34:x=(w-text_w)/2:y=h-${labelBoxH - 20},` +
+          `format=yuv420p[${out}]`
+        );
+      } else {
+        filters.push(`[${stacked}]format=yuv420p[${out}]`);
+      }
+      segments.push(`[${out}]`);
+    }
+
+    function pitchSpecForGlobalRange(globalStart, globalEndExclusive, opts = {}) {
+      return {
+        start: Math.min(globalStart, pitchFrameCount - 1),
+        end: Math.min(globalEndExclusive, pitchFrameCount),
+        freezeFrames: opts.freezeFrames || 0,
+        tint: opts.tint || null,
+      };
+    }
+
+    function swingSpecForGlobalRange(globalStart, globalEndExclusive, opts = {}) {
+      if (globalEndExclusive <= padCount) {
+        return {
+          start: 0,
+          end: 1,
+          freezeFrames: opts.freezeFrames || Math.max(1, globalEndExclusive - globalStart),
+          tint: opts.tint || null,
+        };
+      }
+      const localStart = Math.max(0, Math.min(visualSwingLastIdx, globalStart - padCount));
+      const localEndExclusive = Math.max(
+        localStart + 1,
+        Math.min(swingFrameCount, globalEndExclusive - padCount)
+      );
+      return {
+        start: localStart,
+        end: localEndExclusive,
+        freezeFrames: opts.freezeFrames || 0,
+        tint: opts.tint || null,
+      };
+    }
+
+    function pushGlobalSegment(filters, segments, key, globalStart, globalEndExclusive, opts = {}) {
+      if (globalEndExclusive <= globalStart) return;
+      pushSegment(
+        filters,
+        segments,
+        key,
+        pitchSpecForGlobalRange(globalStart, globalEndExclusive, opts),
+        swingSpecForGlobalRange(globalStart, globalEndExclusive, opts),
+        opts.labelText || ""
+      );
+    }
+
+    const filters = [];
+    const segments = [];
+
+    filters.push(
+      `[2:v]drawtext=${drawtextBase}text='${safeDesc}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=180,` +
+      `drawtext=${drawtextBase}text='${safeTitle}':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=260,` +
+      `drawtext=${drawtextBase}text='${safeSwingDuration}':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=340,` +
+      `drawtext=${drawtextBase}text='${safeDate}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=420,` +
+      `fps=${commonFps},trim=duration=${TITLE_SECONDS},setpts=PTS-STARTPTS,format=yuv420p[seg_title]`
+    );
+    segments.push("[seg_title]");
+
+    if (padCount > 0) {
+      pushGlobalSegment(filters, segments, "seg_lead", 0, padCount);
+    }
+
+    pushGlobalSegment(filters, segments, "seg_first", padCount, padCount + 1, {
+      freezeFrames: FREEZE_FRAMES,
+      tint: "yellow",
+      labelText: "First Move",
+    });
+
+    if (decisionGlobal > padCount + 1) {
+      pushGlobalSegment(filters, segments, "seg_motion_a", padCount + 1, decisionGlobal);
+    }
+
+    pushGlobalSegment(filters, segments, "seg_decision", decisionGlobal, decisionGlobal + 1, {
+      freezeFrames: FREEZE_FRAMES,
+      tint: "green",
+      labelText: "Decision",
+    });
+
+    if (contactGlobal > decisionGlobal + 1) {
+      pushGlobalSegment(filters, segments, "seg_motion_b", decisionGlobal + 1, contactGlobal + 1);
+    }
+
+    if (pitchFrameCount > contactGlobal + 1) {
+      pushGlobalSegment(filters, segments, "seg_tail", contactGlobal + 1, pitchFrameCount);
+    }
+
+    pushGlobalSegment(filters, segments, "seg_contact", contactGlobal, contactGlobal + 1, {
+      freezeFrames: FREEZE_FRAMES,
+      labelText: "Contact",
+    });
+
+    pushGlobalSegment(filters, segments, "seg_first_end", padCount, padCount + 1, {
+      freezeFrames: END_DECISION_FREEZE_FRAMES,
+      labelText: "First Move",
+    });
+
+    filters.push(`${segments.join("")}concat=n=${segments.length}:v=1:a=0[outv]`);
+
+    runCmd("ffmpeg", [
+      "-y",
+      "-i", pitchPath,
+      "-i", swingPath,
+      "-f", "lavfi",
+      "-i", `color=c=black:s=${OUTPUT_W}x${OUTPUT_H}:r=${commonFps}:d=${TITLE_SECONDS}`,
+      "-filter_complex", filters.join(";"),
+      "-map", "[outv]",
+      "-r", String(commonFps),
+      "-threads", "1",
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-crf", "23",
+      "-pix_fmt", "yuv420p",
+      "-movflags", "+faststart",
+      outputPath,
+    ], { cwd: dir });
+
+    return {
+      blob: fs.readFileSync(outputPath),
+      thumb: extractLastFrameJpeg(outputPath),
+    };
+  } finally {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch (_) {}
+  }
+}
+
+function backfillSwingClipMetrics() {
+  const rows = db.prepare(`
+    SELECT id, clip_blob, frame_count, swing_seconds, fps
+    FROM swing_clips
+    WHERE clip_blob IS NOT NULL
+      AND (
+        frame_count IS NULL OR frame_count <= 0 OR
+        swing_seconds IS NULL OR swing_seconds <= 0 OR
+        fps IS NULL OR fps <= 0
+      )
+  `).all();
+  if (!rows.length) return;
+
+  const updateStmt = db.prepare("UPDATE swing_clips SET frame_count=?, swing_seconds=?, fps=? WHERE id=?");
+  for (const row of rows) {
+    const tempFile = path.join(TMP_DIR, `gf_backfill_${crypto.randomUUID()}.mp4`);
+    try {
+      fs.writeFileSync(tempFile, row.clip_blob);
+      const meta = ffprobeMeta(tempFile);
+      const frameCount = Number(meta.frameCount || row.frame_count || 0);
+      const fps = Number(meta.fps || row.fps || 0);
+      const swingSeconds = swingEventSeconds(frameCount, fps, row.swing_seconds);
+      updateStmt.run(
+        Number.isFinite(frameCount) && frameCount > 0 ? frameCount : null,
+        Number.isFinite(swingSeconds) && swingSeconds > 0 ? swingSeconds : null,
+        Number.isFinite(fps) && fps > 0 ? fps : null,
+        Number(row.id)
+      );
+    } catch (_) {
+      // Leave the existing row untouched if metadata extraction fails.
+    } finally {
+      try { fs.unlinkSync(tempFile); } catch (_) {}
+    }
+  }
+}
+
 function safeIdent(name) {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(name || ""));
 }
@@ -562,6 +844,7 @@ function buildSummary(swings) {
 }
 
 ensureSchemaCompatibility();
+backfillSwingClipMetrics();
 
 app.get("/manifest.json", (req, res) => {
   res.type("application/manifest+json").sendFile(path.join(ROOT, "static", "manifest.json"));
@@ -1293,6 +1576,28 @@ app.get("/api/swing_meta", async (req, res) => {
   });
 });
 
+app.get("/api/pitch_meta", async (req, res) => {
+  const row = db.prepare("SELECT fps, clip_blob FROM pitch_clips WHERE id=?").get(Number(req.query.id));
+  if (!row) return res.json({ error: "bad_meta" });
+  let fps = Number(row.fps || 0);
+  let frameCount = null;
+  let duration = null;
+  if (row.clip_blob) {
+    const p = path.join(TMP_DIR, `gf_pitch_meta_${crypto.randomUUID()}.mp4`);
+    await fsp.writeFile(p, row.clip_blob);
+    const meta = ffprobeMeta(p);
+    await fsp.unlink(p).catch(() => {});
+    if (meta.frameCount > 0) frameCount = meta.frameCount;
+    if (meta.duration > 0) duration = meta.duration;
+    if (fps <= 0 && meta.fps > 0) fps = meta.fps;
+  }
+  res.json({
+    fps,
+    frame_count: frameCount,
+    duration,
+  });
+});
+
 app.get("/matchup/select", (req, res) => {
   const teams = db.prepare("SELECT id, name FROM teams ORDER BY name").all();
   const pitcherRows = db.prepare("SELECT id, name, team_id FROM pitchers ORDER BY name").all();
@@ -1358,20 +1663,66 @@ app.get("/matchup/build", (req, res) => {
 });
 
 app.post("/matchup/create", upload.single("file"), async (req, res) => {
-  const blob = await fsp.readFile(req.file.path);
-  const thumbBlob = extractLastFrameJpeg(req.file.path);
-  await fsp.unlink(req.file.path).catch(() => {});
-  const result = db.prepare(`
-    INSERT INTO matchups (pitch_clip_id, swing_clip_id, description, matchup_blob, thumb, created_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-  `).run(
-    Number(req.body.pitch_id),
-    Number(req.body.swing_id),
-    req.body.description || "",
-    blob,
-    thumbBlob
-  );
-  res.json({ id: result.lastInsertRowid });
+  try {
+    let blob = null;
+    let thumbBlob = null;
+
+    if (req.file) {
+      blob = await fsp.readFile(req.file.path);
+      thumbBlob = extractLastFrameJpeg(req.file.path);
+      await fsp.unlink(req.file.path).catch(() => {});
+    } else {
+      const pitchId = Number(req.body.pitch_id);
+      const swingId = Number(req.body.swing_id);
+      const pitchRow = db.prepare(`
+        SELECT pc.clip_blob, p.name AS pitcher_name
+        FROM pitch_clips pc
+        LEFT JOIN pitchers p ON p.id = pc.pitcher_id
+        WHERE pc.id=?
+      `).get(pitchId);
+      const swingRow = db.prepare(`
+       SELECT COALESCE(sc.library_clip_blob, sc.clip_blob) AS clip_blob,
+               sc.swing_seconds,
+               sc.decision_frame,
+               sc.frame_count,
+                h.name AS hitter_name
+        FROM swing_clips sc
+        LEFT JOIN hitters h ON h.id = sc.hitter_id
+        WHERE sc.id=?
+      `).get(swingId);
+      if (!pitchRow || !pitchRow.clip_blob || !swingRow || !swingRow.clip_blob) {
+        return res.status(400).json({ error: "Missing matchup source clip." });
+      }
+      const built = buildMatchupVideoServerSide({
+        pitchBlob: pitchRow.clip_blob,
+        swingBlob: swingRow.clip_blob,
+        description: req.body.description || "",
+        hitterName: swingRow.hitter_name || "Hitter",
+        pitcherName: pitchRow.pitcher_name || "Pitcher",
+        swingSeconds: swingRow.swing_seconds,
+        decisionFrame: swingRow.decision_frame,
+        swingContactFrame: Number(swingRow.frame_count || 0) > 0 ? (Number(swingRow.frame_count) - 1) : null,
+      });
+      blob = built.blob;
+      thumbBlob = built.thumb;
+    }
+
+    const result = db.prepare(`
+      INSERT INTO matchups (pitch_clip_id, swing_clip_id, description, matchup_blob, thumb, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      Number(req.body.pitch_id),
+      Number(req.body.swing_id),
+      req.body.description || "",
+      blob,
+      thumbBlob
+    );
+    res.json({ id: result.lastInsertRowid });
+  } catch (err) {
+    const message = err && err.message ? err.message : "Could not build matchup.";
+    console.error("matchup/create failed:", message);
+    res.status(500).json({ error: message });
+  }
 });
 
 app.post("/dashboard/player/swing/delete", (req, res) => {

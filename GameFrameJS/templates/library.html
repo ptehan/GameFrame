@@ -4,12 +4,21 @@
 <h2>Library</h2>
 
 <style>
+.library-page {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    padding-right: 14px;
+}
 .library-filter-bar {
     margin-bottom: 20px;
     display: flex;
     gap: 12px;
     align-items: flex-end;
     flex-wrap: wrap;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
 }
 .library-filter-group {
     display: flex;
@@ -112,6 +121,11 @@
 #library_grid .library-item .info {
     overflow-wrap: anywhere;
 }
+#library_grid {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+}
 @media (max-width: 1200px) {
     .card-grid {
         grid-template-columns: 1fr !important;
@@ -144,6 +158,8 @@
     }
 }
 </style>
+
+<div class="library-page">
 
 <!-- FILTER BAR -->
 <div class="panel library-filter-bar">
@@ -199,6 +215,8 @@
 
 <!-- GRID -->
 <div id="library_grid" class="card-grid"></div>
+
+</div>
 
 <div id="pose_modal" class="pose-modal">
     <div class="pose-modal-card">
@@ -514,36 +532,41 @@ function renderInfo(c) {
 // BUILD FILTER OPTIONS
 // ------------------------------------------------------------
 function rebuildFilterOptions(items) {
-
-    const pitcherTeams = new Set();
-    const hitterTeams  = new Set();
-    const pitchers     = new Set();
-    const hitters      = new Set();
+    const pitcherTeams = new Map();
+    const hitterTeams  = new Map();
+    const pitchers     = new Map();
+    const hitters      = new Map();
+    const remember = (map, raw) => {
+        const label = String(raw || "").trim();
+        if (!label) return;
+        const key = label.toLowerCase();
+        if (!map.has(key)) map.set(key, label);
+    };
 
     items.forEach(i => {
 
         if (i.type === "pitch" && i.team_name)
-            pitcherTeams.add(i.team_name.toLowerCase());
+            remember(pitcherTeams, i.team_name);
 
         if (i.type === "swing" && i.team_name)
-            hitterTeams.add(i.team_name.toLowerCase());
+            remember(hitterTeams, i.team_name);
 
         if (i.type === "matchup") {
-            if (i.pitcher_team) pitcherTeams.add(i.pitcher_team.toLowerCase());
-            if (i.hitter_team)  hitterTeams.add(i.hitter_team.toLowerCase());
+            if (i.pitcher_team) remember(pitcherTeams, i.pitcher_team);
+            if (i.hitter_team)  remember(hitterTeams, i.hitter_team);
         }
 
         if (i.type === "multi") {
-            if (i.pitcherA_team) pitcherTeams.add(i.pitcherA_team.toLowerCase());
-            if (i.pitcherB_team) pitcherTeams.add(i.pitcherB_team.toLowerCase());
-            if (i.hitter_team)   hitterTeams.add(i.hitter_team.toLowerCase());
+            if (i.pitcherA_team) remember(pitcherTeams, i.pitcherA_team);
+            if (i.pitcherB_team) remember(pitcherTeams, i.pitcherB_team);
+            if (i.hitter_team)   remember(hitterTeams, i.hitter_team);
         }
 
         if (i.pitcher_name)
-            pitchers.add(i.pitcher_name.toLowerCase());
+            remember(pitchers, i.pitcher_name);
 
         if (i.hitter_name)
-            hitters.add(i.hitter_name.toLowerCase());
+            remember(hitters, i.hitter_name);
     });
 
     fPitcherTeam.innerHTML = `<option value="">All</option>`;
@@ -551,10 +574,18 @@ function rebuildFilterOptions(items) {
     fPitcher.innerHTML     = `<option value="">All</option>`;
     fHitter.innerHTML      = `<option value="">All</option>`;
 
-    pitcherTeams.forEach(t => fPitcherTeam.innerHTML += `<option value="${t}">${t}</option>`);
-    hitterTeams.forEach(t => fHitterTeam.innerHTML  += `<option value="${t}">${t}</option>`);
-    pitchers.forEach(p => fPitcher.innerHTML        += `<option value="${p}">${p}</option>`);
-    hitters.forEach(h => fHitter.innerHTML          += `<option value="${h}">${h}</option>`);
+    Array.from(pitcherTeams.entries())
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .forEach(([key, label]) => fPitcherTeam.innerHTML += `<option value="${key}">${label}</option>`);
+    Array.from(hitterTeams.entries())
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .forEach(([key, label]) => fHitterTeam.innerHTML += `<option value="${key}">${label}</option>`);
+    Array.from(pitchers.entries())
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .forEach(([key, label]) => fPitcher.innerHTML += `<option value="${key}">${label}</option>`);
+    Array.from(hitters.entries())
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .forEach(([key, label]) => fHitter.innerHTML += `<option value="${key}">${label}</option>`);
 
     // reapply saved filters (important after rebuild)
     fPitcherTeam.value = savedPitcherTeam;
@@ -564,38 +595,72 @@ function rebuildFilterOptions(items) {
 }
 
 
+function normalizeFilterValue(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
+
 // ------------------------------------------------------------
 // APPLY FILTERS
 // ------------------------------------------------------------
 function applyFilters() {
-    const type          = fType.value;
-    const q             = fText.value.toLowerCase().trim();
-    const pTeam         = fPitcherTeam.value;
-    const hTeam         = fHitterTeam.value;
-    const pitcher       = fPitcher.value;
-    const hitter        = fHitter.value;
+    const type    = normalizeFilterValue(fType.value);
+    const q       = normalizeFilterValue(fText.value);
+    const pTeam   = normalizeFilterValue(fPitcherTeam.value);
+    const hTeam   = normalizeFilterValue(fHitterTeam.value);
+    const pitcher = normalizeFilterValue(fPitcher.value);
+    const hitter  = normalizeFilterValue(fHitter.value);
 
-    rowNodes.forEach(r => {
-        let ok = true;
+    const filteredItems = rawItems.filter(c => {
+        const clipType = normalizeFilterValue(c.type);
+        if (type && clipType !== type) return false;
 
-        const rt       = r.dataset.type;
-        const text     = r.dataset.text;
-        const rPTeam   = r.dataset.pitcherTeam;
-        const rHTeam   = r.dataset.hitterTeam;
-        const rPitcher = r.dataset.pitcher;
-        const rHitter  = r.dataset.hitter;
+        const searchableParts = [
+            c.description,
+            c.team_name,
+            c.pitcher_team,
+            c.hitter_team,
+            c.pitcherA_team,
+            c.pitcherB_team,
+            c.pitcher_name,
+            c.hitter_name,
+            c.pitcherA_name,
+            c.pitcherB_name,
+        ];
+        const searchableText = searchableParts
+            .map(normalizeFilterValue)
+            .filter(Boolean)
+            .join(" ");
+        if (q && !searchableText.includes(q)) return false;
 
-        if (type && rt !== type) ok = false;
-        if (q && !text.includes(q)) ok = false;
+        const pitcherTeams = [
+            c.type === "pitch" ? c.team_name : "",
+            c.pitcher_team,
+            c.pitcherA_team,
+            c.pitcherB_team,
+        ].map(normalizeFilterValue).filter(Boolean);
+        if (pTeam && !pitcherTeams.some(team => team === pTeam)) return false;
 
-        if (pTeam && !rPTeam.includes(pTeam)) ok = false;
-        if (hTeam && !rHTeam.includes(hTeam)) ok = false;
+        const hitterTeams = [
+            c.type === "swing" ? c.team_name : "",
+            c.hitter_team,
+        ].map(normalizeFilterValue).filter(Boolean);
+        if (hTeam && !hitterTeams.some(team => team === hTeam)) return false;
 
-        if (pitcher && rPitcher !== pitcher) ok = false;
-        if (hitter  && rHitter  !== hitter) ok = false;
+        const pitcherNames = [
+            c.pitcher_name,
+            c.pitcherA_name,
+            c.pitcherB_name,
+        ].map(normalizeFilterValue).filter(Boolean);
+        if (pitcher && !pitcherNames.some(name => name === pitcher)) return false;
 
-        r.style.display = ok ? "" : "none";
+        const hitterName = normalizeFilterValue(c.hitter_name);
+        if (hitter && hitterName !== hitter) return false;
+
+        return true;
     });
+
+    buildGrid(filteredItems);
 }
 
 function setAllVisibleCardDetails(openState) {
@@ -612,10 +677,12 @@ function setAllVisibleCardDetails(openState) {
 // LISTENERS
 // ------------------------------------------------------------
 [fText, fPitcherTeam, fHitterTeam, fPitcher, fHitter].forEach(el => {
-    el.addEventListener("input", () => {
+    const handler = () => {
         applyFilters();
         updateURL();
-    });
+    };
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
 });
 
 fType.addEventListener("change", () => {

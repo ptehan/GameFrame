@@ -405,7 +405,7 @@ h2,
 <div id="frame_modal" class="frame-modal">
     <div class="frame-modal-card">
         <div class="frame-modal-header">
-            <h3 style="margin:0;">Full Screen Frame Controls</h3>
+            <h3 style="margin:0;"></h3>
             <button id="close_frame_modal_btn" class="trim-small-btn">Close</button>
         </div>
         <div class="frame-modal-stage">
@@ -1048,18 +1048,18 @@ function evaluateSideChestViewFromLandmarks(landmarks) {
         torsoVisibleCount += 1;
 
         const isSetup =
-            m.handsTogether <= 0.34 &&
-            m.nearRearShoulder <= 0.30 &&
-            m.wristMidY <= (m.hipMidY - 0.02) &&
-            m.sideOffset >= 0.02;
+            m.handsTogether <= 0.38 &&
+            m.nearRearShoulder <= 0.34 &&
+            m.wristMidY <= (m.hipMidY - 0.01) &&
+            m.sideOffset >= 0.015;
         const isStrongSetup =
-            m.handsTogether <= 0.25 &&
-            m.nearRearShoulder <= 0.22 &&
-            m.wristMidY <= (m.shoulderMidY + 0.12) &&
-            m.wristMidY <= (m.hipMidY - 0.06) &&
-            m.sideOffset >= 0.04 &&
-            (shoulderW / torsoH) >= 0.32 &&
-            (hipW / torsoH) >= 0.20;
+            m.handsTogether <= 0.30 &&
+            m.nearRearShoulder <= 0.27 &&
+            m.wristMidY <= (m.shoulderMidY + 0.16) &&
+            m.wristMidY <= (m.hipMidY - 0.03) &&
+            m.sideOffset >= 0.03 &&
+            (shoulderW / torsoH) >= 0.28 &&
+            (hipW / torsoH) >= 0.17;
 
         if (isSetup) setupCount += 1;
         if (isStrongSetup) strongSetupCount += 1;
@@ -1078,28 +1078,28 @@ function evaluateSideChestViewFromLandmarks(landmarks) {
     else if (visibleRatio >= 0.45) score += 14;
     else reasons.push("not enough clear early torso frames");
 
-    if (setupRatio >= 0.35) score += 28;
-    else if (setupRatio >= 0.2) score += 18;
+    if (setupRatio >= 0.30) score += 28;
+    else if (setupRatio >= 0.16) score += 18;
     else reasons.push("early setup does not look chest-facing enough");
 
-    if (strongSetupRatio >= 0.15) score += 20;
-    else if (strongSetupRatio >= 0.08) score += 12;
+    if (strongSetupRatio >= 0.12) score += 20;
+    else if (strongSetupRatio >= 0.05) score += 12;
     else reasons.push("rear-shoulder hand load is weak");
 
-    if (avgShoulderRatio >= 0.34) score += 15;
-    else if (avgShoulderRatio >= 0.26) score += 9;
+    if (avgShoulderRatio >= 0.30) score += 15;
+    else if (avgShoulderRatio >= 0.22) score += 9;
     else reasons.push("shoulders look too narrow for a chest-facing side view");
 
-    if (avgHipRatio >= 0.18) score += 7;
-    else if (avgHipRatio >= 0.13) score += 4;
+    if (avgHipRatio >= 0.16) score += 7;
+    else if (avgHipRatio >= 0.11) score += 4;
 
-    if (avgSideOffset >= 0.045) score += 5;
-    else if (avgSideOffset >= 0.028) score += 3;
+    if (avgSideOffset >= 0.035) score += 5;
+    else if (avgSideOffset >= 0.02) score += 3;
     else reasons.push("hand position stays too centered");
 
     const finalScore = Math.max(0, Math.min(100, Math.round(score)));
     return {
-        approved: finalScore >= 60,
+        approved: finalScore >= 46,
         score: finalScore,
         reasons,
         metrics: {

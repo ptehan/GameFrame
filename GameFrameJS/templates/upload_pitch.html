@@ -1,61 +1,113 @@
 {% extends "base.html" %}
 {% block content %}
 
+<style>
+.pitch-upload-form {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 14px 12px;
+    width: min(560px, 100%);
+    align-items: start;
+}
+.pitch-upload-field {
+    display: grid;
+    gap: 8px;
+}
+.pitch-upload-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.pitch-upload-control {
+    min-height: 42px;
+    box-sizing: border-box;
+}
+.pitch-upload-row .pitch-upload-control {
+    flex: 1 1 auto;
+}
+.pitch-upload-action {
+    min-height: 42px;
+    min-width: 92px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-sizing: border-box;
+}
+.pitch-upload-time {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.pitch-upload-time .pitch-upload-control {
+    width: 78px;
+    flex: 0 0 78px;
+}
+.pitch-upload-submit {
+    min-height: 42px;
+    width: 150px;
+    box-sizing: border-box;
+}
+</style>
+
 <h2 style="margin-bottom: 20px;">Upload Pitch Clip</h2>
 
 <form action="/upload/pitch"
       method="post"
       enctype="multipart/form-data"
-      style="display: grid; grid-template-columns: 200px 1fr; gap: 12px; width: 450px;">
+      class="pitch-upload-form">
 
     <input type="hidden" name="sid" value="{{ sid }}">
 
     <!-- TEAM -->
     <label>Team:</label>
-    <div style="display:flex; gap:8px; align-items:center;">
-        <select id="team_select" name="team_id" required style="flex:1;">
+    <div class="pitch-upload-row">
+        <select id="team_select" name="team_id" required class="pitch-upload-control">
             <option value="">Select Team</option>
             {% for t in teams %}
                 <option value="{{ t.id }}">{{ t.name }}</option>
             {% endfor %}
         </select>
-        <button type="button" id="add_team_btn">Add Team</button>
+        <button type="button" id="add_team_btn" class="pitch-upload-action">Add Team</button>
     </div>
 
     <!-- PITCHER -->
     <label>Pitcher:</label>
-    <div style="display:flex; gap:8px; align-items:center;">
-        <select id="pitcher_select" name="pitcher_id" required style="flex:1;">
+    <div class="pitch-upload-row">
+        <select id="pitcher_select" name="pitcher_id" required class="pitch-upload-control">
             <option value="">Select Pitcher</option>
             {% for p in pitchers %}
                 <option value="{{ p.id }}" data-team="{{ p.team_id }}">{{ p.name }}</option>
             {% endfor %}
         </select>
-        <button type="button" id="add_pitcher_btn">Add Pitcher</button>
+        <button type="button" id="add_pitcher_btn" class="pitch-upload-action">Add Pitcher</button>
     </div>
 
     <!-- DESCRIPTION -->
     <label>Description:</label>
-    <input type="text" name="description" placeholder="Optional note...">
+    <input type="text" name="description" placeholder="Optional note..." class="pitch-upload-control">
 
     <!-- START TIME -->
     <label>Start Time:</label>
-    <div style="display:flex; gap:6px;">
-        <input type="number" name="start_min" min="0" value="0" style="width:60px;">
+    <div class="pitch-upload-field">
+    <div class="pitch-upload-time">
+        <input type="number" name="start_min" min="0" value="0" class="pitch-upload-control">
         <span style="align-self:center;">min</span>
     
-        <input type="number" name="start_sec" min="0" max="59" value="0" style="width:60px;">
+        <input type="number" name="start_sec" min="0" max="59" value="0" class="pitch-upload-control">
         <span style="align-self:center;">sec</span>
     </div>
-    <small style="grid-column: 2; color: #ccc; font-size: 12px;">Note: This will extract a 5-second clip starting from the specified time.</small>
+    <small style="color: #ccc; font-size: 12px;">Note: This will extract a 5-second clip starting from the specified time.</small>
+    </div>
 
     <!-- FILE -->
     <label>Video File:</label>
-    <input type="file" id="file_input" name="file" accept="video/mp4" required>
+    <input type="file" id="file_input" name="file" accept="video/mp4" required class="pitch-upload-control">
 
     <!-- BUTTON -->
     <div></div>
-    <button type="submit" style="padding: 10px 20px; width: 150px;">Upload Pitch</button>
+    <button type="submit" class="pitch-upload-submit">Upload Pitch</button>
 
 </form>
 
