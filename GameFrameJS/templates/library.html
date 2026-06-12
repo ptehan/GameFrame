@@ -157,6 +157,33 @@
         flex-wrap: wrap;
     }
 }
+.library-bulk-bar {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.library-select-cell {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 6px;
+    min-width: 28px;
+}
+.library-select-cell.hidden {
+    display: none;
+}
+.library-select-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+.library-bulk-count {
+    font-size: 13px;
+    opacity: 0.85;
+    min-width: 92px;
+}
 </style>
 
 <div class="library-page">
@@ -212,6 +239,15 @@
 
 </div>
 
+<div class="library-bulk-bar">
+    <button type="button" id="enter_multi_select_btn">Select Multiple</button>
+    <button type="button" id="select_visible_btn" style="display:none;">Select Visible</button>
+    <button type="button" id="clear_visible_btn" style="display:none;">Clear Visible</button>
+    <button type="button" id="delete_selected_btn" style="background:#d33; color:#fff; display:none;">Delete Selected</button>
+    <button type="button" id="cancel_multi_select_btn" style="display:none;">Cancel</button>
+    <span id="bulk_selection_count" class="library-bulk-count">0 selected</span>
+</div>
+
 
 <!-- GRID -->
 <div id="library_grid" class="card-grid"></div>
@@ -252,6 +288,12 @@ const sid = "{{ sid }}";
 
 let rowNodes = [];
 let rawItems = [];
+let multiSelectMode = false;
+const selectedByType = {
+    pitch: new Set(),
+    swing: new Set(),
+    matchup: new Set(),
+};
 
 const fType          = document.getElementById("filter_type");
 const fText          = document.getElementById("filter_text");
@@ -259,6 +301,12 @@ const fPitcherTeam   = document.getElementById("filter_pitcher_team");
 const fHitterTeam    = document.getElementById("filter_hitter_team");
 const fPitcher       = document.getElementById("filter_pitcher");
 const fHitter        = document.getElementById("filter_hitter");
+const enterMultiSelectBtn = document.getElementById("enter_multi_select_btn");
+const selectVisibleBtn = document.getElementById("select_visible_btn");
+const clearVisibleBtn = document.getElementById("clear_visible_btn");
+const deleteSelectedBtn = document.getElementById("delete_selected_btn");
+const cancelMultiSelectBtn = document.getElementById("cancel_multi_select_btn");
+const bulkSelectionCount = document.getElementById("bulk_selection_count");
 const expandSwingsBtn = document.getElementById("expand_swings_btn");
 const collapseSwingsBtn = document.getElementById("collapse_swings_btn");
 const poseModal = document.getElementById("pose_modal");
@@ -364,6 +412,8 @@ async function loadData(type) {
 function buildGrid(items) {
     const grid = document.getElementById("library_grid");
     let html = "";
+    const activeType = normalizeFilterValue(fType.value);
+    const activeSelection = selectedByType[activeType] || new Set();
 
     items.forEach(c => {
 
@@ -446,12 +496,23 @@ function buildGrid(items) {
         <div class="card-row"
              data-type="${c.type}"
              data-text="${text}"
-             data-pitcher-team="${pitcher_team}"
-             data-hitter-team="${hitter_team}"
-             data-pitcher="${pitcher}"
-             data-hitter="${hitter}">
+                 data-pitcher-team="${pitcher_team}"
+                 data-hitter-team="${hitter_team}"
+                 data-pitcher="${pitcher}"
+                 data-hitter="${hitter}"
+                 data-id="${c.id}">
 
             <div class="library-item">
+                <div class="library-select-cell">
+                <div class="library-select-cell ${multiSelectMode ? "" : "hidden"}">
+                    <input
+                        type="checkbox"
+                        class="library-select-checkbox"
+                        data-id="${c.id}"
+                        data-type="${c.type}"
+                        ${activeSelection.has(Number(c.id)) ? "checked" : ""}
+                    >
+                </div>
                 ${isCollapsibleType
                     ? `
                 <details class="library-details">
@@ -488,6 +549,8 @@ function buildGrid(items) {
 
     grid.innerHTML = html;
     rowNodes = Array.from(document.querySelectorAll(".card-row"));
+    bindSelectionCheckboxes();
+    refreshBulkSelectionUI();
 }
 
 
@@ -663,6 +726,175 @@ function applyFilters() {
     buildGrid(filteredItems);
 }
 
+function getActiveSelectionSet() {
+    const type = normalizeFilterValue(fType.value);
+    if (!selectedByType[type]) selectedByType[type] = new Set();
+    return selectedByType[type];
+}
+
+function bindSelectionCheckboxes() {
+    const boxes = Array.from(document.querySelectorAll(".library-select-checkbox"));
+    boxes.forEach(box => {
+        box.addEventListener("change", () => {
+            const type = normalizeFilterValue(box.dataset.type);
+            if (!selectedByType[type]) selectedByType[type] = new Set();
+            const set = selectedByType[type];
+            const id = Number(box.dataset.id);
+            if (box.checked) set.add(id);
+            else set.delete(id);
+            refreshBulkSelectionUI();
+        });
+    });
+}
+
+function refreshBulkSelectionUI() {
+    const activeType = normalizeFilterValue(fType.value);
+    const count = getActiveSelectionSet().size;
+    if (bulkSelectionCount) {
+        bulkSelectionCount.textContent = multiSelectMode ? `${count} selected` : "";
+    }
+    const canBulkDelete = activeType === "pitch" || activeType === "swing" || activeType === "matchup";
+    if (enterMultiSelectBtn) enterMultiSelectBtn.style.display = multiSelectMode ? "none" : "";
+    if (selectVisibleBtn) {
+        selectVisibleBtn.style.display = multiSelectMode ? "" : "none";
+        selectVisibleBtn.disabled = !canBulkDelete;
+    }
+    if (clearVisibleBtn) {
+        clearVisibleBtn.style.display = multiSelectMode ? "" : "none";
+        clearVisibleBtn.disabled = !canBulkDelete;
+    }
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.style.display = multiSelectMode ? "" : "none";
+        deleteSelectedBtn.disabled = !canBulkDelete || count === 0;
+    }
+    if (cancelMultiSelectBtn) {
+        cancelMultiSelectBtn.style.display = multiSelectMode ? "" : "none";
+        cancelMultiSelectBtn.disabled = !canBulkDelete;
+    }
+}
+
+function setMultiSelectMode(nextState) {
+    multiSelectMode = !!nextState;
+    buildGrid(rawItems.filter(c => {
+        const type = normalizeFilterValue(fType.value);
+        const q = normalizeFilterValue(fText.value);
+        const pTeam = normalizeFilterValue(fPitcherTeam.value);
+        const hTeam = normalizeFilterValue(fHitterTeam.value);
+        const pitcher = normalizeFilterValue(fPitcher.value);
+        const hitter = normalizeFilterValue(fHitter.value);
+
+        const clipType = normalizeFilterValue(c.type);
+        if (type && clipType !== type) return false;
+
+        const searchableParts = [
+            c.description,
+            c.team_name,
+            c.pitcher_team,
+            c.hitter_team,
+            c.pitcherA_team,
+            c.pitcherB_team,
+            c.pitcher_name,
+            c.hitter_name,
+            c.pitcherA_name,
+            c.pitcherB_name,
+        ];
+        const searchableText = searchableParts
+            .map(normalizeFilterValue)
+            .filter(Boolean)
+            .join(" ");
+        if (q && !searchableText.includes(q)) return false;
+
+        const pitcherTeams = [
+            c.type === "pitch" ? c.team_name : "",
+            c.pitcher_team,
+            c.pitcherA_team,
+            c.pitcherB_team,
+        ].map(normalizeFilterValue).filter(Boolean);
+        if (pTeam && !pitcherTeams.some(team => team === pTeam)) return false;
+
+        const hitterTeams = [
+            c.type === "swing" ? c.team_name : "",
+            c.hitter_team,
+        ].map(normalizeFilterValue).filter(Boolean);
+        if (hTeam && !hitterTeams.some(team => team === hTeam)) return false;
+
+        const pitcherNames = [
+            c.pitcher_name,
+            c.pitcherA_name,
+            c.pitcherB_name,
+        ].map(normalizeFilterValue).filter(Boolean);
+        if (pitcher && !pitcherNames.some(name => name === pitcher)) return false;
+
+        const hitterName = normalizeFilterValue(c.hitter_name);
+        if (hitter && hitterName !== hitter) return false;
+
+        return true;
+    }));
+}
+
+function cancelMultiSelect() {
+    getActiveSelectionSet().clear();
+    setMultiSelectMode(false);
+}
+
+function setVisibleCheckboxes(checked) {
+    const activeSet = getActiveSelectionSet();
+    const boxes = Array.from(document.querySelectorAll(".library-select-checkbox"));
+    boxes.forEach(box => {
+        const row = box.closest(".card-row");
+        if (!row || row.style.display === "none") return;
+        const id = Number(box.dataset.id);
+        box.checked = checked;
+        if (checked) activeSet.add(id);
+        else activeSet.delete(id);
+    });
+    refreshBulkSelectionUI();
+}
+
+function submitBulkDelete() {
+    const activeType = normalizeFilterValue(fType.value);
+    const selected = Array.from(getActiveSelectionSet());
+    if (!selected.length) {
+        alert("Select at least one item to delete.");
+        return;
+    }
+    if (!confirm(`Delete ${selected.length} selected ${activeType === "matchup" ? "matchups" : `${activeType} clips`}?`)) {
+        return;
+    }
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = "/library/bulk-delete";
+
+    const sidInput = document.createElement("input");
+    sidInput.type = "hidden";
+    sidInput.name = "sid";
+    sidInput.value = sid;
+    form.appendChild(sidInput);
+
+    const typeInput = document.createElement("input");
+    typeInput.type = "hidden";
+    typeInput.name = "type";
+    typeInput.value = activeType;
+    form.appendChild(typeInput);
+
+    const returnInput = document.createElement("input");
+    returnInput.type = "hidden";
+    returnInput.name = "return";
+    returnInput.value = window.location.pathname + window.location.search;
+    form.appendChild(returnInput);
+
+    selected.forEach(id => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "ids";
+        input.value = String(id);
+        form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+}
+
 function setAllVisibleCardDetails(openState) {
     const detailNodes = Array.from(document.querySelectorAll(".card-row details.library-details"));
     detailNodes.forEach(d => {
@@ -689,8 +921,13 @@ fType.addEventListener("change", () => {
     updateURL();
     loadData(fType.value);
 });
+enterMultiSelectBtn.addEventListener("click", () => setMultiSelectMode(true));
 expandSwingsBtn.addEventListener("click", () => setAllVisibleCardDetails(true));
 collapseSwingsBtn.addEventListener("click", () => setAllVisibleCardDetails(false));
+selectVisibleBtn.addEventListener("click", () => setVisibleCheckboxes(true));
+clearVisibleBtn.addEventListener("click", () => setVisibleCheckboxes(false));
+deleteSelectedBtn.addEventListener("click", submitBulkDelete);
+cancelMultiSelectBtn.addEventListener("click", cancelMultiSelect);
 
 
 // ------------------------------------------------------------

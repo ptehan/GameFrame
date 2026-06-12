@@ -194,8 +194,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             ptClip.innerHTML += `<option value="${c.id}">${c.label}</option>`;
         });
     
-        // Auto-select MOST RECENT clip (last entry)
-        ptClip.selectedIndex = clips.length - 1;
+        // Clips are already provided newest-first.
+        ptClip.selectedIndex = 0;
     };
 
 
@@ -243,8 +243,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             swClip.innerHTML += `<option value="${c.id}">${c.label}</option>`;
         });
     
-        // Auto-select MOST RECENT
-        swClip.selectedIndex = clips.length - 1;
+        // Clips are already provided newest-first.
+        swClip.selectedIndex = 0;
     };
 
     // Initialize dropdowns on first load.

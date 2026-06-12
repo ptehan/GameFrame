@@ -11,8 +11,11 @@ const Database = require("better-sqlite3");
 
 const app = express();
 const ROOT = __dirname;
-const DB_PATH = path.join(ROOT, "app.db");
+const DB_PATH = process.env.DB_PATH
+  ? path.resolve(process.env.DB_PATH)
+  : path.join(ROOT, "app.db");
 const TMP_DIR = os.tmpdir();
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new Database(DB_PATH);
 const upload = multer({ dest: TMP_DIR });
 
@@ -77,6 +80,28 @@ function isSupportedImportUrl(raw) {
   }
 }
 
+function normalizeImportUrl(raw) {
+  const input = String(raw || "").trim();
+  if (!input) return "";
+  try {
+    const u = new URL(input);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "youtu.be") {
+      const id = (u.pathname || "/").split("/").filter(Boolean)[0] || "";
+      if (id) return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+    }
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      const parts = (u.pathname || "/").split("/").filter(Boolean);
+      if (parts[0] === "shorts" && parts[1]) {
+        return `https://www.youtube.com/watch?v=${encodeURIComponent(parts[1])}`;
+      }
+    }
+    return u.toString();
+  } catch (_) {
+    return input;
+  }
+}
+
 function importKind(raw) {
   return raw === "pitch" ? "pitch" : "swing";
 }
@@ -96,15 +121,85 @@ function swingCameraViewAllowsPose(cameraView) {
 
 function downloadExternalVideo(url, outputPath) {
   const ytdlpBin = process.env.YTDLP_BIN || "yt-dlp";
-  runCmd(ytdlpBin, [
+  const baseArgs = [
     "--no-playlist",
     "--no-warnings",
     // Use broad best-available formats; strict mp4-only selectors fail on some links.
     "--format", "bv*+ba/b",
     "--merge-output-format", "mp4",
     "-o", outputPath,
-    url,
-  ]);
+  ];
+  const host = (() => {
+    try {
+      return new URL(String(url || "")).hostname.toLowerCase();
+    } catch (_) {
+      return "";
+    }
+  })();
+  const isYouTube = host.includes("youtube.com") || host.includes("youtu.be");
+  const attempts = [];
+
+  if (isYouTube) {
+    attempts.push({
+      label: "android",
+      args: [...baseArgs, "--extractor-args", "youtube:player_client=android", url],
+    });
+
+    const cookieFileCandidates = [];
+    if (process.env.YTDLP_COOKIES_FILE) {
+      cookieFileCandidates.push(String(process.env.YTDLP_COOKIES_FILE));
+    }
+    cookieFileCandidates.push(
+      path.join(ROOT, "youtube_cookies.txt"),
+      path.join(ROOT, "cookies.txt")
+    );
+    for (const cookieFile of cookieFileCandidates) {
+      if (!cookieFile || !fs.existsSync(cookieFile)) continue;
+      attempts.push({
+        label: `android+cookies-file:${cookieFile}`,
+        args: [...baseArgs, "--extractor-args", "youtube:player_client=android", "--cookies", cookieFile, url],
+      });
+    }
+
+    const browserCandidates = [];
+    if (process.env.YTDLP_COOKIES_FROM_BROWSER) {
+      browserCandidates.push(String(process.env.YTDLP_COOKIES_FROM_BROWSER));
+    }
+    browserCandidates.push("edge", "chrome", "firefox");
+    for (const browser of browserCandidates) {
+      attempts.push({
+        label: `android+cookies-from-browser:${browser}`,
+        args: [...baseArgs, "--extractor-args", "youtube:player_client=android", "--cookies-from-browser", browser, url],
+      });
+    }
+  }
+
+  attempts.push({ label: "plain", args: [...baseArgs, url] });
+
+  const failures = [];
+  for (const attempt of attempts) {
+    const result = spawnSync(ytdlpBin, attempt.args, {
+      encoding: null,
+      maxBuffer: 50 * 1024 * 1024,
+    });
+    if (result.status === 0) return;
+    failures.push({
+      label: attempt.label,
+      stderr: (result.stderr || Buffer.from("")).toString("utf8").trim(),
+    });
+  }
+
+  const last = failures[failures.length - 1];
+  const lastErr = last && last.stderr ? last.stderr : "unknown yt-dlp error";
+  if (isYouTube) {
+    throw new Error(
+      `yt-dlp failed after browser-cookie retries. ` +
+      `Try either signing into YouTube in Edge or Chrome on this machine, or place an exported cookies file at ` +
+      `youtube_cookies.txt in the app folder. ` +
+      `Last error: ${lastErr}`
+    );
+  }
+  throw new Error(`yt-dlp failed: ${lastErr}`);
 }
 
 function parseFraction(raw) {
@@ -256,6 +351,15 @@ function poseGuideFromRows(rows) {
   };
 }
 
+function poseFpsFromRows(rows) {
+  if (!rows || !rows.length) return null;
+  for (const r of rows) {
+    const v = Number(r.fps);
+    if (Number.isFinite(v) && v > 0) return v;
+  }
+  return null;
+}
+
 function evaluatePoseDataQuality(poseData) {
   const parsed = parsePoseCsvRows(poseData);
   const rows = parsed.rows;
@@ -376,6 +480,7 @@ function ensureBaseSchema() {
       clip_blob BLOB,
       thumb BLOB,
       fps REAL,
+      contact_frame INTEGER,
       created_at TIMESTAMP,
       FOREIGN KEY (team_id) REFERENCES teams(id),
       FOREIGN KEY (pitcher_id) REFERENCES pitchers(id)
@@ -417,6 +522,7 @@ function ensureBaseSchema() {
 function ensureSchemaCompatibility() {
   ensureBaseSchema();
   ensureColumn("pitch_clips", "thumb", "BLOB");
+  ensureColumn("pitch_clips", "contact_frame", "INTEGER");
   ensureColumn("swing_clips", "thumb", "BLOB");
   ensureColumn("swing_clips", "pose_data", "TEXT");
   ensureColumn("swing_clips", "frame_count", "INTEGER");
@@ -446,7 +552,7 @@ function matchupFontFile() {
   return fs.existsSync(arial) ? arial : "";
 }
 
-function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitterName, pitcherName, swingSeconds, decisionFrame, swingContactFrame }) {
+function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitterName, pitcherName, swingSeconds, decisionFrame, swingContactFrame, pitchContactFrame }) {
   const jobId = `gf_matchup_${crypto.randomUUID()}`;
   const dir = path.join(TMP_DIR, jobId);
   fs.mkdirSync(dir, { recursive: true });
@@ -470,18 +576,21 @@ function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitter
       throw new Error("Unable to read matchup clip timing.");
     }
 
-    const pitchContactFrame = Math.max(0, pitchFrameCount - 1);
+    const rawPitchContactFrame = Number(pitchContactFrame);
+    const resolvedPitchContactFrame = Number.isFinite(rawPitchContactFrame)
+      ? Math.max(0, Math.min(pitchFrameCount - 1, Math.round(rawPitchContactFrame)))
+      : Math.max(0, pitchFrameCount - 1);
     const visualSwingLastIdx = Math.max(0, swingFrameCount - 1);
     const swingContactIdx = Number.isFinite(Number(swingContactFrame))
       ? Math.max(0, Math.min(visualSwingLastIdx, Math.round(Number(swingContactFrame))))
       : visualSwingLastIdx;
-    const padCount = Math.max(0, pitchContactFrame - swingContactIdx);
+    const padCount = Math.max(0, resolvedPitchContactFrame - swingContactIdx);
     const rawDecisionFrame = Number(decisionFrame);
     const decisionLocal = Number.isFinite(rawDecisionFrame)
       ? Math.max(0, Math.min(swingContactIdx, Math.round(rawDecisionFrame)))
       : Math.max(0, swingContactIdx - 5);
     let decisionGlobal = decisionLocal + padCount;
-    const contactGlobal = pitchContactFrame;
+    const contactGlobal = resolvedPitchContactFrame;
     if (decisionGlobal >= contactGlobal) {
       decisionGlobal = Math.max(padCount, contactGlobal - 1);
     }
@@ -507,7 +616,7 @@ function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitter
       return Math.max(0, (Number(frameCount || 0) - 1) / commonFps);
     }
 
-    function sideChain(inputIndex, sourceFrameCount, startFrame, endFrameExclusive, freezeFrames = 0, tint = null, outLabel = "tmp") {
+    function sideChain(inputIndex, sourceFrameCount, startFrame, endFrameExclusive, freezeFrames = 0, tint = null, outLabel = "tmp", blackout = false) {
       const desiredFrames = Math.max(1, endFrameExclusive - startFrame);
       const clampedStart = Math.max(0, Math.min(sourceFrameCount - 1, startFrame));
       const clampedEndExclusive = Math.max(
@@ -525,6 +634,9 @@ function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitter
         chain += `,drawbox=x=0:y=0:w=iw:h=ih:color=${tint}@0.25:t=fill`;
       }
       chain += `,fps=${commonFps},scale=${HALF_W}:${OUTPUT_H}:force_original_aspect_ratio=decrease,pad=${HALF_W}:${OUTPUT_H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+      if (blackout) {
+        chain += `,drawbox=x=0:y=0:w=iw:h=ih:color=black@1:t=fill`;
+      }
       return `${chain}[${outLabel}]`;
     }
 
@@ -533,8 +645,8 @@ function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitter
       const right = `${key}_r`;
       const stacked = `${key}_s`;
       const out = `${key}_o`;
-      filters.push(sideChain(0, pitchFrameCount, pitchSpec.start, pitchSpec.end, pitchSpec.freezeFrames || 0, pitchSpec.tint || null, left));
-      filters.push(sideChain(1, swingFrameCount, swingSpec.start, swingSpec.end, swingSpec.freezeFrames || 0, swingSpec.tint || null, right));
+      filters.push(sideChain(0, pitchFrameCount, pitchSpec.start, pitchSpec.end, pitchSpec.freezeFrames || 0, pitchSpec.tint || null, left, pitchSpec.blackout || false));
+      filters.push(sideChain(1, swingFrameCount, swingSpec.start, swingSpec.end, swingSpec.freezeFrames || 0, swingSpec.tint || null, right, swingSpec.blackout || false));
       filters.push(`[${left}][${right}]hstack=inputs=2[${stacked}]`);
       if (labelText) {
         const safeLabel = ffmpegDrawtextEscape(labelText);
@@ -565,6 +677,7 @@ function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitter
           end: 1,
           freezeFrames: opts.freezeFrames || Math.max(1, globalEndExclusive - globalStart),
           tint: opts.tint || null,
+          blackout: !!opts.swingBlackout,
         };
       }
       const localStart = Math.max(0, Math.min(visualSwingLastIdx, globalStart - padCount));
@@ -577,6 +690,7 @@ function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitter
         end: localEndExclusive,
         freezeFrames: opts.freezeFrames || 0,
         tint: opts.tint || null,
+        blackout: !!opts.swingBlackout,
       };
     }
 
@@ -605,13 +719,15 @@ function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitter
     segments.push("[seg_title]");
 
     if (padCount > 0) {
-      pushGlobalSegment(filters, segments, "seg_lead", 0, padCount);
+      pushGlobalSegment(filters, segments, "seg_lead", 0, padCount, {
+        swingBlackout: true,
+      });
     }
 
     pushGlobalSegment(filters, segments, "seg_first", padCount, padCount + 1, {
       freezeFrames: FREEZE_FRAMES,
       tint: "yellow",
-      labelText: "First Move",
+      labelText: "Start",
     });
 
     if (decisionGlobal > padCount + 1) {
@@ -628,18 +744,9 @@ function buildMatchupVideoServerSide({ pitchBlob, swingBlob, description, hitter
       pushGlobalSegment(filters, segments, "seg_motion_b", decisionGlobal + 1, contactGlobal + 1);
     }
 
-    if (pitchFrameCount > contactGlobal + 1) {
-      pushGlobalSegment(filters, segments, "seg_tail", contactGlobal + 1, pitchFrameCount);
-    }
-
     pushGlobalSegment(filters, segments, "seg_contact", contactGlobal, contactGlobal + 1, {
       freezeFrames: FREEZE_FRAMES,
       labelText: "Contact",
-    });
-
-    pushGlobalSegment(filters, segments, "seg_first_end", padCount, padCount + 1, {
-      freezeFrames: END_DECISION_FREEZE_FRAMES,
-      labelText: "First Move",
     });
 
     filters.push(`${segments.join("")}concat=n=${segments.length}:v=1:a=0[outv]`);
@@ -843,6 +950,28 @@ function buildSummary(swings) {
   };
 }
 
+function buildSummaryNarrative(summary) {
+  if (!summary) return "";
+  const consistencyBand = summary.consistency_score >= 85
+    ? "very consistent"
+    : summary.consistency_score >= 70
+      ? "fairly consistent"
+      : summary.consistency_score >= 55
+        ? "somewhat inconsistent"
+        : "pretty inconsistent";
+  const trendBand = summary.trend_per_swing <= -0.003
+    ? "The player has been getting a little faster lately."
+    : summary.trend_per_swing >= 0.003
+      ? "The player has been getting a little slower lately."
+      : "The player's timing has stayed pretty steady lately.";
+  const outlierBand = summary.outlier_count === 0
+    ? "There are no major outlier swings in this set."
+    : summary.outlier_count === 1
+      ? "There is 1 swing that stands out from the player's usual timing."
+      : `There are ${summary.outlier_count} swings that stand out from the player's usual timing.`;
+  return `Across ${summary.count} swings, the player's swing time is averaging ${summary.avg.toFixed(3)} seconds and looks ${consistencyBand}. Most swings fall between ${summary.p10.toFixed(3)} and ${summary.p90.toFixed(3)} seconds. ${outlierBand} ${trendBand}`;
+}
+
 ensureSchemaCompatibility();
 backfillSwingClipMetrics();
 
@@ -860,14 +989,15 @@ app.get("/logout", (req, res) => res.redirect(302, `/?sid=${encodeURIComponent(s
 
 app.post("/external_video/fetch", async (req, res) => {
   const sid = sidOf(req);
-  const videoUrl = String(req.body.video_url || "").trim();
+  const rawVideoUrl = String(req.body.video_url || "").trim();
+  const videoUrl = normalizeImportUrl(rawVideoUrl);
   const clipType = importKind(String(req.body.clip_type || "swing").trim());
 
   if (!isSupportedImportUrl(videoUrl)) {
     return render(req, res, "external_video.html", {
       sid,
       error: "Paste a valid YouTube, X/Twitter, Instagram, or TikTok link.",
-      video_url: videoUrl,
+      video_url: rawVideoUrl,
       clip_type: clipType,
     });
   }
@@ -886,6 +1016,7 @@ app.post("/external_video/fetch", async (req, res) => {
       clip_type: clipType,
       source_url: `/external/source?id=${encodeURIComponent(sourceId)}`,
       duration: meta.duration,
+      video_url: videoUrl,
     });
   } catch (err) {
     await fsp.unlink(srcPath).catch(() => {});
@@ -897,7 +1028,7 @@ app.post("/external_video/fetch", async (req, res) => {
     return render(req, res, "external_video.html", {
       sid,
       error: hint,
-      video_url: videoUrl,
+      video_url: rawVideoUrl,
       clip_type: clipType,
     });
   }
@@ -1345,15 +1476,16 @@ app.post("/upload/pitch/finalize", upload.single("file"), async (req, res) => {
   const thumbBlob = extractLastFrameJpeg(req.file.path);
   await fsp.unlink(req.file.path).catch(() => {});
   db.prepare(`
-    INSERT INTO pitch_clips (team_id, pitcher_id, description, clip_blob, thumb, fps, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO pitch_clips (team_id, pitcher_id, description, clip_blob, thumb, fps, contact_frame, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `).run(
     Number(req.body.team_id),
     Number(req.body.pitcher_id),
     req.body.description || "",
     blob,
     thumbBlob,
-    Number(req.body.fps || 0)
+    Number(req.body.fps || 0),
+    Number(req.body.contact_frame)
   );
   res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}&type=pitch`);
 });
@@ -1398,7 +1530,12 @@ app.post("/upload/swing/finalize", upload.fields([{ name: "file", maxCount: 1 },
 });
 
 app.post("/library/pitch/delete", (req, res) => {
-  db.prepare("DELETE FROM pitch_clips WHERE id=?").run(Number(req.body.id));
+  const pitchId = Number(req.body.id);
+  const removePitch = db.transaction((id) => {
+    deleteReferencingRows("pitch_clips", id);
+    db.prepare("DELETE FROM pitch_clips WHERE id=?").run(id);
+  });
+  removePitch(pitchId);
   res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}&type=pitch`);
 });
 
@@ -1415,6 +1552,46 @@ app.post("/library/swing/delete", (req, res) => {
 app.post("/library/matchup/delete", (req, res) => {
   db.prepare("DELETE FROM matchups WHERE id=?").run(Number(req.body.id));
   res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}&type=matchup`);
+});
+
+app.post("/library/bulk-delete", (req, res) => {
+  const type = String(req.body.type || "").trim().toLowerCase();
+  const rawIds = Array.isArray(req.body.ids) ? req.body.ids : [req.body.ids];
+  const ids = rawIds
+    .map((v) => Number(v))
+    .filter((v) => Number.isInteger(v) && v > 0);
+
+  if (!ids.length) {
+    return res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}${type ? `&type=${encodeURIComponent(type)}` : ""}`);
+  }
+
+  if (type === "pitch") {
+    const stmt = db.prepare("DELETE FROM pitch_clips WHERE id=?");
+    const tx = db.transaction((rowIds) => {
+      for (const id of rowIds) {
+        deleteReferencingRows("pitch_clips", id);
+        stmt.run(id);
+      }
+    });
+    tx(ids);
+  } else if (type === "swing") {
+    const stmt = db.prepare("DELETE FROM swing_clips WHERE id=?");
+    const tx = db.transaction((rowIds) => {
+      for (const id of rowIds) {
+        deleteReferencingRows("swing_clips", id);
+        stmt.run(id);
+      }
+    });
+    tx(ids);
+  } else if (type === "matchup") {
+    const stmt = db.prepare("DELETE FROM matchups WHERE id=?");
+    const tx = db.transaction((rowIds) => {
+      for (const id of rowIds) stmt.run(id);
+    });
+    tx(ids);
+  }
+
+  res.redirect(303, `/library?sid=${encodeURIComponent(sidOf(req))}${type ? `&type=${encodeURIComponent(type)}` : ""}`);
 });
 
 app.post("/upload/common/add-team", upload.none(), (req, res) => {
@@ -1675,13 +1852,13 @@ app.post("/matchup/create", upload.single("file"), async (req, res) => {
       const pitchId = Number(req.body.pitch_id);
       const swingId = Number(req.body.swing_id);
       const pitchRow = db.prepare(`
-        SELECT pc.clip_blob, p.name AS pitcher_name
+        SELECT pc.clip_blob, pc.contact_frame, p.name AS pitcher_name
         FROM pitch_clips pc
         LEFT JOIN pitchers p ON p.id = pc.pitcher_id
         WHERE pc.id=?
       `).get(pitchId);
       const swingRow = db.prepare(`
-       SELECT COALESCE(sc.library_clip_blob, sc.clip_blob) AS clip_blob,
+       SELECT sc.clip_blob,
                sc.swing_seconds,
                sc.decision_frame,
                sc.frame_count,
@@ -1702,6 +1879,7 @@ app.post("/matchup/create", upload.single("file"), async (req, res) => {
         swingSeconds: swingRow.swing_seconds,
         decisionFrame: swingRow.decision_frame,
         swingContactFrame: Number(swingRow.frame_count || 0) > 0 ? (Number(swingRow.frame_count) - 1) : null,
+        pitchContactFrame: pitchRow.contact_frame,
       });
       blob = built.blob;
       thumbBlob = built.thumb;
@@ -1750,7 +1928,7 @@ app.get("/dashboard/player", async (req, res) => {
       SELECT h.id, h.name, h.team_id, t.name AS team_name, COUNT(sc.id) AS swing_count, MAX(sc.created_at) AS last_swing_at
       FROM hitters h
       JOIN teams t ON t.id = h.team_id
-      LEFT JOIN swing_clips sc ON sc.hitter_id = h.id
+      JOIN swing_clips sc ON sc.hitter_id = h.id
       WHERE h.team_id = ?
       GROUP BY h.id, h.name, h.team_id, t.name
       ORDER BY t.name, h.name
@@ -1759,7 +1937,7 @@ app.get("/dashboard/player", async (req, res) => {
       SELECT h.id, h.name, h.team_id, t.name AS team_name, COUNT(sc.id) AS swing_count, MAX(sc.created_at) AS last_swing_at
       FROM hitters h
       JOIN teams t ON t.id = h.team_id
-      LEFT JOIN swing_clips sc ON sc.hitter_id = h.id
+      JOIN swing_clips sc ON sc.hitter_id = h.id
       GROUP BY h.id, h.name, h.team_id, t.name
       ORDER BY t.name, h.name
     `;
@@ -1769,7 +1947,7 @@ app.get("/dashboard/player", async (req, res) => {
   let selectedHitter = null;
   if (hid) {
     selectedHitter = db.prepare(`
-      SELECT h.id, h.name, t.name
+      SELECT h.id, h.name AS hitter_name, t.name AS team_name
       FROM hitters h
       JOIN teams t ON t.id = h.team_id
       WHERE h.id=?
@@ -1796,6 +1974,7 @@ app.get("/dashboard/player", async (req, res) => {
     const rows = db.prepare(`
       SELECT id, description, fps, decision_frame, created_at, frame_count, swing_seconds,
              ${hasPoseData ? "CASE WHEN pose_data IS NOT NULL AND pose_data <> '' THEN 1 ELSE 0 END" : "0"} AS has_pose_data,
+             ${hasPoseData ? "pose_data" : "NULL"} AS pose_data,
              clip_blob
       FROM swing_clips
       WHERE hitter_id=?
@@ -1820,20 +1999,34 @@ app.get("/dashboard/player", async (req, res) => {
       }
 
       let decisionSeconds = null;
-      let decisionPct = null;
+      let decisionToContactSeconds = null;
+      let commitmentToContactSeconds = null;
       if (fps > 0 && row.decision_frame != null) {
         decisionSeconds = Number(row.decision_frame) / fps;
-        if (swingSeconds > 0) decisionPct = (decisionSeconds / swingSeconds) * 100;
+      }
+      if (row.pose_data) {
+        const parsedPose = parsePoseCsvRows(String(row.pose_data || ""));
+        const guide = poseGuideFromRows(parsedPose.rows || []);
+        const poseFps = poseFpsFromRows(parsedPose.rows || []) || fps || null;
+        if (guide && guide.decisionToContactFrames != null && poseFps && poseFps > 0) {
+          decisionToContactSeconds = guide.decisionToContactFrames / poseFps;
+          commitmentToContactSeconds = decisionToContactSeconds;
+        }
       }
 
       const m = matchupBySwing[Number(row.id)] || { count: 0, latest_id: null };
+      const commitmentToContactDisplay = commitmentToContactSeconds != null
+        ? commitmentToContactSeconds.toFixed(3)
+        : "";
       swingsView.push({
         id: Number(row.id),
         description: String(row.description || "").trim() || "(no description)",
         fps,
         decision_frame: row.decision_frame,
         decision_seconds: decisionSeconds,
-        decision_pct: decisionPct,
+        decision_to_contact_seconds: decisionToContactSeconds,
+        commitment_to_contact_seconds: commitmentToContactSeconds,
+        commitment_to_contact_display: commitmentToContactDisplay,
         created_at: row.created_at,
         frame_count: frameCount,
         swing_seconds: swingSeconds,
@@ -1844,6 +2037,7 @@ app.get("/dashboard/player", async (req, res) => {
     }
   }
   const summary = buildSummary(swingsView);
+  const summaryNarrative = buildSummaryNarrative(summary);
 
   render(req, res, "dashboard_player.html", {
     sid: sidOf(req),
@@ -1855,6 +2049,7 @@ app.get("/dashboard/player", async (req, res) => {
     selected_hitter: selectedHitter,
     results: swingsView,
     summary,
+    summary_narrative: summaryNarrative,
   });
 });
 

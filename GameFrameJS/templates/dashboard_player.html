@@ -3,110 +3,107 @@
 
 <style>
 .dash-wrap {
-    max-width: 1280px;
+    max-width: 1480px;
+    font-size: 14px;
 }
 .dash-title {
-    margin: 0 0 14px 0;
+    margin: 0 0 10px 0;
 }
 .dash-panel {
     border: 1px solid #2f2f2f;
-    border-radius: 10px;
+    border-radius: 8px;
     background: #121212;
-    padding: 14px;
-    margin-bottom: 14px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
 }
 .dash-row {
     display: grid;
-    grid-template-columns: 220px 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: 150px 1fr;
+    gap: 8px;
     align-items: center;
 }
 .dash-row label {
     font-weight: 700;
+    font-size: 13px;
 }
 .dash-select {
     width: 100%;
-    height: 38px;
-    border-radius: 8px;
+    height: 32px;
+    border-radius: 6px;
     border: 1px solid #444;
     background: #191919;
     color: #fff;
-    padding: 0 10px;
+    padding: 0 8px;
+    font-size: 13px;
 }
 .dash-input {
     width: 100%;
-    height: 38px;
-    border-radius: 8px;
+    height: 32px;
+    border-radius: 6px;
     border: 1px solid #444;
     background: #191919;
     color: #fff;
-    padding: 0 10px;
-}
-.hitter-grid {
-    margin-top: 12px;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 8px;
-}
-.hitter-group-title {
-    margin: 12px 0 6px 0;
+    padding: 0 8px;
     font-size: 13px;
-    font-weight: 700;
-    color: #8fd7ff;
-}
-.hitter-chip {
-    display: block;
-    text-decoration: none;
-    color: #fff;
-    background: #1c1c1c;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 8px 10px;
-}
-.hitter-chip.active {
-    border-color: #3dc3ff;
-    box-shadow: 0 0 0 1px #3dc3ff inset;
-}
-.hitter-sub {
-    font-size: 12px;
-    color: #bcbcbc;
-    margin-top: 2px;
 }
 .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+    gap: 6px;
+}
+.summary-narrative {
+    margin: 0 0 8px 0;
+    padding: 8px 10px;
+    border: 1px solid #2b3946;
+    border-radius: 6px;
+    background: #101820;
+    color: #d7e6f2;
+    font-size: 12px;
+    line-height: 1.4;
 }
 .kpi {
     border: 1px solid #2a2a2a;
-    border-radius: 8px;
-    padding: 10px;
+    border-radius: 6px;
+    padding: 7px 8px;
     background: #171717;
 }
 .kpi-label {
-    font-size: 12px;
+    font-size: 11px;
     color: #b4b4b4;
+    line-height: 1.2;
+}
+.hint {
+    cursor: help;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
 }
 .kpi-value {
-    margin-top: 4px;
-    font-size: 18px;
+    margin-top: 3px;
+    font-size: 15px;
     font-weight: 700;
+    line-height: 1.15;
 }
 .dash-links {
     display: flex;
-    gap: 10px;
+    gap: 6px;
     flex-wrap: wrap;
-    margin-top: 10px;
+    margin-top: 8px;
+}
+.dash-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
 }
 .dash-link-btn {
     display: inline-block;
     text-decoration: none;
     border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    padding: 6px 10px;
+    border-radius: 6px;
+    padding: 5px 8px;
     background: #1a1a1a;
     color: #fff;
-    font-size: 13px;
+    font-size: 12px;
 }
 .dash-table-wrap {
     overflow-x: auto;
@@ -114,45 +111,110 @@
 .dash-table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 1000px;
+    min-width: 860px;
 }
 .dash-table th,
 .dash-table td {
     border: 1px solid #303030;
-    padding: 7px 8px;
+    padding: 5px 6px;
     text-align: left;
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.2;
 }
 .dash-table th {
     background: #1e1e1e;
 }
 .dash-chart {
     width: 100%;
-    max-width: 620px;
+    max-width: 760px;
     border: 1px solid #2f2f2f;
-    border-radius: 8px;
+    border-radius: 6px;
     background: #101010;
 }
 .duration-filter-row {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 .duration-pill {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     border: 1px solid #3a3a3a;
     border-radius: 999px;
-    padding: 4px 10px;
+    padding: 3px 8px;
     background: #181818;
+    font-size: 11px;
+}
+.pose-action-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.pose-btn {
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 3px 7px;
+    background: #1f1f1f;
+    color: #fff;
+    cursor: pointer;
     font-size: 12px;
+}
+.export-box {
+    margin-top: 8px;
+    width: 100%;
+    min-height: 120px;
+    border: 1px solid #33404d;
+    border-radius: 6px;
+    background: #0f141a;
+    color: #dce7f2;
+    padding: 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    resize: vertical;
+    display: none;
+}
+.pose-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 9999;
+}
+.pose-modal-card {
+    width: min(1100px, 100%);
+    max-height: 92vh;
+    overflow: auto;
+    background: #11161c;
+    border: 1px solid #2f3c4a;
+    border-radius: 12px;
+    padding: 14px;
+}
+.pose-modal-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.pose-canvas {
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid #2f3c4a;
+    border-radius: 8px;
+    background: #0f1115;
 }
 @media (max-width: 980px) {
     .dash-row {
         grid-template-columns: 1fr;
+    }
+    .dash-wrap {
+        font-size: 13px;
     }
 }
 </style>
@@ -168,10 +230,9 @@
                 <select id="team_select" class="dash-select" name="tid" onchange="onTeamChange()">
                     <option value="0">All Teams</option>
                     {% for t in teams %}
-                    <option value="{{ t[0] }}" {% if t[0] == tid %}selected{% endif %}>{{ t[1] }}</option>
+                    <option value="{{ t.id }}" {% if t.id == tid %}selected{% endif %}>{{ t.name }}</option>
                     {% endfor %}
                 </select>
-                <input id="hitter_filter" class="dash-input" name="pq" value="{{ pq or '' }}" type="text" placeholder="Search players..." oninput="filterHitters()">
             </div>
 
             {% if hitters %}
@@ -180,61 +241,45 @@
                 <select id="hitter_select" class="dash-select" name="hid" onchange="document.getElementById('player_form').submit()">
                     <option value="0">Select Player</option>
                     {% for h in hitters %}
-                    <option value="{{ h[0] }}" data-name="{{ h[1]|lower }}" data-team="{{ h[3]|lower }}" {% if h[0] == hid %}selected{% endif %}>
-                        {{ h[1] }} - {{ h[3] }} ({{ h[4] }} swings)
+                    <option value="{{ h.id }}" data-name="{{ (h.name or '')|lower }}" data-team="{{ (h.team_name or '')|lower }}" {% if h.id == hid %}selected{% endif %}>
+                        {{ h.name or "(unnamed player)" }} - {{ h.team_name or "(no team)" }} ({{ h.swing_count }} swings)
                     </option>
                     {% endfor %}
                 </select>
-                <div style="font-size:12px;color:#b4b4b4;">Search works across all teams; team filter narrows the list.</div>
             </div>
             {% endif %}
         </form>
 
-        {% if hitters %}
-        {% set ns = namespace(team='') %}
-        <div id="hitter_grid">
-            {% for h in hitters %}
-            {% if ns.team != h[3] %}
-            {% set ns.team = h[3] %}
-            <div class="hitter-group-title" data-team="{{ h[3]|lower }}">{{ h[3] }}</div>
-            <div class="hitter-grid" data-team-group="{{ h[3]|lower }}">
-            {% endif %}
-                <a class="hitter-chip {% if h[0] == hid %}active{% endif %}"
-                   data-name="{{ h[1]|lower }}"
-                   data-team="{{ h[3]|lower }}"
-                   href="/dashboard/player?sid={{ sid }}&tid={{ tid }}&hid={{ h[0] }}">
-                    <div>{{ h[1] }}</div>
-                    <div class="hitter-sub">{{ h[4] }} swings{% if h[5] %} | last {{ h[5] }}{% endif %}</div>
-                </a>
-            {% set next_team = hitters[loop.index][3] if not loop.last else '' %}
-            {% if loop.last or next_team != h[3] %}
-            </div>
-            {% endif %}
-            {% endfor %}
-        </div>
-        {% endif %}
     </div>
 
     {% if selected_hitter and summary %}
     <div class="dash-panel">
-        <h3 style="margin:0 0 10px 0;">{{ selected_hitter[1] }} ({{ selected_hitter[2] }}): Swing Consistency</h3>
+        <h3 style="margin:0 0 10px 0;">{{ selected_hitter.hitter_name or "(unnamed player)" }} ({{ selected_hitter.team_name or "(no team)" }}): Swing Consistency</h3>
+        {% if summary_narrative %}
+        <div class="summary-narrative">{{ summary_narrative }}</div>
+        {% endif %}
         <div class="kpi-grid">
-            <div class="kpi"><div class="kpi-label">Total Swings</div><div class="kpi-value">{{ summary.count }}</div></div>
-            <div class="kpi"><div class="kpi-label">Consistency Score</div><div class="kpi-value">{{ "%.1f"|format(summary.consistency_score) }}</div></div>
-            <div class="kpi"><div class="kpi-label">Average (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.avg) }}</div></div>
-            <div class="kpi"><div class="kpi-label">Median (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.median) }}</div></div>
-            <div class="kpi"><div class="kpi-label">Std Dev (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.stddev) }}</div></div>
-            <div class="kpi"><div class="kpi-label">CV</div><div class="kpi-value">{{ "%.2f"|format(summary.cv * 100) }}%</div></div>
-            <div class="kpi"><div class="kpi-label">P10 / P90 (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.p10) }} / {{ "%.3f"|format(summary.p90) }}</div></div>
-            <div class="kpi"><div class="kpi-label">IQR (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.iqr) }}</div></div>
-            <div class="kpi"><div class="kpi-label">Range (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.range) }}</div></div>
-            <div class="kpi"><div class="kpi-label">Outliers</div><div class="kpi-value">{{ summary.outlier_count }}</div></div>
-            <div class="kpi"><div class="kpi-label">Last 10 Avg (s)</div><div class="kpi-value">{{ "%.3f"|format(summary.last10_avg) }}</div></div>
-            <div class="kpi"><div class="kpi-label">Trend / Swing</div><div class="kpi-value">{{ "%.4f"|format(summary.trend_per_swing) }}s</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="The number of swing clips currently included for this player.">Total Swings</span></div><div class="kpi-value">{{ summary.count }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="A higher-level consistency measure derived from the spread of swing times. Higher usually means the player is repeating timing more closely.">Consistency Score</span></div><div class="kpi-value">{{ "%.1f"|format(summary.consistency_score) }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="The arithmetic mean of all swing durations in seconds.">Average (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.avg) }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="The middle swing duration after sorting all swings from fastest to slowest.">Median (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.median) }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="Standard deviation shows how spread out the swing times are around the average. Lower is tighter.">Std Dev (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.stddev) }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="Coefficient of variation: standard deviation divided by average. Useful for comparing consistency across players with different average swing times.">CV</span></div><div class="kpi-value">{{ "%.2f"|format(summary.cv * 100) }}%</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="The 10th and 90th percentile swing times. This shows the typical low and high ends without being overly affected by extreme outliers.">P10 / P90 (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.p10) }} / {{ "%.3f"|format(summary.p90) }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="Interquartile range: the spread between the 25th and 75th percentile swing times. A smaller IQR means the middle of the dataset is tighter.">IQR (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.iqr) }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="The difference between the slowest and fastest swing times in the current set.">Range (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.range) }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="Swings flagged as unusually far from the player's typical timing pattern.">Outliers</span></div><div class="kpi-value">{{ summary.outlier_count }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="The average swing duration across the 10 most recent swings.">Last 10 Avg (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.last10_avg) }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="The estimated change in swing duration from one swing to the next over time. Negative means speeding up; positive means slowing down.">Trend / Swing</span></div><div class="kpi-value">{{ "%.4f"|format(summary.trend_per_swing) }}s</div></div>
         </div>
+        <div class="dash-actions">
+            <button type="button" class="pose-btn" onclick="copyDashboardForLlm()">Copy For LLM</button>
+            <button type="button" class="pose-btn" onclick="toggleLlmExportPreview()">Preview Export</button>
+        </div>
+        <textarea id="llm_export_box" class="export-box" readonly></textarea>
         <div class="dash-links">
-            <a class="dash-link-btn" href="/library?sid={{ sid }}&type=swing&hitter={{ selected_hitter[1]|lower }}">Open Swing Library</a>
-            <a class="dash-link-btn" href="/library?sid={{ sid }}&type=matchup&hitter={{ selected_hitter[1]|lower }}">Open Matchup Library</a>
+            <a class="dash-link-btn" href="/library?sid={{ sid }}&type=swing&hitter={{ (selected_hitter.hitter_name or '')|lower }}">Open Swing Library</a>
+            <a class="dash-link-btn" href="/library?sid={{ sid }}&type=matchup&hitter={{ (selected_hitter.hitter_name or '')|lower }}">Open Matchup Library</a>
         </div>
     </div>
 
@@ -258,19 +303,15 @@
             <table class="dash-table" id="swings_table">
                 <thead>
                     <tr>
-                        <th>Swing ID</th>
-                        <th>Description</th>
-                        <th>Created</th>
-                        <th>Frames</th>
-                        <th>FPS</th>
-                        <th>Swing Time (s)</th>
-                        <th>Decision Frame</th>
-                        <th>Decision Time (s)</th>
-                        <th>Decision %</th>
-                        <th>Swing</th>
-                        <th>Matchups</th>
-                        <th>Pose Data</th>
-                        <th>Delete</th>
+                        <th><span class="hint" title="The database ID for this swing clip.">Swing ID</span></th>
+                        <th><span class="hint" title="The saved label or description attached to this swing clip.">Description</span></th>
+                        <th><span class="hint" title="When this swing clip was added to the system.">Created</span></th>
+                        <th><span class="hint" title="The measured duration of the swing clip in seconds.">Swing Time (s)</span></th>
+                        <th><span class="hint" title="The amount of time between the decision marker and the contact marker from the pose data. This only appears when valid pose event markers exist.">Commitment to Contact (s)</span></th>
+                        <th><span class="hint" title="Open the swing clip playback page.">Swing</span></th>
+                        <th><span class="hint" title="Linked matchup videos created from this swing.">Matchups</span></th>
+                        <th><span class="hint" title="Whether pose-tracking data exists for this swing and can be copied out.">Pose Data</span></th>
+                        <th><span class="hint" title="Remove this swing clip from the dashboard and library.">Delete</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -279,12 +320,8 @@
                         <td>{{ r.id }}</td>
                         <td>{{ r.description }}</td>
                         <td>{{ r.created_at or "" }}</td>
-                        <td>{{ r.frame_count }}</td>
-                        <td>{{ "%.2f"|format(r.fps) if r.fps else "" }}</td>
                         <td>{{ "%.3f"|format(r.swing_seconds) }}</td>
-                        <td>{{ r.decision_frame if r.decision_frame is not none else "" }}</td>
-                        <td>{{ "%.3f"|format(r.decision_seconds) if r.decision_seconds is not none else "" }}</td>
-                        <td>{{ "%.1f"|format(r.decision_pct) ~ "%" if r.decision_pct is not none else "" }}</td>
+                        <td>{{ r.commitment_to_contact_display or "" }}</td>
                         <td><a href="/play/swing?sid={{ sid }}&id={{ r.id }}">Open Swing</a></td>
                         <td>
                             {% if r.matchup_count and r.latest_matchup_id %}
@@ -296,7 +333,10 @@
                         </td>
                         <td>
                             {% if r.has_pose_data %}
-                            <button type="button" onclick="copyPoseData({{ r.id }})" style="border:1px solid #444;border-radius:6px;padding:4px 8px;background:#1f1f1f;color:#fff;cursor:pointer;">Copy Pose</button>
+                            <div class="pose-action-row">
+                                <button type="button" class="pose-btn" onclick="openPoseAnimation({{ r.id }})">Play Pose</button>
+                                <button type="button" class="pose-btn" onclick="copyPoseData({{ r.id }})">Copy Pose</button>
+                            </div>
                             {% else %}
                             <span style="color:#777;">None</span>
                             {% endif %}
@@ -319,7 +359,81 @@
     {% endif %}
 </div>
 
+<script id="dashboard_summary_json" type="application/json">{% if summary %}{{ summary|tojson }}{% else %}null{% endif %}</script>
+<script id="dashboard_results_json" type="application/json">{% if results %}{{ results|tojson }}{% else %}[]{% endif %}</script>
+<script id="dashboard_selected_hitter_json" type="application/json">{% if selected_hitter %}{{ selected_hitter|tojson }}{% else %}null{% endif %}</script>
+<script id="dashboard_summary_narrative_json" type="application/json">{% if summary_narrative %}{{ summary_narrative|tojson }}{% else %}""{% endif %}</script>
+
+<div id="pose_modal" class="pose-modal">
+    <div class="pose-modal-card">
+        <div class="pose-modal-toolbar">
+            <b id="pose_modal_title">Pose Animation</b>
+            <button type="button" id="pose_play_btn" class="pose-btn">Play</button>
+            <button type="button" id="pose_pause_btn" class="pose-btn">Pause</button>
+            <button type="button" id="pose_close_btn" class="pose-btn" style="margin-left:auto;">Close</button>
+        </div>
+        <canvas id="pose_canvas" class="pose-canvas" width="1280" height="720"></canvas>
+        <div style="margin-top:10px; display:grid; gap:10px;">
+            <label for="pose_timeline_slider" style="display:grid; gap:6px;">
+                <span style="font-size:13px; opacity:0.85;">Timeline</span>
+                <input type="range" id="pose_timeline_slider" min="0" max="0" value="0" step="1">
+            </label>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span style="font-size:13px; opacity:0.85;">Speed</span>
+                <button type="button" class="pose-btn pose-speed-btn" data-speed="0.25">0.25x</button>
+                <button type="button" class="pose-btn pose-speed-btn" data-speed="0.5">0.5x</button>
+                <button type="button" class="pose-btn pose-speed-btn" data-speed="0.75">0.75x</button>
+                <button type="button" class="pose-btn pose-speed-btn" data-speed="1">1x</button>
+                <span id="pose_speed_value" style="min-width:42px; font-size:13px; text-align:right;">1.00x</span>
+            </div>
+        </div>
+        <div id="pose_status" style="margin-top:6px; opacity:0.8; font-size:13px;"></div>
+    </div>
+</div>
+
 <script>
+function parseDashboardJson(id, fallback) {
+    const node = document.getElementById(id);
+    if (!node) return fallback;
+    try {
+        return JSON.parse(node.textContent || "");
+    } catch (_) {
+        return fallback;
+    }
+}
+
+const dashboardSummary = parseDashboardJson("dashboard_summary_json", null);
+const dashboardResults = parseDashboardJson("dashboard_results_json", []);
+const dashboardSelectedHitter = parseDashboardJson("dashboard_selected_hitter_json", null);
+const dashboardNarrative = parseDashboardJson("dashboard_summary_narrative_json", "");
+const poseModal = document.getElementById("pose_modal");
+const poseCanvas = document.getElementById("pose_canvas");
+const poseCtx = poseCanvas ? poseCanvas.getContext("2d") : null;
+const poseModalTitle = document.getElementById("pose_modal_title");
+const poseTimelineSlider = document.getElementById("pose_timeline_slider");
+const poseStatus = document.getElementById("pose_status");
+const posePlayBtn = document.getElementById("pose_play_btn");
+const posePauseBtn = document.getElementById("pose_pause_btn");
+const poseSpeedValue = document.getElementById("pose_speed_value");
+const poseSpeedButtons = Array.from(document.querySelectorAll(".pose-speed-btn"));
+const poseCloseBtn = document.getElementById("pose_close_btn");
+const POSE_CONNECTIONS = [
+    ["shoulder1", "shoulder2"],
+    ["shoulder1", "elbow1"], ["elbow1", "wrist1"],
+    ["shoulder2", "elbow2"], ["elbow2", "wrist2"],
+    ["shoulder1", "hip1"], ["shoulder2", "hip2"], ["hip1", "hip2"],
+    ["hip1", "knee1"], ["knee1", "ankle1"],
+    ["hip2", "knee2"], ["knee2", "ankle2"],
+];
+let poseAnimRows = [];
+let poseAnimIndex = 0;
+let poseAnimFps = 30;
+let poseAnimPlaying = false;
+let poseAnimRaf = null;
+let poseAnimLastTs = 0;
+let poseAnimSpeed = 1;
+let poseAnimFrameCarry = 0;
+
 function onTeamChange() {
     const form = document.getElementById("player_form");
     const hitter = document.getElementById("hitter_select");
@@ -327,32 +441,78 @@ function onTeamChange() {
     form.submit();
 }
 
-function filterHitters() {
-    const q = (document.getElementById("hitter_filter").value || "").toLowerCase().trim();
-    const select = document.getElementById("hitter_select");
-    if (select) {
-        for (const opt of select.options) {
-            if (!opt.value || opt.value === "0") continue;
-            const ok = !q || (opt.dataset.name || "").includes(q);
-            opt.hidden = !ok;
-        }
+function buildDashboardLlmExport() {
+    const hitterName = dashboardSelectedHitter && (dashboardSelectedHitter.hitter_name || dashboardSelectedHitter.name)
+        ? (dashboardSelectedHitter.hitter_name || dashboardSelectedHitter.name)
+        : "Unknown Player";
+    const teamName = dashboardSelectedHitter && (dashboardSelectedHitter.team_name || dashboardSelectedHitter.team)
+        ? (dashboardSelectedHitter.team_name || dashboardSelectedHitter.team)
+        : "Unknown Team";
+    const lines = [
+        "PLAYER DASHBOARD EXPORT",
+        `Player: ${hitterName}`,
+        `Team: ${teamName}`,
+        "",
+    ];
+    if (dashboardNarrative) {
+        lines.push("PLAIN ENGLISH SUMMARY");
+        lines.push(dashboardNarrative);
+        lines.push("");
     }
-    const cards = document.querySelectorAll("#hitter_grid .hitter-chip");
-    for (const card of cards) {
-        const ok = !q || (card.dataset.name || "").includes(q);
-        card.style.display = ok ? "block" : "none";
+    if (dashboardSummary) {
+        lines.push("KEY STATS");
+        lines.push(`Total swings: ${dashboardSummary.count}`);
+        lines.push(`Consistency score: ${Number(dashboardSummary.consistency_score || 0).toFixed(1)}`);
+        lines.push(`Average swing time (s): ${Number(dashboardSummary.avg || 0).toFixed(3)}`);
+        lines.push(`Median swing time (s): ${Number(dashboardSummary.median || 0).toFixed(3)}`);
+        lines.push(`Standard deviation (s): ${Number(dashboardSummary.stddev || 0).toFixed(3)}`);
+        lines.push(`Coefficient of variation (%): ${Number((dashboardSummary.cv || 0) * 100).toFixed(2)}`);
+        lines.push(`Typical range P10 to P90 (s): ${Number(dashboardSummary.p10 || 0).toFixed(3)} to ${Number(dashboardSummary.p90 || 0).toFixed(3)}`);
+        lines.push(`Middle spread IQR (s): ${Number(dashboardSummary.iqr || 0).toFixed(3)}`);
+        lines.push(`Full range (s): ${Number(dashboardSummary.range || 0).toFixed(3)}`);
+        lines.push(`Outliers: ${dashboardSummary.outlier_count || 0}`);
+        lines.push(`Last 10 average (s): ${Number(dashboardSummary.last10_avg || 0).toFixed(3)}`);
+        lines.push(`Trend per swing (s): ${Number(dashboardSummary.trend_per_swing || 0).toFixed(4)}`);
+        lines.push("");
     }
-    const titles = document.querySelectorAll("#hitter_grid .hitter-group-title");
-    const groups = document.querySelectorAll("#hitter_grid [data-team-group]");
-    groups.forEach((group) => {
-        const visibleCards = Array.from(group.querySelectorAll(".hitter-chip"))
-            .filter((c) => c.style.display !== "none");
-        const hasVisible = visibleCards.length > 0;
-        group.style.display = hasVisible ? "grid" : "none";
-        const team = group.getAttribute("data-team-group");
-        const title = Array.from(titles).find((t) => t.getAttribute("data-team") === team);
-        if (title) title.style.display = hasVisible ? "block" : "none";
-    });
+    lines.push("SWING ROWS");
+    if (!dashboardResults.length) {
+        lines.push("No swing rows available.");
+    } else {
+        lines.push("id | description | created | swing_time_s | commitment_to_contact_s | has_pose_data | matchup_count");
+        dashboardResults.forEach((r) => {
+            lines.push([
+                r.id,
+                String(r.description || "").replace(/\s+/g, " ").trim(),
+                r.created_at || "",
+                r.swing_seconds == null ? "" : Number(r.swing_seconds).toFixed(3),
+                r.commitment_to_contact_display || "",
+                Number(r.has_pose_data || 0) > 0 ? "yes" : "no",
+                Number(r.matchup_count || 0),
+            ].join(" | "));
+        });
+    }
+    return lines.join("\n");
+}
+
+async function copyDashboardForLlm() {
+    const text = buildDashboardLlmExport();
+    const box = document.getElementById("llm_export_box");
+    if (box) box.value = text;
+    try {
+        await navigator.clipboard.writeText(text);
+        alert("Dashboard export copied for LLM use.");
+    } catch (_) {
+        alert("Copy failed. Use Preview Export and copy from the text box.");
+    }
+}
+
+function toggleLlmExportPreview() {
+    const box = document.getElementById("llm_export_box");
+    if (!box) return;
+    const willShow = box.style.display !== "block";
+    box.style.display = willShow ? "block" : "none";
+    if (willShow) box.value = buildDashboardLlmExport();
 }
 
 function swingDurationBand(seconds) {
@@ -400,6 +560,226 @@ async function copyPoseData(swingId) {
     }
 }
 
+function parseCSVLine(line) {
+    const out = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+        if (ch === "\"") {
+            if (inQuotes && line[i + 1] === "\"") {
+                cur += "\"";
+                i += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (ch === "," && !inQuotes) {
+            out.push(cur);
+            cur = "";
+        } else {
+            cur += ch;
+        }
+    }
+    out.push(cur);
+    return out;
+}
+
+function parsePoseRows(csvText) {
+    const lines = (csvText || "").split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return { rows: [], fps: 30 };
+    const headers = parseCSVLine(lines[0]);
+    const idx = {};
+    headers.forEach((h, i) => { idx[h.trim()] = i; });
+    const take = (cols, name) => {
+        const i = idx[name];
+        if (i == null || i >= cols.length || cols[i] === "") return null;
+        const n = Number(cols[i]);
+        return Number.isFinite(n) ? n : null;
+    };
+    const rows = [];
+    let fps = 30;
+    for (let li = 1; li < lines.length; li += 1) {
+        const cols = parseCSVLine(lines[li]);
+        const rowFps = take(cols, "fps");
+        if (Number.isFinite(rowFps) && rowFps > 0) fps = rowFps;
+        rows.push({
+            frame: take(cols, "frame"),
+            eventStart: take(cols, "event_swing_start") === 1,
+            eventDecision: take(cols, "event_decision") === 1,
+            eventContact: take(cols, "event_contact") === 1,
+            nose: { x: take(cols, "nose_x"), y: take(cols, "nose_y"), conf: take(cols, "nose_conf") },
+            shoulder1: { x: take(cols, "shoulder1_x"), y: take(cols, "shoulder1_y"), conf: take(cols, "shoulder1_conf") },
+            shoulder2: { x: take(cols, "shoulder2_x"), y: take(cols, "shoulder2_y"), conf: take(cols, "shoulder2_conf") },
+            elbow1: { x: take(cols, "elbow1_x"), y: take(cols, "elbow1_y"), conf: take(cols, "elbow1_conf") },
+            elbow2: { x: take(cols, "elbow2_x"), y: take(cols, "elbow2_y"), conf: take(cols, "elbow2_conf") },
+            wrist1: { x: take(cols, "wrist1_x"), y: take(cols, "wrist1_y"), conf: take(cols, "wrist1_conf") },
+            wrist2: { x: take(cols, "wrist2_x"), y: take(cols, "wrist2_y"), conf: take(cols, "wrist2_conf") },
+            hip1: { x: take(cols, "hip1_x"), y: take(cols, "hip1_y"), conf: take(cols, "hip1_conf") },
+            hip2: { x: take(cols, "hip2_x"), y: take(cols, "hip2_y"), conf: take(cols, "hip2_conf") },
+            knee1: { x: take(cols, "knee1_x"), y: take(cols, "knee1_y"), conf: take(cols, "knee1_conf") },
+            knee2: { x: take(cols, "knee2_x"), y: take(cols, "knee2_y"), conf: take(cols, "knee2_conf") },
+            ankle1: { x: take(cols, "ankle1_x"), y: take(cols, "ankle1_y"), conf: take(cols, "ankle1_conf") },
+            ankle2: { x: take(cols, "ankle2_x"), y: take(cols, "ankle2_y"), conf: take(cols, "ankle2_conf") },
+        });
+    }
+    return { rows, fps };
+}
+
+function posePointDelta(a, b) {
+    if (!a || !b) return null;
+    if (!Number.isFinite(a.x) || !Number.isFinite(a.y) || !Number.isFinite(b.x) || !Number.isFinite(b.y)) return null;
+    return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function drawPoseFrame(row, idx, total) {
+    if (!poseCtx || !poseCanvas) return;
+    const w = poseCanvas.width;
+    const h = poseCanvas.height;
+    poseCtx.fillStyle = "black";
+    poseCtx.fillRect(0, 0, w, h);
+    if (!row) return;
+    const x = (v) => Math.round(Math.max(0, Math.min(1, Number(v))) * w);
+    const y = (v) => Math.round(Math.max(0, Math.min(1, Number(v))) * h);
+    const ok = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && (p.conf == null || p.conf >= 0.1);
+    poseCtx.lineWidth = 5;
+    poseCtx.strokeStyle = "#66c2ff";
+    poseCtx.beginPath();
+    for (const [aName, bName] of POSE_CONNECTIONS) {
+        const a = row[aName];
+        const b = row[bName];
+        if (!ok(a) || !ok(b)) continue;
+        poseCtx.moveTo(x(a.x), y(a.y));
+        poseCtx.lineTo(x(b.x), y(b.y));
+    }
+    poseCtx.stroke();
+    const points = ["nose", "shoulder1", "shoulder2", "elbow1", "elbow2", "wrist1", "wrist2", "hip1", "hip2", "knee1", "knee2", "ankle1", "ankle2"];
+    poseCtx.fillStyle = "#ffffff";
+    for (const name of points) {
+        const p = row[name];
+        if (!ok(p)) continue;
+        poseCtx.beginPath();
+        poseCtx.arc(x(p.x), y(p.y), 4, 0, Math.PI * 2);
+        poseCtx.fill();
+    }
+    poseCtx.fillStyle = "rgba(0,0,0,0.6)";
+    poseCtx.fillRect(10, 10, 320, 66);
+    poseCtx.fillStyle = "#fff";
+    poseCtx.font = "16px monospace";
+    poseCtx.fillText(`Frame: ${idx + 1}/${total}`, 18, 32);
+    const tags = [];
+    if (row.eventStart) tags.push("START");
+    if (row.eventDecision) tags.push("DECISION");
+    if (row.eventContact) tags.push("CONTACT");
+    poseCtx.fillText(tags.length ? tags.join(" | ") : "-", 18, 56);
+}
+
+function formatPoseSpeed(speed) {
+    const n = Number(speed || 0);
+    return `${n.toFixed(2)}x`;
+}
+
+function updatePoseStatus(prefix = null) {
+    if (!poseStatus) return;
+    if (!poseAnimRows.length) {
+        poseStatus.textContent = prefix || "No pose data loaded.";
+        return;
+    }
+    const frameInfo = `Frame ${poseAnimIndex + 1}/${poseAnimRows.length}`;
+    const speedInfo = formatPoseSpeed(poseAnimSpeed);
+    poseStatus.textContent = prefix ? `${prefix} | ${frameInfo} | ${speedInfo}` : `${poseAnimPlaying ? "Playing" : "Paused"} | ${frameInfo} | ${speedInfo}`;
+}
+
+function syncPoseTimelineUI() {
+    if (!poseTimelineSlider) return;
+    poseTimelineSlider.max = String(Math.max(0, poseAnimRows.length - 1));
+    poseTimelineSlider.value = String(Math.max(0, Math.min(poseAnimRows.length - 1, poseAnimIndex)));
+}
+
+function syncPoseSpeedUI() {
+    if (poseSpeedValue) poseSpeedValue.textContent = formatPoseSpeed(poseAnimSpeed);
+    poseSpeedButtons.forEach((btn) => {
+        const speed = Number(btn.dataset.speed || 1);
+        const active = Math.abs(speed - poseAnimSpeed) < 0.001;
+        btn.style.background = active ? "#2c6fbb" : "";
+        btn.style.color = active ? "#fff" : "";
+        btn.style.borderColor = active ? "#2c6fbb" : "";
+    });
+}
+
+function setPoseFrame(nextIndex) {
+    if (!poseAnimRows.length) return;
+    poseAnimIndex = Math.max(0, Math.min(poseAnimRows.length - 1, Math.round(nextIndex)));
+    drawPoseFrame(poseAnimRows[poseAnimIndex], poseAnimIndex, poseAnimRows.length);
+    syncPoseTimelineUI();
+    updatePoseStatus();
+}
+
+function stopPoseAnimation() {
+    poseAnimPlaying = false;
+    if (poseAnimRaf) cancelAnimationFrame(poseAnimRaf);
+    poseAnimRaf = null;
+    poseAnimLastTs = 0;
+    poseAnimFrameCarry = 0;
+    updatePoseStatus();
+}
+
+function poseTick(ts) {
+    if (!poseAnimPlaying || !poseAnimRows.length) return;
+    if (!poseAnimLastTs) poseAnimLastTs = ts;
+    const elapsedMs = ts - poseAnimLastTs;
+    poseAnimLastTs = ts;
+    const framesToAdvance = (elapsedMs / 1000) * Math.max(1, poseAnimFps) * poseAnimSpeed;
+    poseAnimFrameCarry += framesToAdvance;
+    let wholeFrames = 0;
+    if (poseAnimFrameCarry >= 1) wholeFrames = Math.floor(poseAnimFrameCarry);
+    else if (poseAnimFrameCarry <= -1) wholeFrames = Math.ceil(poseAnimFrameCarry);
+    if (wholeFrames !== 0) {
+        poseAnimFrameCarry -= wholeFrames;
+        poseAnimIndex = (((poseAnimIndex + wholeFrames) % poseAnimRows.length) + poseAnimRows.length) % poseAnimRows.length;
+        setPoseFrame(poseAnimIndex);
+    }
+    poseAnimRaf = requestAnimationFrame(poseTick);
+}
+
+function startPoseAnimation() {
+    if (!poseAnimRows.length) return;
+    poseAnimPlaying = true;
+    poseAnimLastTs = 0;
+    if (!poseAnimRaf) poseAnimRaf = requestAnimationFrame(poseTick);
+    updatePoseStatus();
+}
+
+async function openPoseAnimation(swingId) {
+    try {
+        if (!poseModal) return;
+        poseStatus.textContent = "Loading pose data...";
+        poseModal.style.display = "flex";
+        const r = await fetch(`/swing/pose-data?id=${swingId}`);
+        const data = await r.json();
+        if (!r.ok || !data.ok || !data.pose_data) {
+            poseStatus.textContent = "No pose data available.";
+            return;
+        }
+        const parsed = parsePoseRows(data.pose_data);
+        if (!parsed.rows.length) {
+            poseStatus.textContent = "Pose data was empty.";
+            return;
+        }
+        poseAnimRows = parsed.rows;
+        poseAnimFps = parsed.fps || 30;
+        poseAnimIndex = 0;
+        poseAnimSpeed = 1;
+        poseAnimFrameCarry = 0;
+        poseModalTitle.textContent = `Pose Animation - Swing ${swingId}`;
+        setPoseFrame(0);
+        syncPoseSpeedUI();
+        updatePoseStatus(`Loaded ${poseAnimRows.length} frames @ ${poseAnimFps.toFixed(2)} fps`);
+        startPoseAnimation();
+    } catch (_) {
+        poseStatus.textContent = "Failed to load pose data.";
+    }
+}
+
 (() => {
     const chart = document.getElementById("duration_chart");
     if (!chart) return;
@@ -414,8 +794,10 @@ async function copyPoseData(swingId) {
     const ph = H - pad.t - pad.b;
     const minV = Math.min(...series);
     const maxV = Math.max(...series);
-    const top = maxV + ((maxV - minV) * 0.06 || 0.015);
-    const bot = Math.max(0, minV - ((maxV - minV) * 0.04 || 0.01));
+    const padTop = ((maxV - minV) * 0.06 || 0.015);
+    const padBot = ((maxV - minV) * 0.04 || 0.01);
+    const top = Math.max(0, maxV + padTop);
+    const bot = Math.min(0, minV - padBot);
     const yScale = ph / Math.max(1e-6, top - bot);
     const toY = (v) => pad.t + ((top - v) * yScale);
 
@@ -459,9 +841,38 @@ async function copyPoseData(swingId) {
     ctx.fillText("Oldest", W - 58, H - 8);
     ctx.fillText("avg " + avg.toFixed(3) + "s", W - 128, toY(avg) - 6);
 })();
-
-filterHitters();
 applyDurationFilter();
+if (posePlayBtn) posePlayBtn.onclick = () => startPoseAnimation();
+if (posePauseBtn) posePauseBtn.onclick = () => stopPoseAnimation();
+if (poseTimelineSlider) {
+    poseTimelineSlider.oninput = () => {
+        const next = Number(poseTimelineSlider.value || 0);
+        stopPoseAnimation();
+        setPoseFrame(next);
+    };
+}
+poseSpeedButtons.forEach((btn) => {
+    btn.onclick = () => {
+        const next = Number(btn.dataset.speed || 1);
+        poseAnimSpeed = Number.isFinite(next) ? next : 1;
+        syncPoseSpeedUI();
+        if (poseAnimRows.length) updatePoseStatus();
+    };
+});
+if (poseCloseBtn) {
+    poseCloseBtn.onclick = () => {
+        stopPoseAnimation();
+        if (poseModal) poseModal.style.display = "none";
+    };
+}
+if (poseModal) {
+    poseModal.onclick = (ev) => {
+        if (ev.target === poseModal) {
+            stopPoseAnimation();
+            poseModal.style.display = "none";
+        }
+    };
+}
 </script>
 
 {% endblock %}
