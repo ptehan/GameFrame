@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: gameframe-js
+    name: gameframe
     env: node
     rootDir: GameFrameJS
     region: ohio
