@@ -70,7 +70,8 @@ const HITTER_ID   = "{{ hitter_id }}";
 const DESCRIPTION = "{{ description }}";
 
 let frames = [];
-let fps = 30;
+const SERVER_FPS = Number("{{ fps }}");
+let fps = Number.isFinite(SERVER_FPS) && SERVER_FPS > 0 ? SERVER_FPS : 30;
 
 let startFrame    = 0;
 let decisionFrame = 0;
@@ -444,62 +445,159 @@ function pickDecisionFrame(scores, startIdx, contactIdx) {
 ////////////////////////////////////////////////////////////
 // LOAD + DECODE VIDEO
 ////////////////////////////////////////////////////////////
-async function loadVideo() {
-    showProgress();
-    updateProgress(5, "Fetching video…");
+function waitForEvent(target, event) {
+    return new Promise((resolve, reject) => {
+        const onEvent = () => {
+            cleanup();
+            resolve();
+        };
+        const onError = () => {
+            cleanup();
+            reject(new Error(`Failed while waiting for ${event}`));
+        };
+        const cleanup = () => {
+            target.removeEventListener(event, onEvent);
+            target.removeEventListener("error", onError);
+        };
+        target.addEventListener(event, onEvent, { once: true });
+        target.addEventListener("error", onError, { once: true });
+    });
+}
 
-    const resp = await fetch(`/raw/swing?id=${TEMP_ID}`);
-    const buf  = await resp.arrayBuffer();
+async function decodeWithCaptureStream(video) {
+    if (!video.captureStream || typeof MediaStreamTrackProcessor === "undefined") {
+        throw new Error("captureStream unsupported");
+    }
 
-    updateProgress(20, "Preparing video…");
-
-    const blob = new Blob([buf], { type: "video/mp4" });
-    const video = document.createElement("video");
-    video.src = URL.createObjectURL(blob);
-    video.muted = true;
-    video.playsInline = true;
-
-    await video.play().catch(() => {});
-    updateProgress(35, "Initializing decoder…");
+    await video.play().catch(() => {
+        throw new Error("autoplay blocked");
+    });
 
     const stream = video.captureStream();
-    const track  = stream.getVideoTracks()[0];
+    const track = stream.getVideoTracks()[0];
     if (!track) {
-        info.textContent = "Cannot decode this MP4.";
-        return;
+        throw new Error("no video track");
     }
 
     const processor = new MediaStreamTrackProcessor(track);
-    const reader    = processor.readable.getReader();
-
-    frames = [];
-    updateProgress(40, "Decoding frames…");
+    const reader = processor.readable.getReader();
+    const collected = [];
 
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         const bmp = await createImageBitmap(value);
-        frames.push(bmp);
+        collected.push(bmp);
         value.close();
-
-        if (frames.length % 20 === 0) {
+        if (collected.length % 20 === 0) {
             updateProgress(
-                Math.min(40 + (frames.length / 5000) * 40, 80),
-                `Decoding… ${frames.length} frames`
+                Math.min(40 + (collected.length / 5000) * 40, 80),
+                `Decoding… ${collected.length} frames`
             );
         }
     }
 
-    updateProgress(90, "Building preview…");
+    video.pause();
+    return collected;
+}
 
-    slider.max = frames.length - 1;
-    drawFrame(0);
+function seekTo(video, time) {
+    return new Promise((resolve, reject) => {
+        const onSeeked = () => {
+            cleanup();
+            resolve();
+        };
+        const onError = () => {
+            cleanup();
+            reject(new Error("seek failed"));
+        };
+        const cleanup = () => {
+            video.removeEventListener("seeked", onSeeked);
+            video.removeEventListener("error", onError);
+        };
+        video.addEventListener("seeked", onSeeked, { once: true });
+        video.addEventListener("error", onError, { once: true });
+        video.currentTime = Math.min(Math.max(time, 0), video.duration || time);
+    });
+}
 
-    updateProgress(100, "Done!");
-    hideProgress();
+async function decodeWithSeeking(video) {
+    const duration = video.duration;
+    if (!Number.isFinite(duration) || duration <= 0) {
+        return [];
+    }
+    const off = document.createElement("canvas");
+    off.width = video.videoWidth || 640;
+    off.height = video.videoHeight || 360;
+    const offCtx = off.getContext("2d");
+    const collected = [];
+    const interval = 1 / fps;
+    const totalFrames = Math.max(1, Math.floor(duration / interval));
 
-    info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
+    for (let i = 0; i <= totalFrames; i += 1) {
+        const t = i * interval;
+        await seekTo(video, t);
+        offCtx.drawImage(video, 0, 0, off.width, off.height);
+        const bmp = await createImageBitmap(off);
+        collected.push(bmp);
+        if (i % 10 === 0) {
+            updateProgress(
+                Math.min(40 + (i / totalFrames) * 40, 80),
+                `Decoding… ${i + 1}/${totalFrames} frames`
+            );
+        }
+    }
+    return collected;
+}
+
+async function loadVideo() {
+    showProgress();
+    updateProgress(5, "Fetching video…");
+
+    try {
+        const resp = await fetch(`/raw/swing?id=${TEMP_ID}`);
+        if (!resp.ok) {
+            throw new Error("Video not found.");
+        }
+        const buf = await resp.arrayBuffer();
+
+        updateProgress(20, "Preparing video…");
+
+        const blob = new Blob([buf], { type: "video/mp4" });
+        const video = document.createElement("video");
+        video.src = URL.createObjectURL(blob);
+        video.muted = true;
+        video.playsInline = true;
+
+        await waitForEvent(video, "loadedmetadata");
+        updateProgress(35, "Initializing decoder…");
+
+        let decoded = [];
+        try {
+            decoded = await decodeWithCaptureStream(video);
+        } catch (err) {
+            updateProgress(40, "Using compatibility decoder…");
+            decoded = await decodeWithSeeking(video);
+        }
+
+        frames = decoded;
+        if (!frames.length) {
+            throw new Error("Cannot decode this MP4.");
+        }
+
+        updateProgress(90, "Building preview…");
+
+        slider.max = frames.length - 1;
+        drawFrame(0);
+
+        updateProgress(100, "Done!");
+        hideProgress();
+
+        info.textContent = `Frames: ${frames.length} | FPS approx: ${fps}`;
+    } catch (err) {
+        hideProgress();
+        info.textContent = err.message || "Video failed to load.";
+    }
 }
 
 ////////////////////////////////////////////////////////////
