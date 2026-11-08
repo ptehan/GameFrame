@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<div style="max-width:480px; margin:40px auto;">
+    <h2>Sign in to GameFrame</h2>
+    <p>Your videos and player library stay on this computer. Internet access verifies your trial or Season Pass and records matchup usage.</p>
+
+    {% if message %}
+    <div style="padding:12px; margin:16px 0; border:1px solid #ffdd00; border-radius:6px;">{{ message }}</div>
+    {% endif %}
+
+    {% if step == 'code' %}
+    <form method="post" action="/auth/verify-code">
+        <input type="hidden" name="email" value="{{ email }}">
+        <label for="code">Six-digit code sent to {{ email }}</label>
+        <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required
+               style="width:100%; padding:12px; margin:10px 0 16px; font-size:22px; letter-spacing:5px;">
+        <button type="submit">Verify and Continue</button>
+    </form>
+    <p><a href="/auth/login">Use a different email</a></p>
+    {% else %}
+    <form method="post" action="/auth/request-code">
+        <label for="email">Email address</label>
+        <input id="email" type="email" name="email" value="{{ email }}" autocomplete="email" required
+               style="width:100%; padding:12px; margin:10px 0 16px;">
+        <button type="submit">Email Me a Code</button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

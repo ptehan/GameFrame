@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block content %}
+<section style="max-width:640px;margin:24px auto;padding:16px;">
+  <h2>{% if is_ev %}Pitch Velocity{% else %}Edit Pitch{% endif %}</h2>
+  <form id="pending-pitch-form" action="{% if is_ev %}/multi-pitch/pending/speed{% else %}/multi-pitch/pending/tag{% endif %}" method="{% if is_ev %}post{% else %}get{% endif %}" style="display:flex;flex-direction:column;gap:16px;">
+    <input type="hidden" name="id" value="{{ pending.id }}">
+    <input type="hidden" name="sid" value="{{ sid }}">
+    <input type="hidden" name="embedded" value="1">
+    {% if is_ev %}
+    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+      <label><input type="radio" name="player_mode" value="existing" checked> Existing pitcher</label>
+      <label><input type="radio" name="player_mode" value="new"> New pitcher</label>
+    </div>
+    <div id="new-pitcher-fields" hidden>
+      <label for="new-pitcher-name">Pitcher name</label>
+      <input id="new-pitcher-name" name="new_pitcher_name" maxlength="150" style="width:100%;box-sizing:border-box;margin:6px 0 16px;height:40px;" disabled>
+      <label for="new-pitcher-team">Team</label>
+      <select id="new-pitcher-team" name="team_id" style="width:100%;height:40px;margin-top:6px;" disabled>
+        <option value="">Choose team</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <label id="existing-pitcher-label" for="pending-pitcher">Pitcher</label>
+    <select id="pending-pitcher" name="pitcher_id" required style="width:100%;height:40px;">
+      <option value="">Choose pitcher</option>
+      {% for p in pitchers %}<option value="{{ p.id }}">{{ p.name }} ({{ p.team_name }})</option>{% endfor %}
+    </select>
+    <button type="submit">{% if is_ev %}Continue to Pitch Velocity{% else %}Edit Pitch Video{% endif %}</button>
+  </form>
+  <video src="/multi-pitch/pending/video?id={{ pending.id }}" controls style="width:100%;max-height:55vh;margin-top:16px;"></video>
+</section>
+{% if is_ev %}
+<script>
+document.querySelectorAll('[name="player_mode"]').forEach(input=>input.addEventListener('change',()=>{
+  const create=input.value==='new';
+  document.getElementById('new-pitcher-fields').hidden=!create;
+  document.querySelectorAll('#new-pitcher-fields input,#new-pitcher-fields select').forEach(field=>{field.disabled=!create;field.required=create;});
+  const existing=document.getElementById('pending-pitcher');existing.hidden=create;existing.disabled=create;existing.required=!create;
+  document.getElementById('existing-pitcher-label').hidden=create;
+}));
+</script>
+{% endif %}
+{% endblock %}

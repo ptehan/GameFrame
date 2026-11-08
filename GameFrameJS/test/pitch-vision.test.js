@@ -1,0 +1,164 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { promisify } = require('node:util');
+const run = promisify(require('node:child_process').execFile);
+const { analyzePitch, windowFrames, validateEvent, parseSettings, calculateSpeed, validateDetail, savedContactWindow, releaseSearchWindow, manualReviewPrompt, normalizeVideoFps } = require('../pitch-vision');
+
+const event = (frame, type) => ({ frame, earliest: frame, latest: frame, type, confidence: 'medium', reason: 'Test evidence' });
+const detail = (frame, type, position) => ({ ...event(frame,type), frame_offset:0, position_feet:position, position_min_feet:position-0.5, position_max_feet:position+0.5, position_reason:'Test landmarks' });
+test('video FPS snaps small errors to standard rates without losing NTSC rates', () => {
+  assert.equal(normalizeVideoFps(59.99880002399952),60);
+  assert.equal(normalizeVideoFps(30.000300003),30);
+  assert.equal(normalizeVideoFps(60000/1001),59.94);
+  assert.equal(normalizeVideoFps(30000/1001),29.97);
+  assert.equal(normalizeVideoFps(24000/1001),23.976);
+  assert.equal(normalizeVideoFps(27.5),27.5);
+  assert.throws(() => normalizeVideoFps(0));
+});
+
+test('manual prompt uses requested instructions and video-specific values', () => {
+  const prompt = manualReviewPrompt({selection:{start:71,end:101},contact_frame:119,timing_fps:60,settings:parseSettings({field:'50/70',speed_loss_percent:12})});
+  assert.match(prompt,/source frames 71-101/);
+  assert.match(prompt,/contact at frame 119/);
+  assert.match(prompt,/50 feet/);
+  assert.match(prompt,/60 FPS, detected from the video/);
+  assert.match(prompt,/Work backwards from the end/);
+  assert.match(prompt,/check the frame before it\. Revise\. Iterate\./);
+  assert.match(prompt,/No guessing\./);
+  assert.match(prompt,/Frames = 119 - the frame number you just found/);
+  assert.match(prompt,/Return 1\.05 \* 3600 \* distance \* fps \/ frames \/ 5280/);
+  assert.doesNotMatch(prompt,/12%|200|1\.417|base distance/);
+  assert.match(prompt,/BEFORE answering/);
+  assert.match(prompt,/reject N, move earlier, and repeat/);
+  assert.match(prompt,/No dialogue, questions, apologies/);
+  assert.match(prompt,/If unresolved, output only UNRESOLVED/);
+  assert.ok(prompt.split(/\s+/).length < 450);
+  const other = manualReviewPrompt({selection:{start:20,end:35},contact_frame:44,timing_fps:29.97,settings:parseSettings()});
+  assert.match(other,/29.97 FPS/);
+  assert.match(other,/Frames = 44 -/);
+  assert.match(other,/60.5 feet/);
+});
+test('guessed MPH range maps to tight FPS-dependent windows without padding', () => {
+  const settings = parseSettings({field:'60/90',speed_range:'65-75'});
+  const w = releaseSearchWindow(119,120,60,settings);
+  const k = 1.05 * 3600 * 51.5 * 60 / 5280;
+  assert.equal(w.min_elapsed_frames,k/75);
+  assert.equal(w.max_elapsed_frames,k/65);
+  assert.equal(w.start,Math.floor(119-k/65));
+  assert.equal(w.end,Math.ceil(119-k/75));
+  assert.equal(w.padding_frames,0);
+  const narrow = releaseSearchWindow(119,120,60,parseSettings({speed_range:'75-85'}));
+  assert.equal(narrow.start,89);
+  assert.equal(narrow.end,93);
+  assert.ok(w.end-w.start < 30);
+  assert.equal(releaseSearchWindow(119,120,30,settings).min_elapsed_frames,w.min_elapsed_frames/2);
+  const fast = releaseSearchWindow(119,120,60,parseSettings({speed_range:'95-105'}));
+  assert.ok(fast.start > w.start);
+  const short = releaseSearchWindow(119,120,60,parseSettings({field:'45/60',speed_range:'65-75'}));
+  assert.ok(short.start > w.start);
+  for (const range of ['45-55','55-65','65-75','75-85','85-95','95-105']) {
+    const window = releaseSearchWindow(119,120,60,parseSettings({speed_range:range}));
+    assert.ok(window.start >= 0 && window.end < 119);
+  }
+  assert.equal(releaseSearchWindow(30,40,60,settings).start,0);
+  assert.throws(() => releaseSearchWindow(2,30,60,settings));
+  assert.throws(() => parseSettings({speed_range:'0-10'}));
+  assert.throws(() => parseSettings({search_extension_feet:-1}));
+  assert.throws(() => parseSettings({field:'custom',pitching_feet:10,search_extension_feet:10}));
+});
+
+test('field presets, signed endpoint positions, fractional timing and release correction', () => {
+  assert.equal(parseSettings({field:'45/60'}).pitching_feet,45);
+  assert.equal(parseSettings({field:'50/70'}).pitching_feet,50);
+  const settings = parseSettings({field:'60/90'});
+  assert.equal(settings.pitching_feet,60.5);
+  assert.equal(parseSettings({field:'custom',pitching_feet:'43'}).pitching_feet,43);
+  assert.throws(() => parseSettings({field:'custom',pitching_feet:'bad',base_feet:60}));
+  assert.throws(() => parseSettings({capture_fps:0}));
+  assert.throws(() => parseSettings({speed_loss_percent:-10}));
+  const release = {...detail(10,'release',6), frame_offset:0.25, earliest:9.5, latest:10.5};
+  const endpoint = {...detail(35,'glove_catch',-2), frame_offset:-0.25, earliest:34.5, latest:35.5};
+  const speed = calculateSpeed(release,endpoint,settings,60);
+  assert.equal(speed.distance_feet,56.5);
+  assert.equal(speed.elapsed_frames,24.5);
+  assert.ok(Math.abs(speed.average_mph - 3600*56.5*60/24.5/5280) < 1e-9);
+  assert.ok(Math.abs(speed.correction_percent - 5.26315789473684) < 1e-9);
+  assert.ok(speed.average_range[0] < speed.average_mph && speed.average_range[1] > speed.average_mph);
+  assert.equal(calculateSpeed(release,{...endpoint,position_feet:2,position_min_feet:1.5,position_max_feet:2.5},settings,60).distance_feet,52.5);
+  assert.equal(calculateSpeed(release,{...endpoint,position_feet:null},settings,60).available,false);
+  assert.equal(calculateSpeed(release,{...endpoint,earliest:10},settings,60).available,false);
+  assert.throws(() => validateDetail({...release,frame_offset:1}, windowFrames(10,90), ['release','unclear'], 'release',settings));
+  assert.throws(() => validateDetail({...release,frame_offset:-0.25}, windowFrames(10,90), ['release','unclear'], 'release',settings));
+  const between = {...detail(100,'release',6),frame_offset:0.75,earliest:100,latest:101};
+  validateDetail(between,Array.from({length:31},(_,i)=>i+90),['release','unclear'],'release',settings);
+  const fractional = calculateSpeed(between,detail(119,'bat_contact',2),settings,30);
+  assert.equal(fractional.elapsed_frames,18.25);
+  assert.equal(fractional.elapsed_seconds,18.25/30);
+});
+test('30-frame windows stay in bounds and retain source indices', () => {
+  assert.deepEqual(releaseSearchWindow(119,120,60), {start:71,end:101});
+  assert.deepEqual(releaseSearchWindow(119,120,59.998800024), {start:71,end:101});
+  assert.deepEqual(releaseSearchWindow(20,90,30), {start:0,end:11});
+  assert.throws(() => releaseSearchWindow(2,90,30));
+  assert.deepEqual(savedContactWindow(72,90,30), {start:12,end:72});
+  assert.deepEqual(savedContactWindow(20,90,30), {start:0,end:20});
+  assert.throws(() => savedContactWindow(90,90,30));
+  assert.throws(() => validateDetail(detail(71,'glove_catch',-2), windowFrames(72,90), ['glove_catch'], 'endpoint', parseSettings(), 72), /must not be changed/);
+  assert.deepEqual(windowFrames(1, 90), Array.from({ length:30 }, (_, i) => i));
+  assert.deepEqual(windowFrames(89, 90), Array.from({ length:30 }, (_, i) => i + 60));
+  assert.deepEqual(windowFrames(5, 8), [0,1,2,3,4,5,6,7]);
+  assert.throws(() => validateEvent(event(99, 'release'), [1,2,3], ['release','unclear']), /outside/);
+});
+
+test('real frame grids feed overview and automatic refinement; API calls are mocked', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gf-vision-test-'));
+  const source = path.join(dir, 'source.mp4');
+  try {
+    await run(require('ffmpeg-static'), ['-v','error','-y','-f','lavfi','-i','testsrc2=s=640x360:r=30:d=3','-c:v','libx264','-pix_fmt','yuv420p',source]);
+    const calls = [];
+    const request = async (url, options) => {
+      assert.equal(url, 'https://api.openai.com/v1/responses');
+      const payload = JSON.parse(options.body); calls.push(payload);
+      assert.equal(payload.store, false);
+      assert.match(payload.instructions,/RELEASE IDENTIFICATION/);
+      assert.match(payload.instructions,/MANDATORY BACKWARD CHECK - REPEAT UNTIL VERIFIED/);
+      assert.match(payload.instructions,/REJECT N/);
+      for (const image of payload.input[0].content.slice(1)) assert.match(image.image_url, /^data:image\/jpeg;base64,\/9j\//);
+      assert.match(payload.input[0].content[0].text, /60.5 ft/);
+      const result = calls.length === 1 ? event(50,'release') : calls.length === 2 ? detail(52,'release',6) : detail(72,'glove_catch',-2);
+      return { ok:true, json:async () => ({ status:'completed', usage:{ input_tokens:100, output_tokens:50 }, output:[{ content:[{ type:'output_text', text:JSON.stringify(result) }] }] }) };
+    };
+    const result = await analyzePitch(source, { apiKey:'test-only', request, contactFrame:72, settings:{capture_fps:60} });
+    assert.equal(result.timing_fps,30);
+    assert.equal(result.frame_count,90);
+    assert.equal(result.speed.available,true);
+    assert.equal(result.speed.distance_feet,56.5);
+    assert.equal(result.release.frame,52);
+    assert.deepEqual(result.release.window,[48,63]);
+    assert.deepEqual(result.endpoint.window,[43,72]);
+    assert.deepEqual(result.endpoint.sheets.flatMap(s => s.frames), Array.from({length:30}, (_,i) => i+43));
+    assert.equal(result.usage.requests,3);
+    assert.equal(result.usage.input_tokens,300);
+    assert.equal(calls[1].input[0].content.length,2);
+    const unknown = { frame:null, earliest:null, latest:null, type:'unclear', confidence:'low', reason:'Not visible' };
+    let absentCalls = 0;
+    const absent = await analyzePitch(source, { apiKey:'test-only', contactFrame:72, request:async () => ({ ok:true, json:async () => ({ status:'completed', output:[{ content:[{ type:'output_text', text:JSON.stringify(++absentCalls === 1 ? unknown : {...detail(72,'unclear',0),position_feet:null,position_min_feet:null,position_max_feet:null}) }] }] }) }) });
+    assert.equal(absent.usage.requests,2);
+    assert.equal(absent.release.window,null);
+    const preview = await analyzePitch(source, {apiKey:'', previewOnly:true, contactFrame:72});
+    assert.equal(preview.usage.requests,0);
+    assert.equal(preview.sheets.length,1);
+    assert.match(preview.prompt,/frame 72/);
+    const manual = await analyzePitch(source, {apiKey:'',previewOnly:true,manualOnly:true,contactFrame:72});
+    assert.equal(manual.sheets,undefined);
+    assert.equal(manual.prompt,undefined);
+    assert.equal(manual.usage.requests,0);
+    assert.equal(manual.review_frames.length,16);
+    assert.deepEqual(preview.sheets[0].frames, [...Array.from({length:16}, (_,i) => i+48),72]);
+    await assert.rejects(analyzePitch(source, { apiKey:'test-only', contactFrame:72, request:async () => ({ok:false,status:429}) }), /429/);
+    await assert.rejects(analyzePitch(source, {apiKey:''}), /OPENAI_API_KEY/);
+  } finally { await fs.rm(dir, {recursive:true,force:true}); }
+});

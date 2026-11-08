@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.ms-wrap{max-width:1080px;margin:0 auto;color:var(--gf-ink)}
+.ms-wrap>p{margin:0 0 14px;color:var(--gf-muted);line-height:1.4}
+.ms-panel{border:1px solid var(--gf-line);border-radius:10px;background:var(--gf-panel);padding:14px;box-shadow:0 1px 0 rgb(20 28 34 / .03)}
+.ms-step[hidden]{display:none!important}
+.ms-step-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.ms-step-heading h2{margin:0;font-size:1rem;letter-spacing:0}
+.ms-step-pill{flex:0 0 auto;border:1px solid var(--gf-line-strong);border-radius:999px;padding:5px 9px;color:var(--gf-subtle);font-size:.72rem;font-weight:800;text-transform:uppercase}
+.ms-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ms-fields .wide{grid-column:1/-1}
+.ms-fields label{display:flex;flex-direction:column;gap:6px;color:var(--gf-muted);font-size:.82rem;font-weight:700}
+.ms-fields input,.ms-fields select{width:100%;box-sizing:border-box}
+.entity-inline{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
+.entity-inline label{min-width:0}
+.ms-file-control{display:grid;gap:6px;color:var(--gf-muted);font-size:.82rem;font-weight:700}
+.ms-file-row{display:flex;align-items:center;gap:8px;min-height:36px;border:1px solid var(--gf-line-strong);border-radius:6px;background:#fff;padding:4px}
+.ms-file-row input{position:absolute;inline-size:1px;block-size:1px;opacity:0;pointer-events:none}
+.ms-file-button{display:inline-flex;align-items:center;justify-content:center;min-height:28px;border:1px solid var(--gf-line-strong);border-radius:6px;background:#fff;color:var(--gf-ink);padding:0 10px;font-size:.88rem;font-weight:700;cursor:pointer}
+.ms-file-button:hover{border-color:#95a3aa;background:var(--gf-panel-soft)}
+.ms-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gf-muted);font-weight:600}
+.ms-video{width:100%;max-height:52vh;background:#111820;border:1px solid var(--gf-line);border-radius:8px}
+.ms-transport{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid var(--gf-line);border-radius:8px;background:#fbfcfc;margin-top:8px}
+.ms-timeline-row{flex:1 0 100%}
+#ms-timeline{display:block;width:100%;height:18px;padding:0;accent-color:var(--gf-accent)}
+.ms-primary{border-color:var(--gf-accent-strong)!important;background:var(--gf-accent-strong)!important;color:#fff!important;font-weight:800}
+.ms-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ms-status{min-height:22px;margin-top:10px;color:var(--gf-muted)}
+.ms-note{font-size:13px;line-height:1.4;color:var(--gf-muted);margin:10px 0 0}
+.ms-progress-track{height:12px;background:var(--gf-line);border-radius:999px;overflow:hidden}
+.ms-progress-bar{height:100%;width:0;background:var(--gf-accent);transition:width .25s ease}
+.ms-progress-label{margin-top:5px;font-size:12px;color:var(--gf-muted)}
+.ms-entity-modal{border:1px solid var(--gf-line);border-radius:10px;padding:0;background:var(--gf-panel);box-shadow:0 24px 70px rgb(20 28 34 / .22);width:min(420px,calc(100vw - 28px))}
+.ms-entity-modal::backdrop{background:rgb(10 17 22 / .56)}
+.ms-entity-card{display:grid;gap:12px;padding:14px}
+.ms-entity-card h3{margin:0;font-size:1rem}
+.ms-entity-actions{display:flex;justify-content:flex-end;gap:8px}
+.ms-error{min-height:18px;color:var(--gf-danger);font-weight:700;font-size:.82rem}
+@media(max-width:650px){.ms-fields{grid-template-columns:1fr}.ms-fields .wide{grid-column:auto}.entity-inline{grid-template-columns:1fr}.ms-actions{justify-content:stretch}.ms-actions button{flex:1 1 160px}}
+</style>
+<div class="ms-wrap">
+  <p>Load one swing video. GameFrame finds the likely contact frame first, then sends you to tag swing start and swing decision.</p>
+  <section class="ms-panel">
+    <div id="load-step" class="ms-step">
+      <div class="ms-step-heading">
+        <h2>Add Swing</h2>
+        <span class="ms-step-pill">Step 1 of 2</span>
+      </div>
+      <form id="analyze-form" class="ms-fields">
+        <div class="entity-inline">
+          <label>Team<select id="team" name="team_id" required><option value="">Choose team</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
+          <button id="add-team" type="button">Add Team</button>
+        </div>
+        <div class="entity-inline">
+          <label>Hitter<select id="hitter" name="hitter_id" required><option value="">Choose hitter</option>{% for h in hitters %}<option value="{{ h.id }}" data-team="{{ h.team_id }}">{{ h.name }}</option>{% endfor %}</select></label>
+          <button id="add-hitter" type="button">Add Hitter</button>
+        </div>
+        <label>Swing type<select id="swing-type" name="swing_type" required><option value="">Choose type</option><option value="game">Game</option><option value="batting_practice">Batting Practice</option><option value="tee">Tee</option></select></label>
+        <div class="ms-file-control wide">
+          <span>Swing video</span>
+          <div class="ms-file-row">
+            <label class="ms-file-button" for="source-file" role="button" tabindex="0">Choose File</label>
+            <span id="source-file-name" class="ms-file-name">No file selected</span>
+            <input id="source-file" type="file" name="file" accept="video/*" required tabindex="-1" aria-hidden="true">
+          </div>
+        </div>
+        <button class="ms-primary wide" type="submit">Find Contact</button>
+      </form>
+    </div>
+
+    <div id="load-status" class="ms-status"></div>
+    <div id="ms-progress" hidden><div class="ms-progress-track"><div id="ms-progress-bar" class="ms-progress-bar"></div></div><div id="ms-progress-label" class="ms-progress-label"></div></div>
+
+    <div id="review" class="ms-step" hidden>
+      <div class="ms-step-heading">
+        <h2>Confirm Contact</h2>
+        <span class="ms-step-pill">Step 2 of 2</span>
+      </div>
+      <video id="source-video" class="ms-video" controls preload="metadata"></video>
+      <div class="ms-transport" aria-label="Video navigation">
+        <div class="ms-timeline-row">
+          <input id="ms-timeline" type="range" min="0" max="0" step="0.033333" value="0" aria-label="Video timeline">
+        </div>
+        <button id="ms-prev-frame" type="button">Prev Frame</button>
+        <button id="ms-play-pause" type="button">Play</button>
+        <button id="ms-next-frame" type="button">Next Frame</button>
+      </div>
+      <p id="review-now" class="ms-status">Review the detected contact frame.</p>
+      <p class="ms-note">Use the slider or frame buttons if the detected frame is off. The current frame will become Contact for the next tagging step.</p>
+      <div class="ms-actions">
+        <button id="back-to-load" type="button">Back</button>
+        <button id="use-current-contact" class="ms-primary" type="button">Use Current Contact Frame</button>
+      </div>
+      <div id="split-status" class="ms-status"></div>
+    </div>
+  </section>
+</div>
+
+<dialog closedby="none" id="ms-entity-modal" class="ms-entity-modal">
+  <section class="ms-entity-card">
+    <h3 id="ms-entity-title">Add</h3>
+    <input id="ms-entity-name" type="text" placeholder="Name" />
+    <div id="ms-entity-error" class="ms-error" role="alert"></div>
+    <div class="ms-entity-actions">
+      <button id="ms-entity-cancel" type="button">Cancel</button>
+      <button id="ms-entity-save" class="ms-primary" type="button">Save</button>
+    </div>
+  </section>
+</dialog>
+
+<script>
+const SID={{ sid|tojson }};
+let analysis=null;
+let detectedContactTime=null;
+let progressTimer=null;
+
+const team=document.getElementById('team');
+const hitter=document.getElementById('hitter');
+const video=document.getElementById('source-video');
+const sourceFile=document.getElementById('source-file');
+const sourceFileName=document.getElementById('source-file-name');
+const loadStep=document.getElementById('load-step');
+const reviewStep=document.getElementById('review');
+const timeline=document.getElementById('ms-timeline');
+const prevFrame=document.getElementById('ms-prev-frame');
+const nextFrame=document.getElementById('ms-next-frame');
+const playPause=document.getElementById('ms-play-pause');
+const status=document.getElementById('load-status');
+const splitStatus=document.getElementById('split-status');
+const reviewNow=document.getElementById('review-now');
+const entityModal=document.getElementById('ms-entity-modal');
+const entityTitle=document.getElementById('ms-entity-title');
+const entityName=document.getElementById('ms-entity-name');
+const entityError=document.getElementById('ms-entity-error');
+let entityMode=null;
+
+const allHitters=[...hitter.options].slice(1).map(o=>({value:o.value,text:o.textContent,team:o.dataset.team}));
+
+function progress(pct,label){
+  const box=document.getElementById('ms-progress');
+  box.hidden=false;
+  document.getElementById('ms-progress-bar').style.width=Math.max(0,Math.min(100,pct))+'%';
+  document.getElementById('ms-progress-label').textContent=label||'';
+}
+
+function postWithProgress(url,body,label){
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST',url);
+    if(!(body instanceof FormData))xhr.setRequestHeader('Content-Type','application/json');
+    xhr.upload.onprogress=e=>{if(e.lengthComputable)progress(5+(e.loaded/e.total)*40,'Loading to GameFrame...')};
+    xhr.upload.onload=()=>{
+      let pct=45;
+      progress(pct,label);
+      clearInterval(progressTimer);
+      progressTimer=setInterval(()=>{pct=Math.min(92,pct+2);progress(pct,label)},500);
+    };
+    xhr.onload=()=>{
+      clearInterval(progressTimer);
+      let data={};
+      try{data=JSON.parse(xhr.responseText||'{}')}catch(_){}
+      if(xhr.status>=200&&xhr.status<300){progress(100,'Complete');resolve(data)}
+      else reject(new Error(data.error||'Operation failed.'));
+    };
+    xhr.onerror=()=>{clearInterval(progressTimer);reject(new Error('Connection failed.'))};
+    xhr.send(body instanceof FormData?body:JSON.stringify(body));
+  });
+}
+
+function updateHitterOptions(preferredHitterValue=hitter.value){
+  const previous=hitter.value;
+  hitter.innerHTML='<option value="">Choose hitter</option>';
+  allHitters.filter(h=>!team.value||h.team===team.value).forEach(h=>{
+    const o=new Option(h.text,h.value);
+    o.dataset.team=h.team;
+    hitter.add(o);
+  });
+  const target=String(preferredHitterValue||previous||'');
+  if(target&&[...hitter.options].some(o=>o.value===target))hitter.value=target;
+}
+
+team.onchange=()=>updateHitterOptions();
+hitter.onchange=()=>{
+  const selectedValue=String(hitter.value||'');
+  const selectedRecord=allHitters.find(h=>h.value===selectedValue);
+  if(selectedRecord?.team && team.value!==selectedRecord.team){
+    team.value=selectedRecord.team;
+    updateHitterOptions(selectedValue);
+  }
+};
+updateHitterOptions();
+
+function openEntityModal(mode){
+  entityMode=mode;
+  entityTitle.textContent=mode==='team'?'Add Team':'Add Hitter';
+  entityName.value='';
+  entityError.textContent='';
+  entityModal.showModal();
+  setTimeout(()=>entityName.focus(),0);
+}
+function closeEntityModal(){if(entityModal.open)entityModal.close();entityMode=null}
+async function saveEntity(){
+  const name=(entityName.value||'').trim();
+  if(!name){entityError.textContent='Name is required.';return}
+  entityError.textContent='';
+  try{
+    if(entityMode==='team'){
+      const fd=new FormData();
+      fd.append('name',name);
+      const r=await fetch('/upload/common/add-team',{method:'POST',body:fd});
+      const data=await r.json();
+      if(!r.ok||!data.ok)throw new Error(data.error||'Failed to add team.');
+      team.add(new Option(data.name,String(data.id)));
+      team.value=String(data.id);
+      updateHitterOptions();
+      closeEntityModal();
+      return;
+    }
+    if(entityMode==='hitter'){
+      if(!team.value){entityError.textContent='Select or add a team first.';return}
+      const fd=new FormData();
+      fd.append('team_id',team.value);
+      fd.append('name',name);
+      const r=await fetch('/upload/common/add-hitter',{method:'POST',body:fd});
+      const data=await r.json();
+      if(!r.ok||!data.ok)throw new Error(data.error||'Failed to add hitter.');
+      allHitters.push({value:String(data.id),text:data.name,team:String(data.team_id)});
+      updateHitterOptions();
+      hitter.value=String(data.id);
+      closeEntityModal();
+    }
+  }catch(err){entityError.textContent=err.message||'Save failed.'}
+}
+
+document.getElementById('add-team').onclick=()=>openEntityModal('team');
+document.getElementById('add-hitter').onclick=()=>openEntityModal('hitter');
+document.getElementById('ms-entity-cancel').onclick=closeEntityModal;
+document.getElementById('ms-entity-save').onclick=saveEntity;
+// Backdrop clicks preserve the entity form; use its explicit close control.
+entityName.addEventListener('keydown',e=>{if(e.key==='Enter')saveEntity()});
+
+const fmt=t=>Number(t).toFixed(3);
+const frame=t=>Math.round(Number(t)*(analysis?.fps||30));
+function frameStep(){return 1 / Math.max(1, Number(analysis?.fps || 30))}
+function showLoadStep(){loadStep.hidden=false;reviewStep.hidden=true}
+function showReviewStep(){loadStep.hidden=true;reviewStep.hidden=false}
+function updateTimeline(){
+  const duration=Number(video.duration||analysis?.duration||0);
+  timeline.max=String(duration||0);
+  timeline.step=String(frameStep());
+  timeline.value=String(Math.min(duration||0,Math.max(0,Number(video.currentTime||0))));
+  reviewNow.textContent=`Current frame ${frame(video.currentTime||0)} at ${fmt(video.currentTime||0)} seconds`;
+}
+function setVideoTime(t){
+  const duration=Number(video.duration||analysis?.duration||0);
+  video.currentTime=Math.max(0,Math.min(duration||0,Number(t)||0));
+  updateTimeline();
+}
+function stepFrame(direction){
+  video.pause();
+  playPause.textContent='Play';
+  setVideoTime((video.currentTime||0)+(Number(direction)||0)*frameStep());
+}
+function resetAnalysisForNewFile(){
+  analysis=null;
+  detectedContactTime=null;
+  clearInterval(progressTimer);
+  progressTimer=null;
+  showLoadStep();
+  status.textContent='';
+  splitStatus.textContent='';
+  reviewNow.textContent='Review the detected contact frame.';
+  document.getElementById('ms-progress').hidden=true;
+  document.getElementById('ms-progress-bar').style.width='0%';
+  document.getElementById('ms-progress-label').textContent='';
+  timeline.value='0';
+  timeline.max='0';
+  playPause.textContent='Play';
+  video.removeAttribute('src');
+  video.load();
+}
+function seekDetected(t){
+  detectedContactTime=Number(t);
+  video.pause();
+  playPause.textContent='Play';
+  setVideoTime(detectedContactTime);
+  reviewNow.textContent=`Detected contact frame ${frame(detectedContactTime)} at ${fmt(detectedContactTime)} seconds`;
+}
+
+document.querySelector('.ms-file-button').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();sourceFile.click()}});
+sourceFile.addEventListener('click',()=>{sourceFile.value='';sourceFileName.textContent='No file selected';resetAnalysisForNewFile()});
+sourceFile.addEventListener('change',()=>{sourceFileName.textContent=sourceFile.files[0]?.name||'No file selected';resetAnalysisForNewFile()});
+timeline.addEventListener('input',()=>setVideoTime(timeline.value));
+prevFrame.onclick=()=>stepFrame(-1);
+nextFrame.onclick=()=>stepFrame(1);
+playPause.onclick=()=>{if(video.paused){video.play();playPause.textContent='Pause'}else{video.pause();playPause.textContent='Play'}};
+video.addEventListener('timeupdate',updateTimeline);
+video.addEventListener('loadedmetadata',updateTimeline);
+video.addEventListener('pause',()=>{playPause.textContent='Play'});
+video.addEventListener('play',()=>{playPause.textContent='Pause'});
+document.getElementById('back-to-load').onclick=()=>showLoadStep();
+
+document.getElementById('analyze-form').onsubmit=async e=>{
+  e.preventDefault();
+  const file=sourceFile.files[0];
+  const form=new FormData(e.target);
+  if(file?.lastModified)form.append('video_created_at',new Date(file.lastModified).toISOString());
+  status.textContent='Loading to GameFrame, finding contact, and preparing swing tagging...';
+  splitStatus.textContent='';
+  try{
+    const j=await postWithProgress('/multi-swing/prepare-tag',form,'Detecting contact and preparing the short swing clip...');
+    analysis=j;
+    analysis.team_id=team.value;
+    analysis.hitter_id=hitter.value;
+    analysis.swing_type=document.getElementById('swing-type').value;
+    analysis.description='Swing';
+    status.textContent=`Contact detected (${j.confidence || 'OK'}). Opening swing start, decision, and contact tagging...`;
+    openTagger(j.temp_id, Number(j.preset_contact_frame || 0), Number(j.fps || 0), j.video_created_at || '');
+  }catch(err){
+    status.textContent=err.message||'Analysis failed.';
+  }
+};
+
+function openTagger(tempId, contactFrame, fpsValue, videoCreatedAt){
+  const matchupReturnUrl=`/matchup/select?${new URLSearchParams({sid:SID,embedded:'1'}).toString()}`;
+  const q=new URLSearchParams({
+    sid:SID,
+    temp_id:tempId,
+    team_id:team.value,
+    hitter_id:hitter.value,
+    description:'Swing',
+    swing_type:document.getElementById('swing-type').value||'',
+    video_created_at:videoCreatedAt||'',
+    fps:String(fpsValue||0),
+    preset_contact_frame:String(contactFrame),
+    return_url:matchupReturnUrl,
+    embedded:'1'
+  });
+  window.location.href=`/upload/swing/trim?${q.toString()}`;
+}
+
+document.getElementById('use-current-contact').onclick=()=>{
+  if(!analysis?.temp_id){splitStatus.textContent='Load a video and find contact first.';return}
+  const contactTime=Number(video.currentTime||detectedContactTime||0);
+  if(!Number.isFinite(contactTime)){splitStatus.textContent='Choose a contact frame first.';return}
+  splitStatus.textContent='Opening swing start and decision tagging...';
+  openTagger(analysis.temp_id, frame(contactTime), Number(analysis.fps||0), analysis.video_created_at||'');
+};
+</script>
+{% endblock %}

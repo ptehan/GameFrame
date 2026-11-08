@@ -1,8 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<h2 style="margin-bottom:20px;">Create Matchup</h2>
-
 <div id="status" style="margin-bottom:10px; color:#ccc; font-weight:bold;">
     Loading FFmpeg…
 </div>
@@ -19,14 +17,18 @@
 
 <form id="matchupForm">
     <input type="hidden" id="sid" value="{{ sid }}">
+    <header class="matchup-wizard-heading">
+        <h2 id="matchup-step-title" tabindex="-1">Choose a pitch</h2>
+        <span id="matchup-step-count">Step 1 of 3</span>
+    </header>
 
-    <div style="display:flex; gap:60px; align-items:flex-start;">
+    <div class="matchup-selection-columns">
 
         <!-- COLUMN 1: PITCH -->
-        <div style="width:300px;">
+        <div data-matchup-step="0" class="matchup-choice-step">
             <h3>Pitch Selection</h3>
-
-            <label>Pitch Team</label>
+            <div class="matchup-choice-fields">
+            <label for="pitch_team">Team</label>
             <select id="pitch_team" style="width:100%; padding:8px; margin:8px 0;">
                 <option value="">Select Team</option>
                 {% for t in teams %}
@@ -34,27 +36,21 @@
                 {% endfor %}
             </select>
 
-            <label>Pitcher</label>
+            <label for="pitch_pitcher">Pitcher</label>
             <select id="pitch_pitcher" style="width:100%; padding:8px; margin:8px 0;"></select>
 
-            <label>Pitch Clip</label>
+            <label for="pitch_clip">Pitch</label>
             <select id="pitch_clip" style="width:100%; padding:8px; margin:8px 0;"></select>
+            </div>
+            <div id="pitch_clip_preview" class="matchup-clip-preview" aria-live="polite"></div>
 
-            <h3>Matchup Description</h3>
-
-            <input type="text" id="desc" placeholder="Description (optional)"
-                   style="width:100%; padding:10px; margin:8px 0;">
-
-            <button type="submit">
-                Create Matchup
-            </button>
         </div>
 
         <!-- COLUMN 2: SWING -->
-        <div style="width:300px;">
+        <div data-matchup-step="1" class="matchup-choice-step" hidden>
             <h3>Swing Selection</h3>
-
-            <label>Swing Team</label>
+            <div class="matchup-choice-fields">
+            <label for="swing_team">Team</label>
             <select id="swing_team" style="width:100%; padding:8px; margin:8px 0;">
                 <option value="">Select Team</option>
                 {% for t in teams %}
@@ -62,15 +58,104 @@
                 {% endfor %}
             </select>
 
-            <label>Hitter</label>
+            <label for="swing_hitter">Hitter</label>
             <select id="swing_hitter" style="width:100%; padding:8px; margin:8px 0;"></select>
 
-            <label>Swing Clip</label>
+            <label for="swing_clip">Swing</label>
             <select id="swing_clip" style="width:100%; padding:8px; margin:8px 0;"></select>
+            </div>
+            <div id="swing_clip_preview" class="matchup-clip-preview" aria-live="polite"></div>
         </div>
 
     </div>
+    <section data-matchup-step="2" hidden>
+        <div id="matchup-review-clips"></div>
+        <label for="desc">Description (optional)</label>
+        <input type="text" id="desc" style="width:100%;padding:10px;margin:8px 0;">
+    </section>
+    <p id="matchup-wizard-error" role="alert" hidden></p>
+    <div class="matchup-wizard-actions">
+        <button id="matchup-back" type="button" hidden>Back</button>
+        <button id="matchup-next" type="button">Continue</button>
+        <button id="matchup-create" type="submit" hidden>Create Matchup</button>
+    </div>
 </form>
+
+<style>
+.matchup-selection-columns { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; align-items:start; }
+#matchupForm { display:block!important;max-width:760px; margin:0 auto; }
+#matchupForm [hidden] { display:none !important; }
+.matchup-wizard-heading,.matchup-wizard-actions { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.matchup-wizard-heading h2#matchup-step-title { display:block !important; font-size:26px; margin:12px 0; }
+#matchupForm .matchup-wizard-heading { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px; }
+#matchupForm .matchup-wizard-heading .gf-step-guidance { grid-column:1/-1;grid-row:2;margin:0 0 12px; }
+.matchup-wizard-actions { margin-top:20px; }
+.matchup-wizard-actions button { min-height:44px; }
+#matchup-next,#matchup-create { margin-left:auto; }
+[data-matchup-step] h3 { display:none; }
+.matchup-selection-columns > div { min-width:0; }
+#status,#progress-container { max-width:900px; margin:0 auto 10px!important; color:var(--gf-muted,#53665d)!important; }
+#matchupForm .matchup-choice-step { display:grid;grid-template-columns:minmax(0,1.2fr) minmax(230px,.8fr);gap:24px;align-items:start; }
+.matchup-choice-fields { display:grid;grid-template-columns:90px minmax(0,1fr);gap:12px;align-items:center; }
+.matchup-choice-fields label { margin:0;font-weight:600;font-size:14px; }
+#matchupForm .matchup-choice-fields select { margin:0!important;padding:8px!important;min-height:40px;box-sizing:border-box;width:100%; }
+#matchupForm .matchup-choice-step .matchup-clip-preview { margin:0; }
+#matchupForm .matchup-choice-step .matchup-preview-card,#matchupForm .matchup-choice-step .matchup-preview-empty { min-height:144px;box-sizing:border-box; }
+#matchupForm .matchup-choice-step .matchup-preview-card img { width:90px;height:120px;max-height:120px; }
+#matchupForm .matchup-choice-step .matchup-preview-card { grid-template-columns:90px minmax(0,1fr);padding:10px; }
+#matchupForm .matchup-wizard-actions { border-top:1px solid var(--gf-line,#dfe4e7);padding-top:12px;margin-top:18px; }
+@media(max-width:650px){ #matchupForm .matchup-choice-step{grid-template-columns:minmax(0,1fr);gap:14px}#matchupForm .matchup-choice-step .matchup-preview-card,#matchupForm .matchup-choice-step .matchup-preview-empty{min-height:90px}#matchupForm .matchup-choice-step .matchup-preview-card img{height:68px}}
+@media(max-width:650px) { .matchup-selection-columns { grid-template-columns:minmax(0,1fr); gap:20px; } }
+.matchup-clip-preview {
+    min-height: 74px;
+    margin: 4px 0 12px;
+}
+.matchup-preview-card {
+    display: grid;
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    min-height: 74px;
+    padding: 8px;
+    border: 1px solid var(--gf-line, #dfe4e7);
+    border-radius: 8px;
+    background: var(--gf-panel-soft, #fafbfb);
+}
+.matchup-preview-card img {
+    display: block;
+    width: 78px;
+    height: 56px;
+    object-fit: contain;
+    border: 1px solid var(--gf-line-strong, #cbd3d8);
+    border-radius: 6px;
+    background: #101820;
+}
+.matchup-preview-card strong {
+    display: block;
+    color: var(--gf-ink, #171b1f);
+    font-size: 0.86rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.matchup-preview-card span {
+    display: block;
+    margin-top: 3px;
+    color: var(--gf-muted, #6b747c);
+    font-size: 0.76rem;
+}
+.matchup-preview-empty {
+    display: grid;
+    place-items: center;
+    min-height: 74px;
+    border: 1px dashed var(--gf-line-strong, #cbd3d8);
+    border-radius: 8px;
+    color: var(--gf-muted, #6b747c);
+    background: var(--gf-panel, #fff);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+</style>
+
 
 
 
@@ -108,6 +193,7 @@ window.FFmpeg.getCreateFFmpegCore = () => ({
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
 
+
     const { createFFmpeg } = FFmpeg;
 
     let ffmpeg = null;
@@ -141,20 +227,113 @@ document.addEventListener("DOMContentLoaded", async () => {
     const pitchClipMap = {{ pitch_clip_map | tojson }};
     const hitterMap    = {{ hitter_map | tojson }};
     const swingClipMap = {{ swing_clip_map | tojson }};
+    const defaultPitch = {
+        team: {{ default_pitch_team_id | tojson }},
+        player: {{ default_pitcher_id | tojson }},
+        clip: {{ default_pitch_clip_id | tojson }}
+    };
+    const defaultSwing = {
+        team: {{ default_swing_team_id | tojson }},
+        player: {{ default_hitter_id | tojson }},
+        clip: {{ default_swing_clip_id | tojson }}
+    };
 
     const ptTeam = document.getElementById("pitch_team");
     const ptPitcher = document.getElementById("pitch_pitcher");
     const ptClip = document.getElementById("pitch_clip");
+    const ptPreview = document.getElementById("pitch_clip_preview");
 
     const swTeam = document.getElementById("swing_team");
     const swHitter = document.getElementById("swing_hitter");
     const swClip = document.getElementById("swing_clip");
+    const swPreview = document.getElementById("swing_clip_preview");
+    let matchupStep = 0;
+    let matchupBusy = false;
+    function showMatchupStep(step) {
+        matchupStep = step;
+        document.querySelectorAll('[data-matchup-step]').forEach(panel => { panel.hidden = Number(panel.dataset.matchupStep) !== step; });
+        document.getElementById('matchup-step-title').textContent = ['Choose a pitch','Choose a swing','Review matchup'][step];
+        document.getElementById('matchup-step-count').textContent = `Step ${step + 1} of 3`;
+        document.getElementById('matchup-back').hidden = step === 0;
+        document.getElementById('matchup-next').hidden = step === 2;
+        document.getElementById('matchup-create').hidden = step !== 2;
+        document.getElementById('matchup-wizard-error').hidden = true;
+        updateSelectedPreviews();
+        if (step === 2) {
+            const review = document.getElementById('matchup-review-clips');
+            review.replaceChildren(ptPreview.cloneNode(true), swPreview.cloneNode(true));
+            review.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+        }
+        document.getElementById('matchup-step-title').focus();
+    }
+    function advanceMatchup() {
+        const valid = matchupStep === 0
+            ? selectedClipFromMap(pitchClipMap,ptPitcher.value,ptClip.value)
+            : selectedClipFromMap(swingClipMap,swHitter.value,swClip.value);
+        if (!valid) {
+            const error = document.getElementById('matchup-wizard-error');
+            error.textContent = matchupStep === 0 ? 'Choose a saved pitch to continue.' : 'Choose a saved swing to continue.';
+            error.hidden = false;
+            return;
+        }
+        if (matchupStep === 1 && valid.pending_id) {
+            const query = new URLSearchParams({id: String(valid.pending_id), sid: document.getElementById('sid').value,
+                matchup_pitch_id: ptClip.value, matchup_description: document.getElementById('desc').value});
+            if (new URLSearchParams(location.search).get('embedded') === '1') query.set('embedded','1');
+            location.href = `/multi-swing/pending/tag?${query}`;
+            return;
+        }
+        showMatchupStep(Math.min(2,matchupStep+1));
+    }
+    document.getElementById('matchup-next').onclick = advanceMatchup;
+    document.getElementById('matchup-back').onclick = () => { if (!matchupBusy) showMatchupStep(Math.max(0,matchupStep-1)); };
+
+    function selectedClipFromMap(map, playerId, clipId) {
+        const clips = map[String(playerId)] || [];
+        return clips.find((clip) => String(clip.id) === String(clipId)) || null;
+    }
+
+    function renderClipPreview(target, clip, typeLabel) {
+        if (!target) return;
+        if (!clip || !clip.id) {
+            target.innerHTML = `<div class="matchup-preview-empty">Select a ${typeLabel.toLowerCase()} clip</div>`;
+            return;
+        }
+        const safeLabel = String(clip.label || `${typeLabel} ${clip.id}`).replace(/[&<>"']/g, (ch) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            "\"": "&quot;",
+            "'": "&#39;",
+        }[ch]));
+        target.innerHTML = `
+            <div class="matchup-preview-card">
+                <img src="${clip.thumbnail}" alt="${typeLabel} thumbnail" loading="lazy"
+                     onerror="this.closest('.matchup-preview-card').querySelector('img').style.visibility='hidden';">
+                <div>
+                    <strong>${safeLabel}</strong>
+                    <span>${clip.pending_id ? 'Needs timing' : `${typeLabel} #${clip.id}`}</span>
+                </div>
+            </div>`;
+    }
+
+    function updateSelectedPreviews() {
+        renderClipPreview(ptPreview, selectedClipFromMap(pitchClipMap, ptPitcher.value, ptClip.value), "Pitch");
+        renderClipPreview(swPreview, selectedClipFromMap(swingClipMap, swHitter.value, swClip.value), "Swing");
+        const selectedSwing = selectedClipFromMap(swingClipMap, swHitter.value, swClip.value);
+        document.getElementById('matchup-next').textContent = matchupStep === 1 && selectedSwing?.pending_id ? 'Set swing timing' : 'Continue';
+    }
 
     ptTeam.onchange = () => {
         ptPitcher.innerHTML = "";
         ptClip.innerHTML = "";
+        updateSelectedPreviews();
     
-        const pitchers = pitcherMap[ptTeam.value] || [];
+        const pitchers = [...(pitcherMap[ptTeam.value] || [])].sort((a, b) => {
+            const aDate = ((pitchClipMap[a.id] || [])[0] || {}).created_at || "";
+            const bDate = ((pitchClipMap[b.id] || [])[0] || {}).created_at || "";
+            return bDate.localeCompare(aDate);
+        });
         let added = 0;
         // Prefer pitchers that already have clips.
         pitchers.forEach(p => {
@@ -186,6 +365,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const clips = pitchClipMap[ptPitcher.value] || [];
         if (clips.length === 0) {
             ptClip.innerHTML = `<option value="">No pitch clips for this pitcher</option>`;
+            updateSelectedPreviews();
             return;
         }
     
@@ -196,14 +376,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     
         // Clips are already provided newest-first.
         ptClip.selectedIndex = 0;
+        updateSelectedPreviews();
     };
 
 
     swTeam.onchange = () => {
         swHitter.innerHTML = "";
         swClip.innerHTML = "";
+        updateSelectedPreviews();
     
-        const hitters = hitterMap[swTeam.value] || [];
+        const hitters = [...(hitterMap[swTeam.value] || [])].sort((a, b) => {
+            const aDate = ((swingClipMap[a.id] || [])[0] || {}).created_at || "";
+            const bDate = ((swingClipMap[b.id] || [])[0] || {}).created_at || "";
+            return bDate.localeCompare(aDate);
+        });
         let added = 0;
         // Prefer hitters that already have clips.
         hitters.forEach(h => {
@@ -235,6 +421,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const clips = swingClipMap[swHitter.value] || [];
         if (clips.length === 0) {
             swClip.innerHTML = `<option value="">No swing clips for this hitter</option>`;
+            updateSelectedPreviews();
             return;
         }
     
@@ -245,7 +432,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     
         // Clips are already provided newest-first.
         swClip.selectedIndex = 0;
+        updateSelectedPreviews();
     };
+
+    ptClip.onchange = updateSelectedPreviews;
+    swClip.onchange = updateSelectedPreviews;
 
     // Initialize dropdowns on first load.
     const initPitchTeam = Array.from(ptTeam.options).find((opt) => {
@@ -258,21 +449,54 @@ document.addEventListener("DOMContentLoaded", async () => {
         const hitters = hitterMap[opt.value] || [];
         return hitters.some((h) => (swingClipMap[h.id] || []).length > 0);
     });
-    if (initPitchTeam) {
+    if (defaultPitch.team != null && Array.from(ptTeam.options).some((opt) => String(opt.value) === String(defaultPitch.team))) {
+        ptTeam.value = String(defaultPitch.team);
+        ptTeam.onchange();
+        ptPitcher.value = String(defaultPitch.player);
+        ptPitcher.onchange();
+        ptClip.value = String(defaultPitch.clip);
+        updateSelectedPreviews();
+    } else if (initPitchTeam) {
         ptTeam.value = initPitchTeam.value;
         ptTeam.onchange();
     } else if (ptTeam.options.length > 1) {
         ptTeam.selectedIndex = 1;
         ptTeam.onchange();
     }
-    if (initSwingTeam) {
+    if (defaultSwing.team != null && Array.from(swTeam.options).some((opt) => String(opt.value) === String(defaultSwing.team))) {
+        swTeam.value = String(defaultSwing.team);
+        swTeam.onchange();
+        swHitter.value = String(defaultSwing.player);
+        swHitter.onchange();
+        swClip.value = String(defaultSwing.clip);
+        updateSelectedPreviews();
+    } else if (initSwingTeam) {
         swTeam.value = initSwingTeam.value;
         swTeam.onchange();
     } else if (swTeam.options.length > 1) {
         swTeam.selectedIndex = 1;
         swTeam.onchange();
     }
+    updateSelectedPreviews();
 
+
+    const requested = new URLSearchParams(location.search);
+    function restoreClip(id, clipMap, peopleMap, team, player, clip) {
+        if (!id) return false;
+        for (const [playerId, clips] of Object.entries(clipMap)) {
+            if (!clips.some(item => String(item.id) === id)) continue;
+            const teamEntry = Object.entries(peopleMap).find(([, people]) => people.some(person => String(person.id) === playerId));
+            if (!teamEntry) return false;
+            team.value = teamEntry[0]; team.onchange();
+            player.value = playerId; player.onchange(); clip.value = id;
+            updateSelectedPreviews(); return true;
+        }
+        return false;
+    }
+    const restoredPitch = restoreClip(requested.get('pitch_id'), pitchClipMap, pitcherMap, ptTeam, ptPitcher, ptClip);
+    const restoredSwing = restoreClip(requested.get('swing_id'), swingClipMap, hitterMap, swTeam, swHitter, swClip);
+    document.getElementById('desc').value = requested.get('description') || '';
+    if (requested.get('resume') === '1' && restoredPitch && restoredSwing) showMatchupStep(2);
 
     //------------------------------------------------
     // FRAME EXTRACTION
@@ -580,6 +804,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         const swingDuration = Number.isFinite(Number(meta.swing_seconds))
             ? Number(meta.swing_seconds).toFixed(2)
             : (swingF.length / 30).toFixed(2);
+        const swingTimingFps = Number(meta.fps) > 0 ? Number(meta.fps) : 30;
+        const decisionToContact = Number.isFinite(Number(meta.decision_frame))
+            ? Math.max(0, ((swingF.length - 1) - Number(meta.decision_frame)) / swingTimingFps).toFixed(2)
+            : "--";
         const hitterName    = swHitter.options[swHitter.selectedIndex].text;
         const pitcherName   = ptPitcher.options[ptPitcher.selectedIndex].text;
 
@@ -602,10 +830,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             ctx.fillText(`${hitterName} vs ${pitcherName}`, TITLE_W/2, 260);
 
             ctx.font = "36px Arial";
-            ctx.fillText(`Swing Duration: ${swingDuration}s`, TITLE_W/2, 340);
+            ctx.fillText(`Swing Time: ${swingDuration}s`, TITLE_W/2, 340);
 
             ctx.font = "32px Arial";
-            ctx.fillText(matchupDate, TITLE_W/2, 420);
+            ctx.fillText(`Decision to Contact: ${decisionToContact}${decisionToContact === "--" ? "" : "s"}`, TITLE_W/2, 400);
+            ctx.fillText(matchupDate, TITLE_W/2, 460);
 
             titleFrames.push(c);
         }
@@ -677,7 +906,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const out = ffmpeg.FS("readFile", "matchup.mp4");
         const blob = new Blob([out], {type:"video/mp4"});
 
-        updateProgress(90, "Uploading…");
+        updateProgress(90, "Loading to GameFrame…");
 
         const fd = new FormData();
         fd.append("sid", document.getElementById("sid").value);
@@ -701,8 +930,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         updateProgress(100, "Done!");
 
-        window.location.href =
-            `/play/matchup?id=${newId}&sid=${document.getElementById("sid").value}`;
+        const playParams = new URLSearchParams({ id: String(newId), sid: document.getElementById("sid").value });
+        if (new URLSearchParams(window.location.search).get("embedded") === "1") playParams.set("embedded", "1");
+        window.location.href = `/play/matchup?${playParams.toString()}`;
     };
 
     */
@@ -767,6 +997,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const swingDuration = Number.isFinite(Number(swingMeta.swing_seconds))
             ? Number(swingMeta.swing_seconds).toFixed(2)
             : (swingFrameCount / commonFps).toFixed(2);
+        const decisionToContact = Number.isFinite(Number(swingMeta.decision_frame))
+            ? Math.max(0, ((swingFrameCount - 1) - Number(swingMeta.decision_frame)) / commonFps).toFixed(2)
+            : "--";
         const hitterName = swHitter.options[swHitter.selectedIndex].text;
         const pitcherName = ptPitcher.options[ptPitcher.selectedIndex].text;
 
@@ -870,9 +1103,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             ctx.font = "42px Arial";
             ctx.fillText(`${hitterName} vs ${pitcherName}`, OUTPUT_W / 2, 260);
             ctx.font = "36px Arial";
-            ctx.fillText(`Swing Duration: ${swingDuration}s`, OUTPUT_W / 2, 340);
+            ctx.fillText(`Swing Time: ${swingDuration}s`, OUTPUT_W / 2, 340);
             ctx.font = "32px Arial";
-            ctx.fillText(matchupDate, OUTPUT_W / 2, 420);
+            ctx.fillText(`Decision to Contact: ${decisionToContact}${decisionToContact === "--" ? "" : "s"}`, OUTPUT_W / 2, 400);
+            ctx.fillText(matchupDate, OUTPUT_W / 2, 460);
             const blob = await new Promise((resolve) => c.toBlob(resolve, "image/png"));
             const titlePng = `${runDir}/title.png`;
             ffmpeg.FS("writeFile", titlePng, new Uint8Array(await blob.arrayBuffer()));
@@ -973,7 +1207,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const out = ffmpeg.FS("readFile", outputPath);
         const blob = new Blob([out], { type: "video/mp4" });
 
-        updateProgress(94, "Uploading...");
+        updateProgress(94, "Loading to GameFrame...");
 
         const fd = new FormData();
         fd.append("sid", document.getElementById("sid").value);
@@ -1007,13 +1241,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         updateProgress(100, "Done!");
 
-        window.location.href =
-            `/play/matchup?id=${newId}&sid=${document.getElementById("sid").value}`;
+        const playParams = new URLSearchParams({ id: String(newId), sid: document.getElementById("sid").value });
+        if (new URLSearchParams(window.location.search).get("embedded") === "1") playParams.set("embedded", "1");
+        window.location.href = `/play/matchup?${playParams.toString()}`;
     };
 
     document.getElementById("matchupForm").onsubmit = async e => {
         e.preventDefault();
 
+        if (matchupBusy) return;
+        if (matchupStep !== 2) { advanceMatchup(); return; }
+        if (!ptClip.value || !swClip.value) { showMatchupStep(0); return; }
+        matchupBusy = true;
+        document.getElementById('matchup-create').disabled = true;
+        document.getElementById('matchup-back').disabled = true;
+        try {
         showProgress();
         updateProgress(8, "Getting your matchup ready...");
         log("Getting your matchup ready...");
@@ -1037,8 +1279,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
 
         if (!resp.ok) {
-            log("Could not build matchup.");
-            updateProgress(0, "Could not build matchup.");
+            const failure = await resp.json().catch(() => ({}));
+            const message = failure.error || "Could not build matchup.";
+            log(message);
+            updateProgress(0, message);
+            if (failure.code === "AUTH_REQUIRED") {
+                setTimeout(() => { window.location.href = "/auth/login"; }, 1200);
+            }
             return;
         }
 
@@ -1049,8 +1296,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         updateProgress(100, "Done!");
 
-        window.location.href =
-            `/play/matchup?id=${newId}&sid=${document.getElementById("sid").value}`;
+        if (typeof window.showCelebration === "function") {
+            await window.showCelebration("Matchup Complete!", "Your side-by-side breakdown is ready", 2100);
+        }
+        const playParams = new URLSearchParams({ id: String(newId), sid: document.getElementById("sid").value });
+        if (new URLSearchParams(window.location.search).get("embedded") === "1") playParams.set("embedded", "1");
+        window.location.href = `/play/matchup?${playParams.toString()}`;
+        } catch(error) {
+            log(error.message || 'Could not build matchup. Please retry.');
+        } finally {
+            matchupBusy = false;
+            document.getElementById('matchup-create').disabled = false;
+            document.getElementById('matchup-back').disabled = false;
+        }
     };
 
 });

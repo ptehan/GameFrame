@@ -1,0 +1,67 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const Database = require('better-sqlite3');
+
+test('saved exports lock pitch speed and downloads never render again',async()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gf_speed_cache_'));
+  process.env.DB_PATH=path.join(dir,'test.db');
+  const exporter=require('../pitch-speed-export');
+  const original=exporter.buildPitchSpeedExport;
+  let renders=0;
+  exporter.buildPitchSpeedExport=()=>Buffer.from('render-'+(++renders));
+  const {startServer,closeDatabase}=require('../server');
+  const server=startServer(0,'127.0.0.1');
+  await new Promise(resolve=>server.listening?resolve():server.once('listening',resolve));
+  const url='http://127.0.0.1:'+server.address().port;
+  const db=new Database(process.env.DB_PATH);
+  try {
+    db.prepare("INSERT INTO teams(id,name) VALUES(1,'Test team')").run();
+    db.prepare("INSERT INTO pitchers(id,team_id,name) VALUES(1,1,'Test pitcher')").run();
+    db.prepare('INSERT INTO pitch_clips(id,team_id,pitcher_id,clip_blob,fps,contact_frame) VALUES(1,1,1,?,60,119)').run(Buffer.from('source'));
+    const input={pitch_id:1,release_frame:90.5,extension:6,contact_adjustment:3,mound_distance:60.5};
+    const save=body=>fetch(url+'/api/pitch/speed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    assert.equal((await save(input)).status,200);
+    assert.equal(await (await fetch(url+'/stream/pitch?id=1')).text(),'source');
+    let response=await fetch(url+'/export/pitch-speed?id=1');
+    assert.equal(response.headers.get('X-Pitch-Export-Cache'),'miss');
+    assert.equal(await response.text(),'render-1');
+    assert.equal(await (await fetch(url+'/stream/pitch?id=1')).text(),'render-1');
+    assert.equal(await (await fetch(url+'/stream/pitch_clip?id=1')).text(),'source');
+    assert.equal(db.prepare('SELECT clip_blob FROM pitch_clips WHERE id=1').get().clip_blob.toString(),'source');
+    const ranged=await fetch(url+'/stream/pitch?id=1',{headers:{Range:'bytes=0-5'}});
+    assert.equal(ranged.status,206);
+    assert.equal(await ranged.text(),'render');
+    response=await fetch(url+'/export/pitch-speed?id=1');
+    assert.equal(response.headers.get('X-Pitch-Export-Cache'),'hit');
+    assert.equal(await response.text(),'render-1');
+    assert.equal(renders,1);
+    const persisted=new Database(process.env.DB_PATH,{readonly:true});
+    assert.equal(persisted.prepare('SELECT speed_export_blob FROM pitch_clips WHERE id=1').get().speed_export_blob.toString(),'render-1');
+    persisted.close();
+    assert.equal((await save({...input,extension:7})).status,409);
+    assert.equal(db.prepare('SELECT release_extension FROM pitch_clips WHERE id=1').get().release_extension,6);
+    response=await fetch(url+'/download/pitch-speed?id=1');
+    assert.equal(response.headers.get('X-Pitch-Export-Cache'),'hit');
+    assert.equal(await response.text(),'render-1');
+    const library=await (await fetch(url+'/library/data?type=pitch')).json();
+    assert.equal(library[0].speed_export_saved,true);
+    assert.equal(library[0].speed_export,'/download/pitch-speed?id=1');
+    db.prepare("UPDATE pitch_clips SET description='Changed' WHERE id=1").run();
+    response=await fetch(url+'/export/pitch-speed?id=1');
+    assert.equal(await response.text(),'render-1');
+    assert.equal(renders,1);
+    db.prepare('INSERT INTO pitch_clips(id,clip_blob,fps,contact_frame) VALUES(2,?,60,119)').run(Buffer.from('source'));
+    assert.equal((await fetch(url+'/download/pitch-speed?id=2')).status,404);
+    assert.equal((await save({...input,pitch_id:2})).status,200);
+    exporter.buildPitchSpeedExport=()=>{throw new Error('Test render failure');};
+    assert.equal((await fetch(url+'/export/pitch-speed?id=2')).status,500);
+    assert.equal((await save({...input,pitch_id:2,extension:8})).status,200);
+  } finally {
+    exporter.buildPitchSpeedExport=original;db.close();
+    await new Promise(resolve=>server.close(resolve));closeDatabase();
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});

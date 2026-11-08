@@ -1,89 +1,54 @@
-const CACHE_NAME = "gameframe-cache-v5";
-
-// Files we WANT to cache, but will NEVER crash install if missing
-const ASSETS = [
-  "/static/css/styles.css",
-  "/static/js/ffmpeg/ffmpeg-core.js",
-  "/static/js/ffmpeg/ffmpeg-core.worker.js",
-  "/manifest.json"
-];
+const CACHE_NAME = "gameframe-cache-v9-local-libraries";
+const HEAVY_ASSET = /^\/static\/(?:js\/ffmpeg\/|vendor\/(?:leaflet-1\.9\.4|html2canvas-1\.4\.1)\/)/;
 
 self.addEventListener("install", event => {
-  // Install should NEVER fail
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(async cache => {
-      for (const url of ASSETS) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            await cache.put(url, res.clone());
-          } else {
-            console.warn("Skipping (bad status):", url, res.status);
-          }
-        } catch (err) {
-          console.warn("Skipping (fetch error):", url, err);
-        }
-      }
-    })
-  );
-
-  // Force new SW to activate immediately
-  self.skipWaiting();
+  // Never delay an app update by downloading the video-processing runtime.
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.map(k => {
-          if (k !== CACHE_NAME) {
-            return caches.delete(k);
-          }
-        })
-      )
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const current = await caches.open(CACHE_NAME);
+    for (const name of await caches.keys()) {
+      if (!name.startsWith("gameframe-cache-") || name === CACHE_NAME) continue;
+      const old = await caches.open(name);
+      for (const request of await old.keys()) {
+        const url = new URL(request.url);
+        if (url.origin === self.location.origin && HEAVY_ASSET.test(url.pathname)) {
+          const response = await old.match(request);
+          if (response && !(await current.match(request))) await current.put(request, response);
+        }
+      }
+      await caches.delete(name);
+    }
+    await self.clients.claim();
+  })());
 });
 
-// Network-first for HTML/navigation and JS so updates are not stuck behind cache.
-// Cache-first for other assets.
 self.addEventListener("fetch", event => {
   const req = event.request;
   const url = new URL(req.url);
-  const accept = req.headers.get("accept") || "";
-  const isHtml = req.mode === "navigate" || accept.includes("text/html");
-
-  if (req.method !== "GET") {
-    event.respondWith(
-      fetch(req).catch(() =>
-        new Response(JSON.stringify({ error: "Network request failed." }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" }
-        })
-      )
-    );
-    return;
+  // Maps, API results, and video ranges keep their own loading policies.
+  if (url.origin !== self.location.origin || req.method !== "GET" ||
+      url.pathname.startsWith("/api/") || url.pathname.startsWith("/stream/")) return;
+  const isCode = req.mode === "navigate" ||
+    (req.headers.get("accept") || "").includes("text/html") ||
+    ["script", "style", "document"].includes(req.destination) ||
+    /\.(?:html|js|mjs|css)$/.test(url.pathname);
+  if (HEAVY_ASSET.test(url.pathname)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(req);
+      if (cached) return cached;
+      const response = await fetch(req);
+      if (response.ok) await cache.put(req, response.clone());
+      return response;
+    })());
+  } else if (isCode) {
+    // No cached-code fallback: an unavailable server must not look like an old app.
+    event.respondWith(fetch(req, { cache: "no-store" }).catch(() =>
+      new Response("GameFrame server is unavailable. Reconnect and refresh.", {
+        status: 503, headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" }
+      })));
   }
-
-  if (isHtml || url.pathname.startsWith("/static/js/")) {
-    event.respondWith(
-      fetch(req)
-        .then(res => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match(req))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(req).then(cached => {
-      return cached || fetch(req).catch(() => new Response("Offline", { status: 503, statusText: "Offline" }));
-    })
-  );
 });

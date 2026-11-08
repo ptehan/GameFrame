@@ -1,8 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<h2>Library</h2>
-
 <style>
 .library-page {
     box-sizing: border-box;
@@ -121,6 +119,32 @@
 #library_grid .library-item .info {
     overflow-wrap: anywhere;
 }
+.library-filter-group[hidden] { display: none; }
+.library-filter-group > br { display: none; }
+.library-filter-control { min-height: 38px; }
+.library-filter-group > label { color: #253b40; font-size: 13px; }
+#library_grid .library-item .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+}
+#library_grid .library-item .actions a,
+#library_grid .library-item .actions form {
+    display: block;
+    width: 100%;
+    margin: 0;
+}
+#library_grid .library-item .actions button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 36px;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+}
 #library_grid {
     box-sizing: border-box;
     width: 100%;
@@ -184,6 +208,23 @@
     opacity: 0.85;
     min-width: 92px;
 }
+.best-swing-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 7px;
+    border: 1px solid #d5a900;
+    border-radius: 999px;
+    background: #3a3008;
+    color: #ffe477;
+    font-size: 11px;
+    font-weight: 700;
+}
+.best-swing-btn.active {
+    border-color: #d5a900;
+    background: #5a4908;
+    color: #fff2a8;
+}
+.pending-swing-badge{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:999px;background:#5a4908;color:#fff2a8;border:1px solid #d5a900;font-size:11px;font-weight:700}
 </style>
 
 <div class="library-page">
@@ -195,6 +236,7 @@
         <label>Type:</label><br>
         <select id="filter_type" class="library-filter-control">
             <option value="matchup">Matchups</option>
+            <option value="ev">EV Videos</option>
             <option value="swing">Swing Clips</option>
             <option value="pitch">Pitch Clips</option>
         </select>
@@ -241,8 +283,8 @@
 
 <div class="library-bulk-bar">
     <button type="button" id="enter_multi_select_btn">Select Multiple</button>
-    <button type="button" id="select_visible_btn" style="display:none;">Select Visible</button>
-    <button type="button" id="clear_visible_btn" style="display:none;">Clear Visible</button>
+    <button type="button" id="select_visible_btn" style="display:none;">Select all results</button>
+    <button type="button" id="clear_visible_btn" style="display:none;">Clear selection</button>
     <button type="button" id="delete_selected_btn" style="background:#d33; color:#fff; display:none;">Delete Selected</button>
     <button type="button" id="cancel_multi_select_btn" style="display:none;">Cancel</button>
     <span id="bulk_selection_count" class="library-bulk-count">0 selected</span>
@@ -253,6 +295,15 @@
 <div id="library_grid" class="card-grid"></div>
 
 </div>
+
+<dialog closedby="none" id="ev-library-player" aria-labelledby="ev-library-player-title" style="width:min(1100px,94vw);max-height:94dvh;padding:16px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+        <b id="ev-library-player-title">EV Video</b>
+        <button type="button" id="ev-library-player-close" style="margin-left:auto;">Close video</button>
+    </div>
+    <video id="ev-library-video" controls playsinline preload="metadata" style="display:block;width:100%;max-height:74dvh;background:#111;"></video>
+    <p id="ev-library-video-status" role="status"></p>
+</dialog>
 
 <div id="pose_modal" class="pose-modal">
     <div class="pose-modal-card">
@@ -283,16 +334,64 @@
 </div>
 
 
+<script src="/static/js/pitch-speed-download.js"></script>
 <script>
 const sid = "{{ sid }}";
+const isEmbeddedLibrary = new URLSearchParams(window.location.search).get("embedded") === "1";
+const evLibraryPlayer = document.getElementById('ev-library-player');
+const evLibraryVideo = document.getElementById('ev-library-video');
+const evLibraryVideoStatus = document.getElementById('ev-library-video-status');
+window.closeLibraryVideo = () => {
+    if (!evLibraryPlayer.open) return false;
+    evLibraryVideo.pause();
+    evLibraryVideo.removeAttribute('src');
+    evLibraryVideo.load();
+    evLibraryPlayer.close();
+    return true;
+};
+document.getElementById('ev-library-player-close').onclick = window.closeLibraryVideo;
+evLibraryPlayer.addEventListener('cancel', event => {
+    event.preventDefault();
+    window.closeLibraryVideo();
+});
+evLibraryVideo.addEventListener('error', () => {
+    evLibraryVideoStatus.textContent = 'The saved video could not be loaded. Close and try Play again.';
+});
+document.getElementById('library_grid').addEventListener('click', event => {
+    const link = event.target.closest('[data-ev-play]');
+    if (!link) return;
+    event.preventDefault();
+    evLibraryVideoStatus.textContent = '';
+    evLibraryVideo.src = `/stream/ev-clip?id=${encodeURIComponent(link.dataset.evPlay)}&kind=generated&inline=1`;
+    evLibraryPlayer.showModal();
+    evLibraryVideo.play().catch(() => {
+        if (evLibraryPlayer.open && !evLibraryVideo.error) evLibraryVideoStatus.textContent = 'Press Play to start the video.';
+    });
+});
+
+function modalSafeUrl(url) {
+    if (!isEmbeddedLibrary) return url;
+    try {
+        const parsed = new URL(url, window.location.href);
+        if (parsed.origin === window.location.origin) parsed.searchParams.set("embedded", "1");
+        return parsed.href;
+    } catch (_) {
+        return url;
+    }
+}
 
 let rowNodes = [];
 let rawItems = [];
+document.addEventListener('pitch-speed-export-saved',event => {
+    const item = rawItems.find(item => item.type === 'pitch' && Number(item.id) === event.detail.id);
+    if (item) { item.speed_export_saved = true; item.speed_export = event.detail.url; }
+});
 let multiSelectMode = false;
 const selectedByType = {
     pitch: new Set(),
     swing: new Set(),
     matchup: new Set(),
+    ev: new Set(),
 };
 
 const fType          = document.getElementById("filter_type");
@@ -301,6 +400,8 @@ const fPitcherTeam   = document.getElementById("filter_pitcher_team");
 const fHitterTeam    = document.getElementById("filter_hitter_team");
 const fPitcher       = document.getElementById("filter_pitcher");
 const fHitter        = document.getElementById("filter_hitter");
+const pitcherTeamFilterGroup = fPitcherTeam?.closest(".library-filter-group");
+const pitcherFilterGroup = fPitcher?.closest(".library-filter-group");
 const enterMultiSelectBtn = document.getElementById("enter_multi_select_btn");
 const selectVisibleBtn = document.getElementById("select_visible_btn");
 const clearVisibleBtn = document.getElementById("clear_visible_btn");
@@ -362,6 +463,25 @@ fHitterTeam.value  = savedHitterTeam;
 fPitcher.value     = savedPitcher;
 fHitter.value      = savedHitter;
 
+function updateFilterVisibility() {
+    const type = normalizeFilterValue(fType.value);
+    const hidePitchers = type === "ev" || type === "swing";
+    const hideHitters = type === "pitch";
+    if (pitcherTeamFilterGroup) pitcherTeamFilterGroup.hidden = hidePitchers;
+    if (pitcherFilterGroup) pitcherFilterGroup.hidden = hidePitchers;
+    fHitterTeam.closest('.library-filter-group').hidden = hideHitters;
+    fHitter.closest('.library-filter-group').hidden = hideHitters;
+    if (hidePitchers) {
+        fPitcherTeam.value = "";
+        fPitcher.value = "";
+    }
+    if (hideHitters) {
+        fHitterTeam.value = "";
+        fHitter.value = "";
+    }
+}
+updateFilterVisibility();
+
 
 // ------------------------------------------------------------
 // UPDATE URL WITHOUT RELOAD
@@ -403,6 +523,16 @@ async function loadData(type) {
     buildGrid(items);
     rebuildFilterOptions(items);
     applyFilters();
+    const pitchId = Number(new URL(window.location.href).searchParams.get('pitch_id'));
+    if (type === 'pitch' && Number.isInteger(pitchId) && pitchId > 0) {
+        const row = rowNodes.find(node => node.dataset.type === 'pitch' && Number(node.dataset.id) === pitchId);
+        if (row) {
+            const details = row.querySelector('details');
+            if (details) details.open = true;
+            row.scrollIntoView({block:'center'});
+            row.querySelector('summary')?.focus({preventScroll:true});
+        }
+    }
 }
 
 
@@ -430,6 +560,9 @@ function buildGrid(items) {
             pitcher_team = (c.pitcher_team || "").toLowerCase();
             hitter_team  = (c.hitter_team  || "").toLowerCase();
         }
+        else if (c.type === "ev") {
+            hitter_team = (c.team_name || "").toLowerCase();
+        }
         else if (c.type === "multi") {
             pitcher_team = [
                 (c.pitcherA_team || "").toLowerCase(),
@@ -442,7 +575,23 @@ function buildGrid(items) {
         const hitter  = (c.hitter_name  || "").toLowerCase();
         const text    = (c.description  || "").toLowerCase();
         const hasPoseData = (c.type === "swing" && Number(c.has_pose_data || 0) > 0);
-        const isCollapsibleType = (c.type === "swing" || c.type === "pitch" || c.type === "matchup");
+        const isPendingSwing = (c.type === "swing" && Number(c.is_pending || 0) === 1);
+        const isPendingPitch = (c.type === "pitch" && Number(c.is_pending || 0) === 1);
+        const selectionKey = isPendingSwing || isPendingPitch ? `pending:${c.id}` : String(c.id);
+        const isBestSwing = (c.type === "swing" && Number(c.is_best || 0) === 1);
+        const usesBestSwing = (c.type === "matchup" && Number(c.swing_is_best || 0) === 1);
+        const bestBadge = (isBestSwing || usesBestSwing) ? `<span class="best-swing-badge">★ BEST SWING</span>` : "";
+        const pendingBadge = c.type === 'ev' && c.finish_swing
+            ? `<span class="pending-swing-badge">MATCHUP SWING UNFINISHED</span>`
+            : isPendingSwing || isPendingPitch ? `<span class="pending-swing-badge">PENDING</span>` : "";
+        const swingTypeEditor = c.type === "swing" ? `<label style="display:inline-flex;align-items:center;gap:6px;">Swing Type
+            <select aria-label="Swing type" onchange="updateSwingType(${c.id}, ${isPendingSwing ? 1 : 0}, this.value)">
+                <option value=""${!c.swing_type ? " selected" : ""}>Unclassified</option>
+                <option value="game"${c.swing_type === "game" ? " selected" : ""}>Game</option>
+                <option value="batting_practice"${c.swing_type === "batting_practice" ? " selected" : ""}>Batting Practice</option>
+                <option value="tee"${c.swing_type === "tee" ? " selected" : ""}>Tee</option>
+            </select></label>` : "";
+        const isCollapsibleType = (c.type === "swing" || c.type === "pitch" || c.type === "matchup" || c.type === "ev");
         const swingDur = (c.swing_duration_seconds != null && Number.isFinite(Number(c.swing_duration_seconds)))
             ? `${Number(c.swing_duration_seconds).toFixed(3)}s`
             : "n/a";
@@ -450,30 +599,65 @@ function buildGrid(items) {
             ? `${c.hitter_name || "Unknown Hitter"} (${c.team_name || "Unknown Team"})`
             : c.type === "pitch"
                 ? `${c.pitcher_name || "Unknown Pitcher"} (${c.team_name || "Unknown Team"})`
-                : c.type === "matchup"
+                    : c.type === "matchup"
                     ? `${c.pitcher_name || "Unknown Pitcher"} vs ${c.hitter_name || "Unknown Hitter"}`
+                    : c.type === "ev"
+                    ? `${c.hitter_name || "Unknown Hitter"} (${c.team_name || "Unknown Team"})`
                     : `${c.type || "Clip"}`;
         const summaryDesc = (c.description || "No description");
+        const swingTypeLabel = c.swing_type === "game" ? "Game" : c.swing_type === "batting_practice" ? "Batting Practice" : c.swing_type === "tee" ? "Tee" : "Unclassified";
+        const dateInfo = c.video_created_at
+            ? `Video date: ${formatLibraryDate(c.video_created_at)}<br><span style="opacity:.7;">Added to GameFrame: ${formatLibraryDate(c.created_at)}</span>`
+            : `Added to GameFrame: ${formatLibraryDate(c.created_at)}`;
         const expandedInfoHtml = c.type === "swing"
             ? `<b>${c.hitter_name || "Unknown Hitter"}</b> (${c.team_name || "Unknown Team"})<br>
                ${c.description || ""}<br>
+               Type: ${swingTypeLabel}<br>
                Swing Duration: ${swingDur}<br><br>
-               Created: ${c.created_at}`
+               ${dateInfo}`
             : c.type === "pitch"
                 ? `<b>${c.pitcher_name || "Unknown Pitcher"}</b> (${c.team_name || "Unknown Team"})<br>
                    ${c.description || ""}<br><br>
-                   Created: ${c.created_at}`
+                   ${c.speed_export ? `${Number(c.initial_mph).toFixed(1)} mph out of the hand | ${Number(c.average_mph).toFixed(1)} mph average<br><br>` : ""}
+                   ${dateInfo}`
                 : c.type === "matchup"
                     ? `Pitcher: ${c.pitcher_name || "Unknown Pitcher"} (${c.pitcher_team || "Unknown Team"})<br>
                        Hitter: ${c.hitter_name || "Unknown Hitter"} (${c.hitter_team || "Unknown Team"})<br>
                        ${c.description || ""}<br><br>
-                       Created: ${c.created_at}`
+                       ${dateInfo}`
+                    : c.type === "ev"
+                    ? `${renderInfo(c)}
+                       ${['saving','queued','rendering'].includes(c.video_status) ? '<b>Video preparing in the background.</b><br>' : c.video_status==='error' ? '<b>Video needs retry; hit is saved.</b><br>' : ''}
+                       ${c.finish_swing ? 'Contact frame saved. Tag swing start and decision to finish the matchup swing.<br>' : ''}
+                       Source: ${c.source_file_name || "Unknown source"}<br>
+                       ${dateInfo}`
                     : `${renderInfo(c)}Created: ${c.created_at}`;
-        const actionHtml = `
+        const actionHtml = isPendingPitch ? `<div class="actions">
+            <a href="${modalSafeUrl(c.play)}"><button type="button">Edit Pitch Video</button></a>
+            ${c.source_video ? `<a href="${c.source_video}" download data-library-download><button type="button">Original Video</button></a>` : ''}
+            <button type="button" onclick="removePendingSwing(${c.id}, 'pitch')">Delete Pending</button>
+          </div>` : isPendingSwing ? `
                 <div class="actions">
-                    <a href="${c.play}">
-                        <button>Play</button>
-                    </a>
+                    ${swingTypeEditor}
+                    <a href="${modalSafeUrl(c.play)}"><button type="button">Tag Start &amp; Decision</button></a>
+                    <button type="button" style="background:#d33;color:white;" onclick="removePendingSwing(${c.id})">Delete Pending</button>
+                </div>` : `
+                <div class="actions">
+                    <a href="${modalSafeUrl(c.play)}" ${c.type === 'ev' && c.video_ready !== false ? `data-ev-play="${Number(c.id)}"` : ''}><button type="button">Play</button></a>
+                    ${c.type === 'ev' && c.finish_swing ? `<a href="${modalSafeUrl(c.finish_swing)}" data-finish-ev-swing><button type="button">Finish matchup swing</button></a>` : ''}
+                    ${c.type === 'ev' && c.matchup_swing ? `<a href="${modalSafeUrl(c.matchup_swing)}" data-library-matchup><button type="button">Create Matchup</button></a>` : ''}
+                    ${c.type === 'ev' && c.open_ev ? `<a href="${modalSafeUrl(c.open_ev + '&view=map')}" data-ev-map><button type="button">Compare on map</button></a>` : ''}
+                    ${(c.type === 'pitch' || c.type === 'swing') && !(c.type === 'pitch' && c.speed_export_saved) ? `<a href="/stream/${c.type}?id=${Number(c.id)}" download="${c.type}_${Number(c.id)}.mp4" data-library-download><button type="button">Download Video</button></a>` : ''}
+                    ${c.type === 'pitch' || c.type === 'swing' ? `<a href="${modalSafeUrl(`/matchup/select?sid=${encodeURIComponent(sid)}&${c.type}_id=${Number(c.id)}`)}" data-library-matchup><button type="button">Create Matchup</button></a>` : ''}
+                    ${c.source_video ? `<a href="${c.source_video}" download data-library-download><button type="button">Original Video</button></a>` : ''}
+                    ${c.type === 'pitch' && !c.speed_export_saved ? `<a href="${modalSafeUrl(c.speed_review)}" data-pitch-speed-review><button type="button">${c.speed_export ? 'Edit Pitch Speed' : 'Set Pitch Speed'}</button></a>` : ''}
+                    ${c.type === 'pitch' && c.speed_export ? `<a href="${c.speed_export}" data-pitch-speed-export><button type="button">${c.speed_export_saved ? 'Download Saved Export' : 'Export with Pitch Speed'}</button></a>` : ''}
+                    <details class="library-more-actions"><summary>More actions</summary>
+                    ${swingTypeEditor}
+                    <button type="button" onclick="editDescription('${c.type}', ${c.id})">${c.type === "ev" ? "Edit Video Description" : "Edit Description"}</button>
+                    ${c.type === "ev" && c.open_ev
+                        ? `<a href="${c.open_ev}"><button type="button">Edit Video Setup</button></a>`
+                        : ""}
                     ${hasPoseData
                         ? `<button type="button" onclick="openPoseAnimation(${c.id})">Pose Animation</button>`
                         : ""}
@@ -483,6 +667,9 @@ function buildGrid(items) {
                     ${hasPoseData
                         ? `<button type="button" style="background:#7a1f1f;color:#fff;" onclick="deletePoseData(${c.id})">Delete Pose Data</button>`
                         : ""}
+                    ${c.type === "swing"
+                        ? `<button type="button" class="best-swing-btn ${isBestSwing ? "active" : ""}" onclick="setBestSwing(${c.id}, ${isBestSwing ? 0 : 1})">${isBestSwing ? "Remove Best Mark" : "Mark as Best Swing"}</button>`
+                        : ""}
 
                     <form method="post" action="${c.delete}"
                           onsubmit="return attachReturnURL(this);">
@@ -491,6 +678,7 @@ function buildGrid(items) {
                         <input type="hidden" name="return" value="">
                         <button type="submit" style="background:#d33; color:white;">Delete</button>
                     </form>
+                    </details>
                 </div>`;
         html += `
         <div class="card-row"
@@ -503,26 +691,26 @@ function buildGrid(items) {
                  data-id="${c.id}">
 
             <div class="library-item">
-                <div class="library-select-cell">
                 <div class="library-select-cell ${multiSelectMode ? "" : "hidden"}">
                     <input
                         type="checkbox"
                         class="library-select-checkbox"
-                        data-id="${c.id}"
+                        data-id="${selectionKey}"
                         data-type="${c.type}"
-                        ${activeSelection.has(Number(c.id)) ? "checked" : ""}
+                        ${isPendingPitch ? 'disabled' : ''}
+                        ${activeSelection.has(selectionKey) ? "checked" : ""}
                     >
                 </div>
                 ${isCollapsibleType
                     ? `
                 <details class="library-details">
                     <summary class="library-summary">
-                        <b>${summaryTitle}</b> - <span class="library-summary-desc">${summaryDesc}</span>
+                        <b>${summaryTitle}</b>${bestBadge}${pendingBadge} - <span class="library-summary-desc">${summaryDesc}</span>
                     </summary>
                     <div class="library-expanded">
-                        <div class="library-thumb-wrap">
-                            <img class="thumb" src="${c.thumbnail}">
-                        </div>
+                        ${c.thumbnail
+                            ? `<div class="library-thumb-wrap"><img class="thumb" loading="lazy" fetchpriority="low" src="${c.thumbnail}"></div>`
+                            : `<div class="library-thumb-wrap" style="display:grid;place-items:center;color:#ddd;font-weight:800;text-align:center;padding:8px;">EV<br>TRACK</div>`}
                         <div class="info">
                             ${expandedInfoHtml}
                         </div>
@@ -531,9 +719,9 @@ function buildGrid(items) {
                 </details>
                     `
                     : `
-                <div class="library-thumb-wrap">
-                    <img class="thumb" src="${c.thumbnail}">
-                </div>
+                ${c.thumbnail
+                    ? `<div class="library-thumb-wrap"><img class="thumb" loading="lazy" fetchpriority="low" src="${c.thumbnail}"></div>`
+                    : `<div class="library-thumb-wrap" style="display:grid;place-items:center;color:#ddd;font-weight:800;text-align:center;padding:8px;">EV<br>TRACK</div>`}
 
                 <div class="info">
                     ${renderInfo(c)}
@@ -567,7 +755,8 @@ function renderInfo(c) {
         const dur = (c.swing_duration_seconds != null && Number.isFinite(Number(c.swing_duration_seconds)))
             ? `${Number(c.swing_duration_seconds).toFixed(3)}s`
             : "n/a";
-        return `<b>${c.hitter_name}</b> (${c.team_name})<br>${c.description || ""}<br>Swing Duration: ${dur}<br><br>`;
+        const swingType = c.swing_type === "game" ? "Game" : c.swing_type === "batting_practice" ? "Batting Practice" : c.swing_type === "tee" ? "Tee" : "Unclassified";
+        return `<b>${c.hitter_name}</b> (${c.team_name})<br>${c.description || ""}<br>Type: ${swingType}<br>Swing Duration: ${dur}<br><br>`;
     }
 
     if (c.type === "matchup") {
@@ -576,6 +765,17 @@ function renderInfo(c) {
             Hitter: ${c.hitter_name} (${c.hitter_team})<br>
             ${c.description || ""}<br><br>
         `;
+    }
+
+    if (c.type === "ev") {
+        const ev = Number.isFinite(Number(c.best_exit_velocity_mph)) ? `${Number(c.best_exit_velocity_mph).toFixed(0)} mph` : "n/a";
+        const la = Number.isFinite(Number(c.best_launch_angle_deg)) ? `${Number(c.best_launch_angle_deg).toFixed(0)}°` : "n/a";
+        const dist = Number.isFinite(Number(c.best_distance_ft)) ? `${Number(c.best_distance_ft).toFixed(0)} ft` : "n/a";
+        const hang = Number.isFinite(Number(c.best_hang_time_s)) ? `${Number(c.best_hang_time_s).toFixed(1)}s` : "n/a";
+        return `<b>${c.hitter_name || "Unknown Hitter"}</b> (${c.team_name || "Unknown Team"})<br>
+            ${c.description || ""}<br>
+            EV / LA / Distance: ${ev} / ${la} / ${dist}<br>
+            Hang: ${hang}<br><br>`;
     }
 
     if (c.type === "multi") {
@@ -588,6 +788,79 @@ function renderInfo(c) {
     }
 
     return "";
+}
+
+function formatLibraryDate(value) {
+    if (!value) return "Unknown";
+    const normalized = String(value).includes("T") ? String(value) : `${value}Z`;
+    const date = new Date(normalized);
+    return Number.isFinite(date.getTime()) ? date.toLocaleString() : String(value);
+}
+
+async function editDescription(type, id) {
+    const item = rawItems.find((entry) => entry.type === type && Number(entry.id) === Number(id));
+    if (!item) return;
+    const description = prompt("Description", item.description || "");
+    if (description === null) return;
+    try {
+        const form = new URLSearchParams();
+        form.set("type", type);
+        form.set("id", String(id));
+        form.set("description", description);
+        const response = await fetch("/library/description", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: form.toString(),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "Could not update description.");
+        item.description = result.description;
+        buildGrid(rawItems);
+        applyFilters();
+    } catch (error) {
+        alert(error.message || "Could not update description.");
+    }
+}
+
+async function setBestSwing(swingId, isBest) {
+    const form = new URLSearchParams();
+    form.set("id", String(swingId));
+    form.set("is_best", isBest ? "1" : "0");
+    try {
+        const response = await fetch("/library/swing/best", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: form.toString(),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "Could not update swing.");
+        const swing = rawItems.find((item) => item.type === "swing" && Number(item.id) === Number(swingId));
+        if (swing) swing.is_best = isBest ? 1 : 0;
+        buildGrid(rawItems);
+        applyFilters();
+    } catch (error) {
+        alert(error.message || "Could not update the best-swing mark.");
+    }
+}
+
+async function updateSwingType(swingId, isPending, swingType) {
+    const swing = rawItems.find((item) => item.type === "swing" && Number(item.id) === Number(swingId) && Number(item.is_pending || 0) === Number(isPending));
+    if (!swing) return;
+    const previous = swing.swing_type || "";
+    const form = new URLSearchParams({ id: String(swingId), swing_type: swingType, is_pending: isPending ? "1" : "0" });
+    try {
+        const response = await fetch("/library/swing/type", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form.toString() });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || "Could not update swing type.");
+        swing.swing_type = result.swing_type;
+        buildGrid(rawItems);
+        applyFilters();
+    } catch (error) {
+        swing.swing_type = previous;
+        buildGrid(rawItems);
+        applyFilters();
+        alert(error.message || "Could not update swing type.");
+    }
 }
 
 
@@ -612,6 +885,9 @@ function rebuildFilterOptions(items) {
             remember(pitcherTeams, i.team_name);
 
         if (i.type === "swing" && i.team_name)
+            remember(hitterTeams, i.team_name);
+
+        if (i.type === "ev" && i.team_name)
             remember(hitterTeams, i.team_name);
 
         if (i.type === "matchup") {
@@ -669,10 +945,10 @@ function normalizeFilterValue(value) {
 function applyFilters() {
     const type    = normalizeFilterValue(fType.value);
     const q       = normalizeFilterValue(fText.value);
-    const pTeam   = normalizeFilterValue(fPitcherTeam.value);
-    const hTeam   = normalizeFilterValue(fHitterTeam.value);
-    const pitcher = normalizeFilterValue(fPitcher.value);
-    const hitter  = normalizeFilterValue(fHitter.value);
+    const pTeam   = ["ev", "swing"].includes(type) ? "" : normalizeFilterValue(fPitcherTeam.value);
+    const hTeam   = type === "pitch" ? "" : normalizeFilterValue(fHitterTeam.value);
+    const pitcher = ["ev", "swing"].includes(type) ? "" : normalizeFilterValue(fPitcher.value);
+    const hitter  = type === "pitch" ? "" : normalizeFilterValue(fHitter.value);
 
     const filteredItems = rawItems.filter(c => {
         const clipType = normalizeFilterValue(c.type);
@@ -739,7 +1015,7 @@ function bindSelectionCheckboxes() {
             const type = normalizeFilterValue(box.dataset.type);
             if (!selectedByType[type]) selectedByType[type] = new Set();
             const set = selectedByType[type];
-            const id = Number(box.dataset.id);
+            const id = box.dataset.id;
             if (box.checked) set.add(id);
             else set.delete(id);
             refreshBulkSelectionUI();
@@ -753,7 +1029,7 @@ function refreshBulkSelectionUI() {
     if (bulkSelectionCount) {
         bulkSelectionCount.textContent = multiSelectMode ? `${count} selected` : "";
     }
-    const canBulkDelete = activeType === "pitch" || activeType === "swing" || activeType === "matchup";
+    const canBulkDelete = ["pitch", "swing", "matchup", "ev"].includes(activeType);
     if (enterMultiSelectBtn) enterMultiSelectBtn.style.display = multiSelectMode ? "none" : "";
     if (selectVisibleBtn) {
         selectVisibleBtn.style.display = multiSelectMode ? "" : "none";
@@ -843,7 +1119,7 @@ function setVisibleCheckboxes(checked) {
     boxes.forEach(box => {
         const row = box.closest(".card-row");
         if (!row || row.style.display === "none") return;
-        const id = Number(box.dataset.id);
+        const id = box.dataset.id;
         box.checked = checked;
         if (checked) activeSet.add(id);
         else activeSet.delete(id);
@@ -918,6 +1194,7 @@ function setAllVisibleCardDetails(openState) {
 });
 
 fType.addEventListener("change", () => {
+    updateFilterVisibility();
     updateURL();
     loadData(fType.value);
 });
@@ -940,8 +1217,28 @@ loadData(savedType);
 // RETURN URL CAPTURE FOR DELETE FORMS
 // ------------------------------------------------------------
 function attachReturnURL(form) {
-    form.return.value = window.location.pathname + window.location.search;
+    const type = form.closest('.card-row')?.dataset.type;
+    const consequence = type === 'pitch' || type === 'swing' ? ' Matchups using this clip will also be deleted.' : '';
+    if (!confirm(`Delete this ${type === 'ev' ? 'EV video' : type || 'video'}?${consequence}`)) return false;
+    const returnInput = form.querySelector('input[name="return"]');
+    if (returnInput) returnInput.value = window.location.pathname + window.location.search;
     return true;
+}
+
+async function removePendingSwing(id, kind = 'swing') {
+    if (!confirm(`Delete this pending ${kind} clip?`)) return;
+    const body = new URLSearchParams({ id: String(id), sid });
+    try {
+        const response = await fetch(`/multi-${kind}/pending/delete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+        });
+        if (!response.ok) throw new Error("Could not delete pending swing.");
+        await loadData(kind);
+    } catch (error) {
+        alert(error.message || "Could not delete pending swing.");
+    }
 }
 
 async function copyPoseData(swingId) {
@@ -1369,11 +1666,7 @@ poseCloseBtn.onclick = () => {
     poseModal.style.display = "none";
 };
 poseModal.onclick = (ev) => {
-    if (ev.target === poseModal) {
-        stopPoseAnimation();
-        poseChangeSeries = null;
-        poseModal.style.display = "none";
-    }
+    // Backdrop clicks keep the pose review open.
 };
 </script>
 

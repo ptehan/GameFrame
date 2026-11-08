@@ -2,6 +2,10 @@
 {% block content %}
 
 <h2>Play Pitch Clip</h2>
+{% if original_source %}<p>Original: <a href="/original/pitch?id={{ id }}" download>{{ original_source.original_file_name }}</a></p>{% endif %}
+{% if pitch_speed %}<p>{{ "%.1f"|format(pitch_speed.mph) }} mph out of the hand · {{ "%.1f"|format(pitch_speed.average) }} mph average</p>{% endif %}
+<p>{% if not speed_export_saved %}<a href="/pitch/speed?id={{ id }}&sid={{ sid }}" data-pitch-speed-review>{% if pitch_speed %}Edit Pitch Speed{% else %}Set Pitch Speed{% endif %}</a>{% endif %}
+{% if pitch_speed and not speed_export_saved %} <a href="/export/pitch-speed?id={{ id }}" data-pitch-speed-export>Export with Pitch Speed</a>{% endif %}</p>
 
 <div style="max-width:480px;">
 
@@ -44,9 +48,13 @@
 </div>
 
 
+<script src="/static/js/pitch-speed-download.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     const player = document.getElementById("player");
+    document.addEventListener('pitch-speed-export-saved', event => {
+        if (event.detail.id === Number('{{ id }}')) player.load();
+    });
 
     // Correct: read src from the <source> tag inside <video>
     const videoURL = player.querySelector("source").src;

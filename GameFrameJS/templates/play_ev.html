@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block content %}
+{% set video_ready = video_ready | default(true) %}
+<h2>EV Video</h2>
+<p id="ev-video-status" role="status">{% if not video_ready %}Hit saved. Your video is preparing. You can leave this page and find it in Library when ready.{% endif %}</p>
+<div style="position:relative;">
+  <video id="ev-saved-video" controls playsinline autoplay preload="metadata" style="display:block;width:100%;max-height:60vh;object-fit:contain;background:#111;"
+    src="/stream/ev-clip?id={{ id }}&kind={% if video_ready %}generated{% else %}source{% endif %}&inline=1"></video>
+  <div id="ev-saved-metrics" {% if video_ready %}hidden{% endif %} style="position:absolute;top:0;left:0;right:0;background:#132b2edb;color:white;padding:10px;pointer-events:none;">
+    {{ ev | round }} mph EV | {{ launch | round }} degrees | {{ distance | round }} ft
+  </div>
+</div>
+<p><button id="ev-video-download" type="button" {% if not video_ready %}disabled{% endif %}>{% if video_ready %}Download Video{% else %}Preparing video...{% endif %}</button></p>
+<script src="/static/js/ev-video-ready.js?v=20261105-2"></script>
+<script>
+(()=>{
+  const id={{ id }},video=document.getElementById('ev-saved-video'),button=document.getElementById('ev-video-download'),notice=document.getElementById('ev-video-status');
+  const target='/stream/ev-clip?id='+id+'&kind=generated&inline=1';let pending=null,stop=null;
+  const load=()=>{if(pending){video.src=pending;pending=null;document.getElementById('ev-saved-metrics').hidden=true;}};
+  video.onended=load;video.onpause=load;
+  function apply(status){
+    const ready=status.status==='ready',failed=['error','unavailable'].includes(status.status);
+    notice.textContent=ready?'':failed?'Hit saved. The presentation video is not ready. Your measurement and source clip are safe.':'Hit saved. Your video is preparing. You can leave this page.';
+    button.disabled=!ready&&!failed;button.textContent=ready?'Download Video':failed?'Retry video':'Preparing video...';
+    button.onclick=ready?()=>{location.href='/stream/ev-clip?id='+id+'&kind=generated';}:async()=>{
+      button.disabled=true;try{apply(await GameFrameEvVideo.retry(id));watch();}catch(error){notice.textContent=error.message;button.disabled=false;}
+    };
+    if(ready&&video.getAttribute('src')!==target){pending=target;if(video.paused||video.ended)load();}
+  }
+  function watch(){stop?.();stop=GameFrameEvVideo.watch({id,onStatus:apply,onError:error=>{notice.textContent=error.status===404?'This saved hit was removed.':'Hit saved. Checking video preparation again shortly...';}});}
+  {% if video_ready %}apply({status:'ready'});{% else %}watch();{% endif %}
+})();
+</script>
+{% endblock %}

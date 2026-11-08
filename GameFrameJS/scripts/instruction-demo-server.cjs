@@ -1,0 +1,3 @@
+const path=require('node:path'),fs=require('node:fs'),Database=require('better-sqlite3');
+const root=path.resolve(__dirname,'..'),dir=path.join(root,process.env.TUTORIAL_OUTPUT||'demo-output/gameframe-instructions-refresh');
+(async()=>{fs.mkdirSync(dir,{recursive:true});const db=new Database(path.join(root,'app.db'),{readonly:true});const snapshot=path.join(dir,'tutorial-snapshot.db');await db.backup(snapshot);db.close();process.env.DB_PATH=snapshot;const {startServer}=require('../server');const server=startServer(8011,'127.0.0.1');server.once('listening',()=>console.log('Tutorial snapshot ready: http://127.0.0.1:8011'));})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,33 @@
+{
+  "date":"2026-11-01",
+  "active":true,
+  "server":"Local app restarted on port 8000 and health checked; server left running.",
+  "changes":[
+    "Field coordinates are applied immediately; an independent frozen map snapshot is captured afterward. Late snapshots cannot overwrite revised marks. Screenshot capture is bounded to three seconds.",
+    "Only the latest client estimate can update results. HTTP disconnects cancel the corresponding queued/running server estimate cooperatively; durable saves are not cancelled by disconnects.",
+    "The app worker prewarms encoder selection and flight math. Its verified encoder choice is passed into render subprocesses instead of probing per export.",
+    "Frame-accurate raw source preparation is shared between rendering and final save. Both original and rendered videos remain durably stored in the database before acknowledging save.",
+    "The worker consistently uses the bundled FFmpeg/FFprobe binaries, including desktop unpacked paths. The bundled encoder successfully uses Intel Quick Sync on this machine.",
+    "The existing fixed-step flight equations run in a compiled kernel with fastmath disabled. Python fallback remains available. Existing NumPy and SciPy versions were preserved."
+  ],
+  "validation":{
+    "map_ui_fixture":"demo-output/responsive-ev-ui-check.json",
+    "normal_workflow_fixture":"demo-output/ball-assist-lab/normal-workflow-check.json",
+    "live_http_cancellation":"demo-output/live-estimate-cancellation.json",
+    "raw_clip_frame_alignment":"demo-output/source-preparation-check/report.json",
+    "hardware_encoder":"demo-output/responsive-encoder-check.json",
+    "complete_export":"demo-output/responsive-full-export.json",
+    "fresh_fit":"demo-output/speed-benchmark/report.json",
+    "map_confirmation_fixture_seconds":0.175,
+    "live_estimator_queue_release_seconds":1.102,
+    "live_fresh_fit_seconds":56.078,
+    "complete_export_seconds":76.229,
+    "complete_export_media":"31.049 seconds; 1280x720 H.264, 933 frames; AAC audio",
+    "metrics_unchanged":{"exit_velocity_mph":86.95624980821957,"launch_angle_deg":20.925535398327803,"distance_ft":314.9918622742817},
+    "source_contact_alignment":"Contact is 1.0 seconds into the prepared raw clip; best matching original-frame offset is zero.",
+    "coverage":"Compiled/Python equation equivalence across speeds, launch angles, spin and wind; missing-accelerator fallback; runtime reload/recovery; queued and running cancellation; source and encoder reuse/retry; save persistence in a temporary database; rejected-export guards; current/stale/timed-out map capture; auto accept, manual reject, detection failure and cancellation branches; explicit render once; full hardware replay/metrics/map/flight/results/audio export.",
+    "existing_saved_hits_modified":false
+  },
+  "limits":"These timings are individual local runs, not guaranteed response times. Fresh estimates and complete rendering still take time on this two-core machine. This change does not implement cloud offloading, browser-side rendering, reduced-quality export, or speculative field landmark detection.",
+  "raw_test_evidence":"demo-output/speed-benchmark/fresh-input.json contains the durable copy of the same raw Cortland observations; saved predictions are used only to compare results after inference."
+}

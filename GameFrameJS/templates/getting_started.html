@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Getting Started</h2>
+<p>Build your first matchup in six steps. Completed steps are marked automatically.</p>
+<div style="display:grid;gap:10px;max-width:760px;">
+    <div class="panel"><b>{% if counts.teams %}✓{% else %}1.{% endif %} Create a team</b><br><a href="/teams">Open Teams</a></div>
+    <div class="panel"><b>{% if counts.hitters and counts.pitchers %}✓{% else %}2.{% endif %} Add a hitter and pitcher</b><br><a href="/hitters">Add hitter</a> · <a href="/pitchers">Add pitcher</a></div>
+    <div class="panel"><b>{% if counts.swings %}✓{% else %}3.{% endif %} Add and tag a swing</b><br><a href="/multi-swing?sid={{ sid }}">Add swings</a></div>
+    <div class="panel"><b>{% if counts.pitches %}✓{% else %}4.{% endif %} Upload and tag a pitch</b><br><a href="/upload/pitch">Add pitch</a></div>
+    <div class="panel"><b>{% if counts.matchups %}✓{% else %}5.{% endif %} Create a matchup</b><br><a href="/matchup/select">Create matchup</a></div>
+    <div class="panel"><b>6. Review timing and consistency</b><br><a href="/dashboard/player">Open Player Dashboard</a></div>
+</div>
+<form method="post" action="/getting-started/complete" style="margin-top:14px;">
+    <button type="submit">Finish setup and hide the reminder</button>
+</form>
+{% endblock %}

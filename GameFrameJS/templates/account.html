@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Account & Usage</h2>
+<div class="panel" style="max-width:680px;display:grid;gap:12px;">
+    <div><b>Signed in as</b><br>{{ auth_email or "Not signed in" }}</div>
+    {% if entitlement %}
+    <div><b>Access</b><br>{% if entitlement.kind == "season_pass" %}Season Pass{% else %}Free trial{% endif %}</div>
+    <div><b>Matchups</b><br>{{ entitlement.used }} used · {{ entitlement.remaining }} remaining · {{ entitlement.limit }} total</div>
+    <div><b>Access date</b><br>{{ entitlement.expires_at or "Not available" }}</div>
+    {% if entitlement.device_limit_reached %}<div style="color:#ffadad;">This account has reached its device limit.</div>{% endif %}
+    {% elif status_error %}
+    <div style="color:#ffadad;"><b>Could not reach GameFrame online services.</b><br>{{ status_error }}</div>
+    {% else %}
+    <div>Sign in to view trial or Season Pass usage.</div>
+    {% endif %}
+    <div><b>Installed version</b><br>{{ current_version or "1.0.0" }}{% if latest_version %} · Available: {{ latest_version }}{% endif %}</div>
+    {% if update_available %}
+    <div style="color:#ffe89a;"><b>An update is available.</b>{% if download_url %} <a href="{{ download_url }}" target="_blank" rel="noopener">Download the latest installer</a>.{% else %} Contact GameFrame for the latest installer.{% endif %}</div>
+    {% endif %}
+    {% if devices %}
+    <div><b>Registered devices</b>
+        <div style="display:grid;gap:7px;margin-top:7px;">
+        {% for device in devices %}
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border:1px solid #444;padding:7px;border-radius:6px;">
+                <span>{{ device.label }}{% if device.current %} (this computer){% endif %} · last used {{ device.last_seen_at }}{% if device.app_version %} · v{{ device.app_version }}{% endif %}</span>
+                <form method="post" action="/account/device/revoke" style="margin-left:auto;" onsubmit="return confirm('Remove this device from the account?');">
+                    <input type="hidden" name="device_id" value="{{ device.id }}">
+                    <button type="submit">Remove</button>
+                </form>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="/account"><button type="button">Refresh</button></a>
+        <a href="/auth/logout"><button type="button">Sign out</button></a>
+    </div>
+    <div style="font-size:12px;opacity:.75;">Videos, teams, players, tags, and generated matchups remain in the local GameFrame database on this computer. Account and usage records require an internet connection.</div>
+</div>
+{% endblock %}

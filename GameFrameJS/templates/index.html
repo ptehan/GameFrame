@@ -1,34 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
-
-
-
-<p style="font-size:18px; max-width:700px; line-height:1.6; margin-bottom:30px;">
-    GameFrame is a precision timing and matchup tool for baseball and softball hitters.
-    Upload any pitch video and any swing video, tag your key milestones, and instantly see how
-    they sync. Understand how early or late the swing is, how your move-to-launch lines up with
-    different pitch speeds, and how timing changes across matchups.
-</p>
-
-<p style="font-size:18px; max-width:700px; line-height:1.6; margin-bottom:30px;">
-    The app is built for coaches, parents, and highly motivated players who want a clean,
-    distraction-free way to analyze timing. No clutter. Just fast, accurate
-    video alignment with tools designed specifically for hitter development.
-</p>
-
-<div style="margin-top:40px;">
-    <h3>Get Started</h3>
-    <ul style="font-size:18px; line-height:1.6;">
-        <li>Upload and tag pitch clips</li>
-        <li>Upload and tag swing clips</li>
-        <li>Create automatic pitch–swing matchups</li>
-        <li>Review timing frames, decision windows, and sync points</li>
-        <li>Organize hitters, pitchers, and teams</li>
-    </ul>
-</div>
-
-<p style="margin-top:40px; font-size:16px; color:#888;">
-    Use the menu to begin managing your Teams, Hitters, Pitchers, Swings, and Matchups. Build marker: 2026-02-25.
-</p>
-
+<section class="gf-home">
+  <h2>What would you like to do?</h2>
+  <p>Choose a task. We’ll guide you through each step.</p>
+  <div class="gf-home-actions">
+    <a class="gf-home-action" href="{{ ev_predictor_url }}/predictor.html" data-ev-start><strong>Measure a hit for EV</strong><span>Estimate exit velocity from ball and field marks.</span></a>
+    <a class="gf-home-action" href="/matchup/select?sid={{ sid }}&amp;embedded=1" data-menu-modal data-modal-title="Matchup"><strong>Create a matchup</strong><span>Choose a pitch and a saved swing.</span></a>
+    <a class="gf-home-action" href="/library?sid={{ sid }}&amp;type=swing&amp;embedded=1" data-menu-modal data-modal-title="Tag an existing swing"><strong>Tag an existing swing</strong><span>Choose a saved swing and finish its matchup timing.</span></a>
+    <a class="gf-home-action" href="/multi-swing?sid={{ sid }}&amp;embedded=1" data-menu-modal data-modal-title="Upload a swing"><strong>Upload a new swing</strong><span>Add a video and tag it for a matchup.</span></a>
+    <a class="gf-home-action" href="/library?sid={{ sid }}&amp;type=pitch&amp;embedded=1" data-menu-modal data-modal-title="Tag an existing pitch"><strong>Tag an existing pitch</strong><span>Choose a saved pitch and finish its matchup timing.</span></a>
+    <a class="gf-home-action" href="/upload/pitch?sid={{ sid }}&amp;embedded=1" data-menu-modal data-modal-title="Upload a pitch"><strong>Upload a new pitch</strong><span>Add a video and mark contact and release.</span></a>
+  </div>
+  <nav class="gf-home-utilities" aria-label="Saved videos and management">
+    <a class="gf-home-action" href="/library?sid={{ sid }}&amp;embedded=1" data-menu-modal data-modal-title="Saved videos"><strong>View saved videos</strong></a>
+    <a class="gf-home-action" href="/dashboard/player?sid={{ sid }}"><strong>Dashboard</strong></a>
+    <a class="gf-home-action" href="/teams?sid={{ sid }}&amp;embedded=1" data-menu-modal data-modal-title="Team management"><strong>Manage teams</strong></a>
+    <a class="gf-home-action" href="/hitters?sid={{ sid }}&amp;embedded=1" data-menu-modal data-modal-title="Player management"><strong>Manage players</strong><span>Hitters and pitchers</span></a>
+  </nav>
+</section>
 {% endblock %}

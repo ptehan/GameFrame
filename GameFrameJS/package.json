@@ -3,15 +3,71 @@
   "version": "1.0.0",
   "private": true,
   "description": "JavaScript/HTML port of GameFrame",
-  "main": "server.js",
+  "main": "desktop/main.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "start:all": "node scripts/start-all.js",
+    "dev": "node server.js",
+    "test": "node --test",
+    "desktop": "electron .",
+    "build:desktop": "node scripts/build-desktop.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
     "express": "^4.21.2",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
     "multer": "^1.4.5-lts.2",
     "nunjucks": "^3.2.4"
+  },
+  "devDependencies": {
+    "electron": "36.9.5",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.gameframe.desktop",
+    "productName": "GameFrame",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**/*",
+      "usage-auth.js",
+      "server.js",
+      "matchup-renderer.js",
+      "ev-worker.js",
+      "pitch-vision.js",
+      "pitch-speed.js",
+      "pitch-source.js",
+      "measurement-summary.js",
+      "pitch-speed-export.js",
+      "ev-predictor/**/*",
+      "templates/**/*",
+      "static/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "ev-predictor/**/*",
+      "node_modules/ffmpeg-static/**/*",
+      "node_modules/ffprobe-static/**/*",
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "artifactName": "${productName}-${version}-${arch}-Setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-${arch}-Portable.${ext}"
+    }
   }
 }

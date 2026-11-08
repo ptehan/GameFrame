@@ -1,0 +1,14 @@
+const fs=require('fs'),path=require('path'),crypto=require('crypto'),{execFileSync}=require('child_process');
+const root=path.resolve(__dirname,'..'),base=path.join(root,'demo-output/instruction-continuous');
+const v=JSON.parse(fs.readFileSync(path.join(base,'render/walkthrough-revised/verification.json')));
+if(!/Walkthrough-(Complete|Map-Fixed|Four-Points)\.mp4$/.test(v.file)||v.decode_errors!==0)throw Error('Wrong export');
+const p=v.full_playbacks[0];if(!p||p.source_start_s!==0||p.source_end_s<31.04||p.speed!==1||p.narration_over_playback)throw Error('Incomplete EV playback');
+if(Math.abs(v.expected_duration_s-v.actual_duration_s)>.2)throw Error('Export duration mismatch');
+const sha=crypto.createHash('sha256').update(fs.readFileSync(p.source_file)).digest('hex');
+if(sha!=='d342c3aa1720e6972e1ce9846a94ac2aefe876563a0a312b1c583d5b203d2c04')throw Error('EV source changed');
+const ffmpeg=require('ffmpeg-static'),qa=path.join(base,'complete-qa');fs.mkdirSync(qa,{recursive:true});
+for(const [label,seconds] of [['menu',2],['map-middle',29],['map-end',42],['ev-start',p.start_s+.7],['ev-middle',p.start_s+16],['ev-end',p.end_s-.6]])execFileSync(ffmpeg,['-y','-v','error','-threads','1','-ss',String(seconds),'-i',v.file,'-frames:v','1','-threads','1',path.join(qa,label+'.png')],{windowsHide:true});
+const readyPath=path.join(base,'revised-walkthrough-ready.json'),ready=JSON.parse(fs.readFileSync(readyPath));
+Object.assign(ready,{file:v.file,duration_s:v.actual_duration_s,full_playbacks:v.full_playbacks,current_menu_capture:'current-menu-final',ev_export_unchanged:true,decode_errors:0});fs.writeFileSync(readyPath,JSON.stringify(ready,null,2));
+const bundlePath=path.join(base,'all-videos-ready.json'),bundle=JSON.parse(fs.readFileSync(bundlePath));Object.assign(bundle.videos.find(x=>x.kind==='walkthrough'),{file:v.file,duration_s:v.actual_duration_s,bytes:fs.statSync(v.file).size,full_ev_playback_s:p.source_duration_s});bundle.completed_at=new Date().toISOString();fs.writeFileSync(bundlePath,JSON.stringify(bundle,null,2));
+console.log(JSON.stringify({file:v.file,duration_s:v.actual_duration_s,full_playback:p,qa},null,2));

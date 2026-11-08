@@ -4,6 +4,7 @@ services:
     env: docker
     plan: starter
     autoDeploy: true
+    healthCheckPath: /health
     disk:
       name: gameframe-data
       mountPath: /var/data
@@ -13,3 +14,19 @@ services:
         value: 10000
       - key: DB_PATH
         value: /var/data/app.db
+      - key: AUTH_CODE_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: AUTH_FROM_EMAIL
+        sync: false
+      - key: ADMIN_API_KEY
+        sync: false
+      - key: AUTH_ALLOW_DEV_CODE
+        value: "false"
+      - key: TRIAL_MATCHUP_LIMIT
+        value: "3"
+      - key: TRIAL_DAYS
+        value: "14"
+      - key: MAX_UPLOAD_MB
+        value: "4096"

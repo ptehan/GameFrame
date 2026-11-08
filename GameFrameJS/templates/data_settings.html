@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Backup & Restore</h2>
+<div class="panel" style="max-width:760px;display:grid;gap:14px;">
+    {% if message %}<div style="color:#8ff0a4;font-weight:700;">{{ message }}</div>{% endif %}
+    {% if error %}<div style="color:#ffadad;font-weight:700;">{{ error }}</div>{% endif %}
+    <section>
+        <h3 style="margin-top:0;">Download a complete backup</h3>
+        <p>This includes teams, players, video clips, tags, matchups, collages, and dashboard history. Current database size: {{ "%.1f"|format(database_bytes / 1048576) }} MB.</p>
+        <a href="/settings/data/backup"><button type="button">Download GameFrame Backup</button></a>
+    </section>
+    <section style="border-top:1px solid #444;padding-top:12px;">
+        <h3 style="margin-top:0;">Automatic safety copies</h3>
+        <p>The desktop app keeps one startup backup per day and retains the five most recent copies.</p>
+        {% if automatic_backups %}
+        <ul>{% for backup in automatic_backups %}<li><a href="/settings/data/automatic?name={{ backup.name }}">{{ backup.name }}</a> ({{ "%.1f"|format(backup.bytes / 1048576) }} MB)</li>{% endfor %}</ul>
+        {% else %}<p style="opacity:.75;">The first automatic copy will appear after GameFrame restarts with an existing library.</p>{% endif %}
+    </section>
+    <section style="border-top:1px solid #444;padding-top:12px;">
+        <h3 style="margin-top:0;">Restore a backup</h3>
+        <p>Restoring replaces the teams, players, clips, and matchups currently on this computer. Your sign-in remains unchanged. Download a current backup first.</p>
+        <form method="post" action="/settings/data/restore" enctype="multipart/form-data" onsubmit="return confirm('Replace the current GameFrame library with this backup?');">
+            <input type="file" name="backup" accept=".db,.sqlite,.sqlite3" required>
+            <button type="submit" style="margin-left:8px;">Restore Selected Backup</button>
+        </form>
+    </section>
+</div>
+{% endblock %}

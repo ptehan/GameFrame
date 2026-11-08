@@ -1,9 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <script src="/static/js/modal-dismissal.js?v=20261102-2"></script>
+    <script>document.documentElement.classList.add("gf-guided");</script>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>GameFrame</title>
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <script>
+    (() => {
+        document.documentElement.dataset.theme = "light";
+        localStorage.setItem("gameframe-theme", "light");
+    })();
+    </script>
+    <link rel="stylesheet" href="/static/css/styles.css?v=20260927-modal-trim-1">
+    <link rel="stylesheet" href="/static/css/guided-workspace.css?v=20261029-home-actions">
     <style>
         /* collapsed state */
         .submenu {
@@ -16,81 +26,125 @@
             cursor: pointer;
             user-select: none;
         }
+        .responsive-menu > summary { display: none; }
+        :where(button, a, input, select, textarea, summary):focus-visible { outline: 3px solid #16796b; outline-offset: 3px; }
+        @media (max-width: 760px) {
+            .responsive-menu > summary { display: list-item; padding: 10px; cursor: pointer; font-weight: 700; }
+            .responsive-menu .app-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
     </style>
 
     <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#000000">
+    <meta name="theme-color" content="#f4f5f6">
     <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 
     <script>
     if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("/service-worker.js?v=20260301", { updateViaCache: "none" })
+    navigator.serviceWorker.register("/service-worker.js?v=20261104-fresh-code", { updateViaCache: "none" })
             .catch(err => console.log("SW fail", err));
     }
     </script>
 </head>
 
-<body>
+<body class="{% if embedded %}embedded-page{% endif %}">
+<script>
+// Redirects may omit the query flag; iframe pages must still stay navigation-free.
+if (window.self !== window.top) document.body.classList.add("embedded-page");
+</script>
 
-<div id="sidebar">
+<main class="app-shell pitch-shell">
+    {% if not embedded %}
+    <header class="topbar">
+        <div class="brand-block">
+            <a class="app-logo-link" href="/" aria-label="Back to GameFrame landing page">
+                <img class="app-logo" src="/static/logo/gameframe-logo-app.png" alt="GameFrame">
+            </a>
+            <h1>Pitch Timing</h1>
+            <p>Tag pitch and swing timing, build matchups, and review timing windows.</p>
+        </div>
+    </header>
+    {% endif %}
 
-    <div class="title" style="padding:10px 0; text-align:center;">
-        <img src="/static/logo/GameFrameLogo2.png"
-             alt="GameFrame Logo"
-             style="width:160px; height:auto; display:block; margin:0 auto;">
+    <section class="pitch-workspace">
+        {% if not embedded %}
+        <aside id="sidebar">
+            <details class="responsive-menu">
+                <summary>Menu</summary>
+            <nav class="app-nav" aria-label="GameFrame navigation">
+                        <a class="app-nav-link" href="{{ ev_predictor_url }}/predictor.html" id="open-ev-modeling">EV Modeling</a>
+                        <a class="app-nav-link" href="/matchup/select?sid={{ sid }}&embedded=1" data-menu-modal data-modal-title="Matchup">Matchup</a>
+                        <a class="app-nav-link" href="/upload/pitch?sid={{ sid }}&embedded=1" data-menu-modal data-modal-title="Pitch">Pitch</a>
+                        <a class="app-nav-link" href="/multi-swing?sid={{ sid }}&embedded=1" data-menu-modal data-modal-title="Swing">Swing</a>
+                        <a class="app-nav-link" href="/dashboard/player?sid={{ sid }}">Dashboard</a>
+                        <a class="app-nav-link" href="/teams?sid={{ sid }}&embedded=1" data-menu-modal data-modal-title="Teams and Hitters">Teams and Hitters</a>
+                        <a class="app-nav-link" href="/library?sid={{ sid }}&embedded=1" data-menu-modal data-modal-title="Library">Library</a>
+            </nav>
+            </details>
+            <script>
+            (() => {
+                const menu = document.querySelector('.responsive-menu');
+                const narrow = window.matchMedia('(max-width: 760px)');
+                const sync = () => { menu.open = false; };
+                sync();
+                narrow.addEventListener('change', sync);
+            })();
+            </script>
+        </aside>
+        {% endif %}
+
+        <div id="main">
+            {% if desktop_mode and not onboarding_complete %}
+            <div class="onboarding-banner">
+                New to GameFrame? <a href="/getting-started">Follow the six-step setup guide.</a>
+            </div>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </div>
+    </section>
+</main>
+
+{% if not embedded %}
+<dialog closedby="none" id="menu-flow-modal" class="menu-flow-modal">
+    <section class="menu-flow-card">
+        <header class="menu-flow-heading">
+            <h2 id="menu-flow-title">GameFrame</h2>
+            <button id="menu-flow-close" type="button">Close</button>
+        </header>
+        <section id="ev-video-start" hidden>
+            <div class="ev-source-selection">
+                <h3>Select your hit video</h3>
+                <button id="ev-choose-video" type="button">Choose Video</button>
+                <span>MP4, MOV, or another supported video file</span>
+            </div>
+            <input id="ev-menu-video" type="file" accept="video/*" aria-label="Select EV video" data-predictor-url="{{ ev_predictor_url }}/predictor.html" hidden>
+        </section>
+        <iframe id="menu-flow-frame" title="GameFrame workflow" allow="fullscreen" allowfullscreen></iframe>
+    </section>
+</dialog>
+<style>
+.menu-flow-modal:has(#ev-video-start:not([hidden])) {
+    width:min(560px,calc(100vw - 32px)); height:fit-content; max-height:calc(100dvh - 32px); border-radius:8px;
+}
+#ev-video-start { padding:32px 24px; }
+#ev-video-start h3 { margin:0 0 16px; font-size:16px; font-weight:600; }
+.ev-source-selection { display:flex; flex-direction:column; align-items:center; gap:16px; text-align:center; }
+.menu-flow-modal:has(#ev-video-start:not([hidden])) .menu-flow-card { height:auto; }
+.ev-source-selection span { font-size:14px; color:var(--gf-muted,#637179); }
+#ev-choose-video { min-height:42px; margin:0; padding:10px 20px; border:1px solid #126c5f; border-radius:6px; background:#126c5f; color:#fff; font-weight:600; white-space:nowrap; }
+#ev-choose-video:hover { background:#0e574c; }
+#ev-choose-video:focus-visible { outline:3px solid #b58c19; outline-offset:3px; }
+#menu-flow-frame[hidden],#ev-video-start[hidden],#ev-menu-video[hidden] { display:none!important; }
+@media(max-width:380px) { .ev-source-selection { flex-direction:column; align-items:stretch; } }
+</style>
+{% endif %}
+
+<div id="celebration" class="celebration" role="status" aria-live="polite" aria-hidden="true">
+    <div class="celebration-burst" aria-hidden="true"></div>
+    <div class="celebration-card">
+        <div class="celebration-kicker">GAMEFRAME</div>
+        <div id="celebration-title" class="celebration-title"></div>
+        <div id="celebration-detail" class="celebration-detail"></div>
     </div>
-
-    <div id="pwa-install" class="menu-item"
-         style="display:block; font-weight:bold; cursor:pointer;">
-        Install GameFrame
-    </div>
-
-    <!-- HOME -->
-    <div class="menu-section">
-        <a class="menu-section" href="/?sid={{ sid }}" style="text-decoration:none;">Home</a>
-    </div>
-
-    <!-- CREATE VIDEOS -->
-    <div class="menu-section" data-target="create-videos">Create Videos ></div>
-    <div class="submenu" id="create-videos">
-        <a class="menu-item" href="/upload/pitch?sid={{ sid }}">Upload Pitch Clip</a>
-        <a class="menu-item" href="/upload/swing?sid={{ sid }}">Upload Swing Clip</a>
-        <a class="menu-item" href="/matchup/select?sid={{ sid }}">Create Matchup</a>
-
-
-        <!-- REPLACED YOUTUBE WITH EXTERNAL VIDEO -->
-        <a class="menu-item" href="/external_video">External Video</a>
-    </div>
-
-    <!-- LIBRARY -->
-    <div class="menu-section">
-        <a class="menu-section" href="/library?sid={{ sid }}" style="text-decoration:none;">Library ></a>
-    </div>
-
-    <!-- DASHBOARD -->
-    <div class="menu-section" data-target="dashboard">Dashboard ></div>
-    <div class="submenu" id="dashboard">
-        <a class="menu-item" href="/dashboard/player?sid={{ sid }}">Player Dashboard</a>
-    </div>
-
-    <!-- MANAGE -->
-    <div class="menu-section" data-target="manage">Manage ></div>
-    <div class="submenu" id="manage">
-        <a class="menu-item" href="/teams?sid={{ sid }}">Teams</a>
-        <a class="menu-item" href="/pitchers?sid={{ sid }}">Pitchers</a>
-        <a class="menu-item" href="/hitters?sid={{ sid }}">Hitters</a>
-    </div>
-
-    <!-- AUTH -->
-    <div class="menu-section" data-target="auth">Auth ></div>
-    <div class="submenu" id="auth">
-        <a class="menu-item" href="/logout?sid={{ sid }}">Logout</a>
-    </div>
-
-</div>
-
-<div id="main">
-    {% block content %}{% endblock %}
 </div>
 
 <script>
@@ -108,40 +162,205 @@ document.querySelectorAll(".menu-section").forEach(section => {
         }
     });
 });
-</script>
 
-<script>
-let deferredPrompt = null;
-const installLink = document.getElementById("pwa-install");
+let celebrationTimer = null;
 
-window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    installLink.textContent = "Install GameFrame";
-    installLink.style.display = "block";
-});
+window.showCelebration = (title, detail = "", duration = 1350) => {
+    const overlay = document.getElementById("celebration");
+    const titleEl = document.getElementById("celebration-title");
+    const detailEl = document.getElementById("celebration-detail");
+    if (!overlay || !titleEl || !detailEl) return Promise.resolve();
 
-installLink.onclick = async () => {
-    if (deferredPrompt) {
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-        deferredPrompt = null;
-        return;
-    }
-    alert("To install: use browser menu and choose 'Install app' or 'Add to Home Screen'.");
+    clearTimeout(celebrationTimer);
+    titleEl.textContent = String(title || "Nice work!");
+    detailEl.textContent = String(detail || "");
+    overlay.classList.remove("is-visible");
+    void overlay.offsetWidth;
+    overlay.classList.add("is-visible");
+    overlay.setAttribute("aria-hidden", "false");
+
+    return new Promise(resolve => {
+        celebrationTimer = setTimeout(() => {
+            overlay.classList.remove("is-visible");
+            overlay.setAttribute("aria-hidden", "true");
+            resolve();
+        }, Math.max(500, Number(duration) || 1350));
+    });
 };
-
-if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) {
-    installLink.style.display = "none";
-}
-
-window.addEventListener("appinstalled", () => {
-    installLink.style.display = "none";
-});
 </script>
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
+    const isEmbeddedPage = document.body.classList.contains("embedded-page");
+
+    if (isEmbeddedPage) {
+        document.querySelectorAll("a[href]").forEach(link => {
+            const href = link.getAttribute("href");
+            if (!href || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("mailto:")) return;
+            try {
+                const url = new URL(href, window.location.href);
+                if (url.origin !== window.location.origin) return;
+                url.searchParams.set("embedded", "1");
+                link.href = url.href;
+            } catch (_) {}
+        });
+
+        document.querySelectorAll("form").forEach(form => {
+            form.addEventListener("submit", () => {
+                const action = form.getAttribute("action") || window.location.href;
+                try {
+                    const url = new URL(action, window.location.href);
+                    if (url.origin === window.location.origin && form.method.toLowerCase() === "get") {
+                        url.searchParams.set("embedded", "1");
+                        form.action = url.pathname + url.search;
+                    }
+                } catch (_) {}
+                let embeddedInput = form.querySelector('input[name="embedded"]');
+                if (!embeddedInput) {
+                    embeddedInput = document.createElement("input");
+                    embeddedInput.type = "hidden";
+                    embeddedInput.name = "embedded";
+                    form.appendChild(embeddedInput);
+                }
+                embeddedInput.value = "1";
+            });
+        });
+    }
+
+    {% if not embedded %}
+    const menuFlowModal = document.getElementById("menu-flow-modal");
+    let menuFlowFrame = document.getElementById("menu-flow-frame");
+    let preparedSwingFrame = null;
+    let preparedSwingId = null;
+    const menuFlowTitle = document.getElementById("menu-flow-title");
+    const menuFlowClose = document.getElementById("menu-flow-close");
+    const evMenuVideo = document.getElementById("ev-menu-video");
+    const evVideoStart = document.getElementById("ev-video-start");
+    document.getElementById("ev-choose-video").addEventListener("click", () => evMenuVideo.click());
+    document.getElementById("open-ev-modeling").addEventListener("click", event => {
+        event.preventDefault();
+        menuFlowTitle.textContent = "EV Modeling";
+        delete menuFlowModal.dataset.flow;
+        // Clicking EV explicitly starts a fresh attempt, including after failure.
+        pendingEvFile = null;
+        preparedSwingFrame?.remove();preparedSwingFrame=null;preparedSwingId=null;
+        evMenuVideo.value = "";
+        menuFlowFrame.src = "about:blank";
+        menuFlowFrame.hidden = true;
+        evVideoStart.hidden = false;
+        menuFlowModal.showModal();
+    });
+    let pendingEvFile = null;
+    function menuFlowLoaded() {
+        try {
+            const route = menuFlowFrame.contentWindow.location.pathname;
+            menuFlowModal.dataset.flow = route.includes('/predictor.html') ? 'ev' : '';
+            const titles = [['/matchup', 'Matchup'], ['/play/matchup', 'Matchup'], ['/pitch/speed', 'Pitch Velocity'], ['/multi-pitch', 'Pitch'], ['/upload/pitch', 'Pitch'], ['/library', 'Library'], ['/multi-swing', 'Edit & Tag Swing'], ['/upload/swing', 'Edit & Tag Swing']];
+            const match = titles.find(([prefix]) => route.startsWith(prefix));
+            if (match) menuFlowTitle.textContent = match[1];
+        } catch (_) {}
+        if (!pendingEvFile) return;
+        const target = new URL(evMenuVideo.dataset.predictorUrl, window.location.href);
+        menuFlowFrame.contentWindow.postMessage({ type: "gameframe:load-ev-video", file: pendingEvFile }, target.origin);
+        pendingEvFile = null;
+    }
+    menuFlowFrame?.addEventListener("load", menuFlowLoaded);
+    evMenuVideo?.addEventListener("change", () => {
+        const file = evMenuVideo.files?.[0];
+        if (!file) return;
+        pendingEvFile = file;
+        menuFlowModal.dataset.flow = 'ev';
+        evVideoStart.hidden = true;
+        menuFlowFrame.hidden = false;
+        menuFlowTitle.textContent = "EV Modeling";
+        menuFlowFrame.removeAttribute("credentialless");
+        menuFlowFrame.src = evMenuVideo.dataset.predictorUrl;
+        if (!menuFlowModal.open) menuFlowModal.showModal();
+        evMenuVideo.value = "";
+    });
+
+    document.querySelectorAll("[data-menu-modal]").forEach(link => {
+        link.addEventListener("click", event => {
+            if (!menuFlowModal || !menuFlowFrame) return;
+            event.preventDefault();
+            pendingEvFile = null;
+            delete menuFlowModal.dataset.flow;
+            evVideoStart.hidden = true;
+            menuFlowFrame.hidden = false;
+            menuFlowTitle.textContent = link.dataset.modalTitle || link.textContent.trim() || "GameFrame";
+            const modalUrl = new URL(link.href, window.location.href);
+            if (modalUrl.origin === window.location.origin) {
+                menuFlowFrame.removeAttribute("credentialless");
+                modalUrl.searchParams.set("embedded", "1");
+            } else {
+                menuFlowFrame.setAttribute("credentialless", "");
+            }
+            menuFlowFrame.src = modalUrl.href;
+            if (!menuFlowModal.open) menuFlowModal.showModal();
+        });
+    });
+
+    const closeMenuFlow = () => {
+        // Close a library video first, keeping the library and its filters open.
+        try { if (menuFlowFrame?.contentWindow.closeLibraryVideo?.()) return; } catch (_) {}
+        pendingEvFile = null;
+        // Closing EV hides it without unloading its video or unfinished marks.
+        if (menuFlowFrame && !menuFlowFrame.src.includes("/predictor.html")) menuFlowFrame.src = "about:blank";
+        if (menuFlowModal?.open) menuFlowModal.close();
+    };
+    window.addEventListener("message", event => {
+        const predictor = new URL(evMenuVideo.dataset.predictorUrl, location.href);
+        if (event.source !== menuFlowFrame.contentWindow || event.origin !== predictor.origin) return;
+        if (event.data?.type === 'gameframe:preload-swing') {
+            const id=Number(event.data.id);
+            if (!Number.isSafeInteger(id)||id<=0||preparedSwingId===id) return;
+            preparedSwingFrame?.remove();
+            preparedSwingId=id;
+            preparedSwingFrame=document.createElement('iframe');
+            preparedSwingFrame.title='Preparing swing timing';
+            preparedSwingFrame.setAttribute('aria-hidden','true');
+            preparedSwingFrame.inert=true;
+            preparedSwingFrame.style.cssText='position:fixed;left:-20000px;top:0;width:1200px;height:800px;visibility:hidden;pointer-events:none';
+            preparedSwingFrame.src=`/multi-swing/pending/tag?embedded=1&sid={{ sid }}&id=${id}`;
+            // Keep its browsing context in place: moving an iframe after it
+            // decodes would reload it and throw away the warmed frames.
+            menuFlowFrame.parentElement.append(preparedSwingFrame);
+            return;
+        }
+        if (event.data?.type === 'gameframe:close-ev') { closeMenuFlow(); return; }
+        if (event.data?.type === "gameframe:tag-swing") {
+            const id = Number(event.data.id);
+            if (!Number.isSafeInteger(id) || id <= 0) return;
+            menuFlowTitle.textContent = "Edit & Tag Swing";
+            if (preparedSwingFrame && preparedSwingId===id) {
+                const oldFrame=menuFlowFrame;
+                menuFlowFrame=preparedSwingFrame;
+                preparedSwingFrame=null;preparedSwingId=null;
+                menuFlowFrame.id='menu-flow-frame';
+                menuFlowFrame.title='GameFrame workflow';
+                menuFlowFrame.removeAttribute('style');menuFlowFrame.removeAttribute('aria-hidden');menuFlowFrame.inert=false;
+                menuFlowFrame.addEventListener('load',menuFlowLoaded);
+                oldFrame.remove();
+                delete menuFlowModal.dataset.flow;
+                return;
+            }
+            menuFlowFrame.removeAttribute("credentialless");
+            menuFlowFrame.src = `/multi-swing/pending/tag?embedded=1&sid={{ sid }}&id=${id}`;
+            return;
+        }
+        if (event.data?.type !== "gameframe:open-library") return;
+        menuFlowTitle.textContent = "Library";
+        menuFlowFrame.removeAttribute("credentialless");
+        menuFlowFrame.src = "/library?embedded=1&type=ev&sid={{ sid }}";
+    });
+    menuFlowClose?.addEventListener("click", closeMenuFlow);
+    menuFlowModal?.addEventListener("cancel", event => {
+        event.preventDefault();
+        // Only the explicit Close button may unload the embedded editor.
+    });
+    // Backdrop clicks must not unload the embedded editor and its unsaved work.
+    {% endif %}
+
     document.querySelectorAll(".filter-box").forEach(input => {
         const tableId = input.dataset.table;
         if (!tableId) return;
@@ -166,6 +385,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 {% block scripts %}{% endblock %}
+<script src="/static/js/workflow-help.js"></script>
+<script src="/static/js/tagging-fullscreen.js"></script>
+<script src="/static/js/remember-upload-people.js"></script>
+<script src="/static/js/guided-workspace.js?v=20261028-1"></script>
+<script src="/static/js/ev-video-ready.js?v=20261105-2"></script>
+<script src="/static/js/ev-video-notifications.js?v=20261105-popup"></script>
 
 </body>
 </html>

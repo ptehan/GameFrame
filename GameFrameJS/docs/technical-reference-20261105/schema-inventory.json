@@ -1,0 +1,2175 @@
+[
+  {
+    "table": "app_settings",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "key",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "value",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "sqlite_autoindex_app_settings_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "key"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE app_settings (\n      key TEXT PRIMARY KEY,\n      value TEXT\n    )"
+  },
+  {
+    "table": "auth_accounts",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "email",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "normalized_email",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "email_verified_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "trial_started_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "disabled_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "sqlite_autoindex_auth_accounts_2",
+        "unique": 1,
+        "origin": "u",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 2,
+            "name": "normalized_email"
+          }
+        ]
+      },
+      {
+        "seq": 1,
+        "name": "sqlite_autoindex_auth_accounts_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "id"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE auth_accounts (\n      id TEXT PRIMARY KEY,\n      email TEXT NOT NULL,\n      normalized_email TEXT NOT NULL UNIQUE,\n      email_verified_at TEXT,\n      trial_started_at TEXT,\n      created_at TEXT NOT NULL DEFAULT (datetime('now')),\n      disabled_at TEXT\n    )"
+  },
+  {
+    "table": "auth_codes",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "normalized_email",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "code_hash",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "expires_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "attempts",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "consumed_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "request_ip_hash",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "auth_codes_email_created",
+        "unique": 0,
+        "origin": "c",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 1,
+            "name": "normalized_email"
+          },
+          {
+            "seqno": 1,
+            "cid": 6,
+            "name": "created_at"
+          }
+        ]
+      },
+      {
+        "seq": 1,
+        "name": "sqlite_autoindex_auth_codes_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "id"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE auth_codes (\n      id TEXT PRIMARY KEY,\n      normalized_email TEXT NOT NULL,\n      code_hash TEXT NOT NULL,\n      expires_at TEXT NOT NULL,\n      attempts INTEGER NOT NULL DEFAULT 0,\n      consumed_at TEXT,\n      created_at TEXT NOT NULL DEFAULT (datetime('now'))\n    , request_ip_hash TEXT)"
+  },
+  {
+    "table": "auth_sessions",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "token_hash",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "account_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "device_hash",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "expires_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "last_seen_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "revoked_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "auth_sessions_account",
+        "unique": 0,
+        "origin": "c",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 2,
+            "name": "account_id"
+          },
+          {
+            "seqno": 1,
+            "cid": 4,
+            "name": "expires_at"
+          }
+        ]
+      },
+      {
+        "seq": 1,
+        "name": "sqlite_autoindex_auth_sessions_2",
+        "unique": 1,
+        "origin": "u",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 1,
+            "name": "token_hash"
+          }
+        ]
+      },
+      {
+        "seq": 2,
+        "name": "sqlite_autoindex_auth_sessions_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "id"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE auth_sessions (\n      id TEXT PRIMARY KEY,\n      token_hash TEXT NOT NULL UNIQUE,\n      account_id TEXT NOT NULL,\n      device_hash TEXT NOT NULL,\n      expires_at TEXT NOT NULL,\n      created_at TEXT NOT NULL DEFAULT (datetime('now')),\n      last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),\n      revoked_at TEXT\n    )"
+  },
+  {
+    "table": "ev_field_locations",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "label",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "data",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "updated_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "sqlite_autoindex_ev_field_locations_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "label"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE ev_field_locations(label TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL)"
+  },
+  {
+    "table": "ev_hit_tracks",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "team_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "hitter_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "source_file_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "source_video_path",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "contact_time_s",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "clip_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "clip_mime_type",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "clip_start_time_s",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "clip_end_time_s",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "clip_duration_s",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "observation_package_json",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "prediction_json",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "best_exit_velocity_mph",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "best_launch_angle_deg",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "best_distance_ft",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "best_hang_time_s",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "best_hit_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "source_clip_path",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 21,
+        "name": "generated_clip_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 22,
+        "name": "generated_clip_mime_type",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 23,
+        "name": "generated_clip_path",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 24,
+        "name": "video_render_status",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 25,
+        "name": "video_render_error",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 26,
+        "name": "video_render_token",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 27,
+        "name": "save_request_key",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 28,
+        "name": "save_request_hash",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "ev_save_request_key",
+        "unique": 1,
+        "origin": "c",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 27,
+            "name": "save_request_key"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "hitters",
+        "from": "hitter_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      },
+      {
+        "id": 1,
+        "seq": 0,
+        "table": "teams",
+        "from": "team_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      }
+    ],
+    "sql": "CREATE TABLE ev_hit_tracks (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            team_id INTEGER,\n            hitter_id INTEGER,\n            description TEXT,\n            source_file_name TEXT,\n            source_video_path TEXT,\n            contact_time_s REAL,\n            clip_blob BLOB,\n            clip_mime_type TEXT,\n            clip_start_time_s REAL,\n            clip_end_time_s REAL,\n            clip_duration_s REAL,\n            observation_package_json TEXT NOT NULL,\n            prediction_json TEXT,\n            best_exit_velocity_mph REAL,\n            best_launch_angle_deg REAL,\n            best_distance_ft REAL,\n            best_hang_time_s REAL,\n            best_hit_id TEXT,\n            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, source_clip_path TEXT, generated_clip_blob BLOB, generated_clip_mime_type TEXT, generated_clip_path TEXT, video_render_status TEXT, video_render_error TEXT, video_render_token TEXT, save_request_key TEXT, save_request_hash TEXT,\n            FOREIGN KEY (team_id) REFERENCES teams(id),\n            FOREIGN KEY (hitter_id) REFERENCES hitters(id)\n        )"
+  },
+  {
+    "table": "ev_pitch_links",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "source_key",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "pending_pitch_id",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "pitch_clip_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "sqlite_autoindex_ev_pitch_links_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "source_key"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE ev_pitch_links (\n                source_key TEXT PRIMARY KEY, pending_pitch_id INTEGER NOT NULL, pitch_clip_id INTEGER\n            )"
+  },
+  {
+    "table": "ev_swing_links",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "source_key",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "pending_swing_id",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "swing_clip_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "ev_hit_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "sqlite_autoindex_ev_swing_links_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "source_key"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE ev_swing_links (\n                source_key TEXT PRIMARY KEY, pending_swing_id INTEGER NOT NULL, swing_clip_id INTEGER\n            , ev_hit_id INTEGER)"
+  },
+  {
+    "table": "hitters",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "team_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "teams",
+        "from": "team_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      }
+    ],
+    "sql": "CREATE TABLE hitters (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    team_id INTEGER,\n    name TEXT NOT NULL,\n    description TEXT,\n    FOREIGN KEY (team_id) REFERENCES teams(id)\n)"
+  },
+  {
+    "table": "licenses",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "account_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "product_code",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'season_pass'",
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'active'",
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "starts_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "expires_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "matchup_limit",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "500",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "device_limit",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "2",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "stripe_customer_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "stripe_payment_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "licenses_account_status",
+        "unique": 0,
+        "origin": "c",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 1,
+            "name": "account_id"
+          },
+          {
+            "seqno": 1,
+            "cid": 3,
+            "name": "status"
+          },
+          {
+            "seqno": 2,
+            "cid": 5,
+            "name": "expires_at"
+          }
+        ]
+      },
+      {
+        "seq": 1,
+        "name": "sqlite_autoindex_licenses_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "id"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE licenses (\n      id TEXT PRIMARY KEY,\n      account_id TEXT NOT NULL,\n      product_code TEXT NOT NULL DEFAULT 'season_pass',\n      status TEXT NOT NULL DEFAULT 'active',\n      starts_at TEXT NOT NULL,\n      expires_at TEXT NOT NULL,\n      matchup_limit INTEGER NOT NULL DEFAULT 500,\n      device_limit INTEGER NOT NULL DEFAULT 2,\n      stripe_customer_id TEXT,\n      stripe_payment_id TEXT,\n      created_at TEXT NOT NULL DEFAULT (datetime('now'))\n    )"
+  },
+  {
+    "table": "matchups",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "pitch_clip_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "swing_clip_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "matchup_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "thumb",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "collage_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "pitch_speed_json",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "swing_clips",
+        "from": "swing_clip_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      },
+      {
+        "id": 1,
+        "seq": 0,
+        "table": "pitch_clips",
+        "from": "pitch_clip_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      }
+    ],
+    "sql": "CREATE TABLE matchups (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    pitch_clip_id INTEGER,\n    swing_clip_id INTEGER,\n    description TEXT,\n    matchup_blob BLOB,\n    thumb BLOB,\n    created_at TIMESTAMP, collage_blob BLOB, pitch_speed_json TEXT,\n    FOREIGN KEY (pitch_clip_id) REFERENCES pitch_clips(id),\n    FOREIGN KEY (swing_clip_id) REFERENCES swing_clips(id)\n)"
+  },
+  {
+    "table": "multi_matchups",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "pitch_clip_id_A",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "pitch_clip_id_B",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "swing_clip_id",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "matchup_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "thumb",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "created_at",
+        "type": "DATETIME",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE multi_matchups (\r\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n    pitch_clip_id_A INTEGER NOT NULL,\r\n    pitch_clip_id_B INTEGER NOT NULL,\r\n    swing_clip_id   INTEGER NOT NULL,\r\n    description     TEXT,\r\n    matchup_blob    BLOB,\r\n    thumb           BLOB,\r\n    created_at      DATETIME\r\n)"
+  },
+  {
+    "table": "pending_pitch_clips",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "batch_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "team_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "pitcher_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "clip_blob",
+        "type": "BLOB",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "fps",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "contact_frame",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "source_contact_seconds",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "video_created_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'pending'",
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "pitch_clip_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "completed_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "thumb",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "source_video_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE pending_pitch_clips (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      batch_id TEXT NOT NULL,\n      team_id INTEGER,\n      pitcher_id INTEGER,\n      description TEXT,\n      clip_blob BLOB NOT NULL,\n      fps REAL NOT NULL,\n      contact_frame INTEGER NOT NULL,\n      source_contact_seconds REAL,\n      video_created_at TEXT,\n      status TEXT NOT NULL DEFAULT 'pending',\n      pitch_clip_id INTEGER,\n      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n      completed_at TIMESTAMP\n    , thumb BLOB, source_video_id TEXT)"
+  },
+  {
+    "table": "pending_swing_clips",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "batch_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "team_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "hitter_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "clip_blob",
+        "type": "BLOB",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "fps",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "contact_frame",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "source_contact_seconds",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "video_created_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'pending'",
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "swing_clip_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "completed_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "thumb",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "swing_type",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE pending_swing_clips (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      batch_id TEXT NOT NULL,\n      team_id INTEGER,\n      hitter_id INTEGER,\n      description TEXT,\n      clip_blob BLOB NOT NULL,\n      fps REAL NOT NULL,\n      contact_frame INTEGER NOT NULL,\n      source_contact_seconds REAL,\n      video_created_at TEXT,\n      status TEXT NOT NULL DEFAULT 'pending',\n      swing_clip_id INTEGER,\n      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n      completed_at TIMESTAMP\n    , thumb BLOB, swing_type TEXT)"
+  },
+  {
+    "table": "pitch_clips",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "team_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "pitcher_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "clip_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "fps",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "thumb",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "contact_frame",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "video_created_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "release_frame",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "release_extension",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "contact_adjustment",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "mound_distance",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "initial_mph",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "average_mph",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "speed_fps",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "speed_export_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "speed_export_key",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "source_video_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "pitchers",
+        "from": "pitcher_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      },
+      {
+        "id": 1,
+        "seq": 0,
+        "table": "teams",
+        "from": "team_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      }
+    ],
+    "sql": "CREATE TABLE pitch_clips (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    team_id INTEGER,\n    pitcher_id INTEGER,\n    description TEXT,\n    clip_blob BLOB,\n    fps REAL,\n    created_at TIMESTAMP, thumb BLOB, contact_frame INTEGER, video_created_at TEXT, release_frame REAL, release_extension REAL, contact_adjustment REAL, mound_distance REAL, initial_mph REAL, average_mph REAL, speed_fps REAL, speed_export_blob BLOB, speed_export_key TEXT, source_video_id TEXT,\n    FOREIGN KEY (team_id) REFERENCES teams(id),\n    FOREIGN KEY (pitcher_id) REFERENCES pitchers(id)\n)"
+  },
+  {
+    "table": "pitch_video_sources",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "original_file_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "stored_file_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "sha256",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "CURRENT_TIMESTAMP",
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "sqlite_autoindex_pitch_video_sources_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "id"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE pitch_video_sources (\n    id TEXT PRIMARY KEY, original_file_name TEXT NOT NULL, stored_file_name TEXT NOT NULL,\n    sha256 TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n  )"
+  },
+  {
+    "table": "pitchers",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "team_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "teams",
+        "from": "team_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      }
+    ],
+    "sql": "CREATE TABLE pitchers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    team_id INTEGER,\n    name TEXT NOT NULL,\n    description TEXT,\n    FOREIGN KEY (team_id) REFERENCES teams(id)\n)"
+  },
+  {
+    "table": "registered_devices",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "device_hash",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "first_account_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "first_seen_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "last_seen_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "app_version",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "disabled_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "sqlite_autoindex_registered_devices_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "device_hash"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE registered_devices (\n      device_hash TEXT PRIMARY KEY,\n      first_account_id TEXT NOT NULL,\n      first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),\n      last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),\n      app_version TEXT,\n      disabled_at TEXT\n    )"
+  },
+  {
+    "table": "swing_clips",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "team_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "hitter_id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "clip_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "fps",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "decision_frame",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "thumb",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "frame_count",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "swing_seconds",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "pose_data",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "library_clip_blob",
+        "type": "BLOB",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "pose_quality_score",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "pose_quality_status",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "camera_view",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "is_best",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "video_created_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "swing_type",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [],
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "hitters",
+        "from": "hitter_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      },
+      {
+        "id": 1,
+        "seq": 0,
+        "table": "teams",
+        "from": "team_id",
+        "to": "id",
+        "on_update": "NO ACTION",
+        "on_delete": "NO ACTION",
+        "match": "NONE"
+      }
+    ],
+    "sql": "CREATE TABLE swing_clips (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    team_id INTEGER,\n    hitter_id INTEGER,\n    description TEXT,\n    clip_blob BLOB,\n    fps REAL,\n    decision_frame INTEGER,\n    created_at TIMESTAMP, thumb BLOB, frame_count INTEGER, swing_seconds REAL, pose_data TEXT, library_clip_blob BLOB, pose_quality_score REAL, pose_quality_status TEXT, camera_view TEXT, is_best INTEGER NOT NULL DEFAULT 0, video_created_at TEXT, swing_type TEXT,\n    FOREIGN KEY (team_id) REFERENCES teams(id),\n    FOREIGN KEY (hitter_id) REFERENCES hitters(id)\n)"
+  },
+  {
+    "table": "teams",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "sqlite_autoindex_teams_1",
+        "unique": 1,
+        "origin": "u",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 1,
+            "name": "name"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE teams (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL UNIQUE,\n    description TEXT\n)"
+  },
+  {
+    "table": "usage_events",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "request_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "account_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "device_hash",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "license_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "event_type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "app_version",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "processing_ms",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "error_code",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "completed_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ],
+    "indexes": [
+      {
+        "seq": 0,
+        "name": "usage_events_account_type",
+        "unique": 0,
+        "origin": "c",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 2,
+            "name": "account_id"
+          },
+          {
+            "seqno": 1,
+            "cid": 5,
+            "name": "event_type"
+          },
+          {
+            "seqno": 2,
+            "cid": 10,
+            "name": "created_at"
+          }
+        ]
+      },
+      {
+        "seq": 1,
+        "name": "sqlite_autoindex_usage_events_2",
+        "unique": 1,
+        "origin": "u",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 1,
+            "name": "request_id"
+          }
+        ]
+      },
+      {
+        "seq": 2,
+        "name": "sqlite_autoindex_usage_events_1",
+        "unique": 1,
+        "origin": "pk",
+        "partial": 0,
+        "columns": [
+          {
+            "seqno": 0,
+            "cid": 0,
+            "name": "id"
+          }
+        ]
+      }
+    ],
+    "foreign_keys": [],
+    "sql": "CREATE TABLE usage_events (\n      id TEXT PRIMARY KEY,\n      request_id TEXT NOT NULL UNIQUE,\n      account_id TEXT NOT NULL,\n      device_hash TEXT NOT NULL,\n      license_id TEXT,\n      event_type TEXT NOT NULL,\n      status TEXT NOT NULL,\n      app_version TEXT,\n      processing_ms INTEGER,\n      error_code TEXT,\n      created_at TEXT NOT NULL DEFAULT (datetime('now')),\n      completed_at TEXT\n    )"
+  }
+]

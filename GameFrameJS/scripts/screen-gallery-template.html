@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GameFrame screen sequence</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden}body{font:14px/1.4 system-ui;background:#edf1ee;color:#172d22;display:flex;flex-direction:column}header{background:#fff;padding:10px 18px;border-bottom:1px solid #d2ddd5;display:flex;gap:18px;align-items:center;flex-wrap:wrap}h1{font-size:18px;margin:0}header p{margin:0;color:#59695f;font-size:12px}main{flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 16px;gap:6px}h2{font-size:16px;margin:0}#note{margin:0;font-size:12px;color:#52675b}#image-link{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#dce4df;border-radius:6px;overflow:hidden}img{display:block;max-width:100%;max-height:100%;object-fit:contain}footer{display:flex;gap:12px;align-items:center;padding:10px 18px;background:white;border-top:1px solid #cddbd2}button,select{font:inherit;border:1px solid #bbcfc1;border-radius:5px;padding:7px 12px;background:white;color:#173d28}button{cursor:pointer}button:disabled{opacity:.35;cursor:default}#next{background:#176b51;color:white;border-color:#176b51}#count{margin-left:auto;font-variant-numeric:tabular-nums;color:#53685b}select{max-width:38vw}a:focus-visible,button:focus-visible,select:focus-visible{outline:3px solid #328c6d;outline-offset:2px}@media(max-width:600px){header p{display:none}main{padding:8px}footer{gap:6px;padding:8px}button,select{padding:7px;font-size:12px}#count{font-size:12px}h2{font-size:14px}}
+</style>
+<header><h1>GameFrame screen sequence</h1><p>Actual captures. Each workflow is in order; optional branches are labeled.</p></header>
+<main><h2 id="title"></h2><p id="note"></p><a id="image-link" target="_blank" rel="noopener" title="Open full-resolution screenshot"><img id="image" alt=""></a></main>
+<footer><select id="group" aria-label="Choose workflow"></select><span id="count" aria-live="polite"></span><button id="previous">Previous</button><button id="next">Next</button></footer>
+<script>
+const screens=__SCREEN_DATA__;
+const groups=[...new Set(screens.map(s=>s.group))];
+const group=document.getElementById('group'),image=document.getElementById('image'),title=document.getElementById('title'),note=document.getElementById('note'),link=document.getElementById('image-link'),previous=document.getElementById('previous'),next=document.getElementById('next');
+groups.forEach(g=>group.add(new Option(g,g)));
+let index=0;
+function show(value){index=Math.max(0,Math.min(screens.length-1,value));const s=screens[index];title.textContent=`${index+1}. ${s.title}`;note.textContent=s.note||'';note.hidden=!s.note;image.src=s.file;image.alt=s.title;link.href=s.file;group.value=s.group;document.getElementById('count').textContent=`${index+1} / ${screens.length}`;previous.disabled=index===0;next.disabled=index===screens.length-1;history.replaceState(null,'','#'+(index+1));if(screens[index+1]){const preload=new Image();preload.src=screens[index+1].file;}}
+previous.onclick=()=>show(index-1);next.onclick=()=>show(index+1);group.onchange=()=>show(screens.findIndex(s=>s.group===group.value));
+document.addEventListener('keydown',e=>{if(e.target.tagName==='SELECT')return;if(['ArrowRight','PageDown'].includes(e.key)){e.preventDefault();show(index+1)}if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();show(index-1)}if(e.key==='Home')show(0);if(e.key==='End')show(screens.length-1)});
+show((Number(location.hash.slice(1))||1)-1);
+</script></html>

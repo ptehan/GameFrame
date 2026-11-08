@@ -1,0 +1,22 @@
+const fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+ const base='http://127.0.0.1:8000';
+ await (await fetch(base+'/api/gameframe/options')).json();
+ const raw=JSON.parse(fs.readFileSync('demo-output/speed-benchmark/fresh-input.json'));
+ const controller=new AbortController();
+ const old=fetch(base+'/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(raw),signal:controller.signal}).then(r=>r.text()).catch(e=>e.name);
+ await new Promise(resolve=>setTimeout(resolve,1000));controller.abort();
+ assert.equal(await old,'AbortError');
+ const started=performance.now();
+ const probe=await fetch(base+'/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(20000)});
+ await probe.text();const freedSeconds=(performance.now()-started)/1000;
+ assert.ok(freedSeconds<20,'A replacement request must not wait for the obsolete full fit');
+ const fitStart=performance.now();
+ const response=await fetch(base+'/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(raw),signal:AbortSignal.timeout(240000)});
+ const prediction=await response.json();assert.equal(response.ok,true,JSON.stringify(prediction));
+ const match=prediction.direction_first_match;assert.equal(match.acceptable,true);assert.equal(match.staged,true);
+ const baseline=JSON.parse(fs.readFileSync('demo-output/reviewed-staged-latest.json')).direction_first_match.best;
+ for(const key of ['exit_velocity_mph','launch_angle_deg','distance_ft'])assert.ok(Math.abs(match.best[key]-baseline[key])<1e-7,key);
+ const report={aborted_request:'AbortError',queue_freed_seconds:freedSeconds,following_fit_seconds:(performance.now()-fitStart)/1000,best:match.best,performance:match.performance,saved_hits_modified:false};
+ fs.writeFileSync('demo-output/live-estimate-cancellation.json',JSON.stringify(report,null,2));console.log(JSON.stringify({queue_freed_seconds:freedSeconds,following_fit_seconds:report.following_fit_seconds,ev:match.best.exit_velocity_mph,launch:match.best.launch_angle_deg,distance:match.best.distance_ft}));
+})().catch(error=>{console.error(error);process.exitCode=1;});

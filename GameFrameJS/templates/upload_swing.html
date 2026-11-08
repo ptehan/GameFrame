@@ -1,14 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2 style="margin-bottom: 20px;">Upload Swing Clip</h2>
+<h2 id="swing_upload_title" style="margin-bottom: 20px;">Upload Swing Clip</h2>
 
 <form action="/upload/swing"
       method="post"
       enctype="multipart/form-data"
+      id="video_upload_form"
       style="display: grid; grid-template-columns: 220px 1fr; gap: 12px; width: min(860px, 100%);">
 
     <input type="hidden" name="sid" value="{{ sid }}">
+    <input type="hidden" id="video_created_at" name="video_created_at" value="">
 
     <!-- TEAM -->
     <label>Team:</label>
@@ -48,6 +50,8 @@
         <span style="align-self:center;">sec</span>
     </div>
     <small style="grid-column: 2; color: #ccc; font-size: 12px;">Note: This will extract a 5-second clip starting from the specified time.</small>
+    <div></div>
+    <div id="start_time_error" role="alert" style="display:none; color:#ff8a8a; font-weight:700;"></div>
 
     <!-- FILE -->
     <label>Video File:</label>
@@ -55,9 +59,17 @@
 
     <!-- BUTTON -->
     <div></div>
-    <button type="submit" style="padding: 10px 20px; width: 150px;">
+    <button type="submit" id="video_upload_submit" style="padding: 10px 20px; width: 150px;">
         Upload Swing
     </button>
+
+    <div></div>
+    <div id="video_upload_progress" style="display:none; width:100%; max-width:420px;">
+        <div style="height:12px; overflow:hidden; border-radius:6px; background:#333;">
+            <div id="video_upload_bar" style="width:0%; height:100%; background:#ffdd00; transition:width .15s;"></div>
+        </div>
+        <div id="video_upload_status" style="margin-top:7px; font-size:13px;">Loading to GameFrame...</div>
+    </div>
 
 </form>
 
@@ -173,10 +185,84 @@ addHitterBtn.onclick = () => openEntityModal("hitter");
 entityCancel.onclick = closeEntityModal;
 entitySave.onclick = submitEntityModal;
 entityModal.addEventListener("click", (ev) => {
-    if (ev.target === entityModal) closeEntityModal();
+    // Backdrop clicks preserve this form.
 });
 entityInput.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") submitEntityModal();
+});
+
+const videoUploadForm = document.getElementById("video_upload_form");
+const videoUploadSubmit = document.getElementById("video_upload_submit");
+const videoUploadProgress = document.getElementById("video_upload_progress");
+const videoUploadBar = document.getElementById("video_upload_bar");
+const videoUploadStatus = document.getElementById("video_upload_status");
+const startTimeError = document.getElementById("start_time_error");
+const fileInput = document.getElementById("file_input");
+
+async function selectedVideoDuration(file) {
+    return new Promise((resolve) => {
+        if (!file) return resolve(0);
+        const probe = document.createElement("video");
+        const url = URL.createObjectURL(file);
+        probe.preload = "metadata";
+        probe.onloadedmetadata = () => { const value = Number(probe.duration || 0); URL.revokeObjectURL(url); resolve(value); };
+        probe.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+        probe.src = url;
+    });
+}
+
+videoUploadForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (!videoUploadForm.reportValidity()) return;
+    startTimeError.style.display = "none";
+    startTimeError.textContent = "";
+    const duration = await selectedVideoDuration(fileInput.files[0]);
+    const start = Number(videoUploadForm.elements.start_min.value || 0) * 60 + Number(videoUploadForm.elements.start_sec.value || 0);
+    if (duration > 0 && start + 5 > duration + 0.05) {
+        startTimeError.textContent = `That start time is too late. Choose a time at least 5 seconds before the video ends (${duration.toFixed(1)} seconds).`;
+        startTimeError.style.display = "block";
+        return;
+    }
+    videoUploadSubmit.disabled = true;
+    videoUploadProgress.style.display = "block";
+    videoUploadBar.style.width = "0%";
+    videoUploadStatus.textContent = "Loading to GameFrame...";
+    const selectedFile = fileInput.files[0];
+    document.getElementById("video_created_at").value = selectedFile && selectedFile.name !== "youtube_clip.mp4"
+        ? new Date(selectedFile.lastModified).toISOString()
+        : "";
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", videoUploadForm.action);
+    xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const percent = Math.min(95, Math.round((event.loaded / event.total) * 95));
+        videoUploadBar.style.width = `${percent}%`;
+        videoUploadStatus.textContent = `Loading to GameFrame... ${Math.round((event.loaded / event.total) * 100)}%`;
+    };
+    xhr.upload.onload = () => {
+        videoUploadBar.style.width = "97%";
+        videoUploadStatus.textContent = "Preparing the five-second clip...";
+    };
+    xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 400) {
+            videoUploadBar.style.width = "100%";
+            videoUploadStatus.textContent = "Clip ready.";
+            window.location.href = xhr.responseURL;
+            return;
+        }
+        videoUploadSubmit.disabled = false;
+        const message = (xhr.responseText || "").trim();
+        videoUploadStatus.textContent = message || "Upload failed. Please try again.";
+        if (xhr.status === 400 && message) {
+            startTimeError.textContent = message;
+            startTimeError.style.display = "block";
+        }
+    };
+    xhr.onerror = () => {
+        videoUploadSubmit.disabled = false;
+        videoUploadStatus.textContent = "Could not load the video. Please try again.";
+    };
+    xhr.send(new FormData(videoUploadForm));
 });
 </script>
 

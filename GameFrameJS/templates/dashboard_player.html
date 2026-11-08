@@ -1,7 +1,34 @@
 {% extends "base.html" %}
 {% block content %}
+<nav aria-label="Dashboard views" style="display:flex;gap:24px;border-bottom:1px solid #ccd5d3;padding:10px 0;margin-bottom:20px;">
+  <a href="/dashboard/player?sid={{ sid }}" aria-current="page"><strong>Timing</strong></a>
+  <a href="/dashboard/measurements?view=pitching&sid={{ sid }}">Pitching</a>
+  <a href="/dashboard/measurements?view=hitting&sid={{ sid }}">Hitting</a>
+</nav>
 
 <style>
+.dashboard-layout-picker{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.dashboard-layout-picker label{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:2px solid transparent;font-size:13px;cursor:pointer}
+.dashboard-layout-picker label:has(input:checked){border-color:#16796b;background:#edf7f4;color:#123d36}
+.dash-wrap .dashboard-filter-panel{background:transparent;border:0;border-bottom:1px solid #ccd5d3;border-radius:0;padding:0 0 18px;margin-bottom:18px}
+@media(min-width:1100px){
+ .dash-wrap[data-filter-layout="compact"] #player_form{grid-template-columns:1.1fr 1.5fr 1fr 1fr 1.3fr;gap:12px}
+ .dash-wrap[data-filter-layout="compact"] #player_form .dashboard-controls{display:contents}
+ .dash-wrap[data-filter-layout="sidebar"]{display:flow-root}
+ .dash-wrap[data-filter-layout="sidebar"]>.dashboard-filter-panel{float:left;box-sizing:border-box;width:260px;border-bottom:0;border-right:1px solid #ccd5d3;padding-right:16px}
+ .dash-wrap[data-filter-layout="sidebar"]>.dash-panel:not(.dashboard-filter-panel){margin-left:280px;min-width:0}
+ .dash-wrap[data-filter-layout="sidebar"] #player_form,.dash-wrap[data-filter-layout="sidebar"] #player_form .dashboard-controls{grid-template-columns:minmax(0,1fr)}
+}
+.dash-wrap[data-filter-layout="stacked"] #player_form{grid-template-columns:minmax(0,1fr);max-width:800px}
+.dash-wrap[data-filter-layout="stacked"] #player_form .dashboard-controls{grid-template-columns:minmax(0,1fr)}
+.dash-wrap[data-filter-layout="stacked"] #player_form .dash-row,.dash-wrap[data-filter-layout="stacked"] #player_form .dashboard-controls label{grid-template-columns:160px minmax(0,1fr);align-items:center}
+@media(max-width:600px){ .dash-wrap[data-filter-layout="stacked"] #player_form .dash-row,.dash-wrap[data-filter-layout="stacked"] #player_form .dashboard-controls label{grid-template-columns:minmax(0,1fr)}}
+#player_form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0;align-items:start}
+#player_form .dash-row{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0;margin:0!important}
+#player_form .dashboard-controls{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0}
+#player_form .dashboard-controls label{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0;font-size:13px;font-weight:700}
+#player_form .dash-select{box-sizing:border-box;width:100%;min-width:0;max-width:100%;height:40px;margin:0;padding:0 10px;font-size:14px;line-height:normal;text-overflow:ellipsis}
+@media(max-width:760px){ #player_form,#player_form .dashboard-controls{grid-template-columns:minmax(0,1fr)}.pitch-workspace,html[data-theme="light"] .pitch-workspace{grid-template-columns:minmax(0,1fr)}#sidebar,html[data-theme="light"] #sidebar{min-height:0}}
 .dash-wrap {
     max-width: 1480px;
     font-size: 14px;
@@ -82,6 +109,37 @@
     font-size: 15px;
     font-weight: 700;
     line-height: 1.15;
+}
+.dashboard-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+.timing-explainer {
+    color: #b9c4cc;
+    font-size: 12px;
+    margin: -3px 0 10px;
+}
+.comparison-track {
+    height: 9px;
+    border-radius: 999px;
+    background: #303030;
+    overflow: hidden;
+    margin-top: 7px;
+}
+.comparison-fill {
+    height: 100%;
+    background: #41d1ff;
+}
+.primary-kpi-grid .kpi {
+    border-color: #35627a;
+    background: #12202a;
+}
+.secondary-metric {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #303030;
 }
 .dash-links {
     display: flex;
@@ -209,6 +267,48 @@
     border-radius: 8px;
     background: #0f1115;
 }
+html[data-theme="light"] .dash-panel,
+html[data-theme="light"] .kpi,
+html[data-theme="light"] .duration-pill {
+    background: #fff;
+    border-color: #c8c8c8;
+    color: #000;
+}
+html[data-theme="light"] .primary-kpi-grid .kpi {
+    background: #eef8fc;
+    border-color: #79a9bf;
+}
+html[data-theme="light"] .summary-narrative {
+    background: #f3f8fb;
+    border-color: #b8cad5;
+    color: #17242c;
+}
+html[data-theme="light"] .kpi-label,
+html[data-theme="light"] .timing-explainer {
+    color: #3f4850;
+}
+html[data-theme="light"] .dash-select,
+html[data-theme="light"] .dash-input,
+html[data-theme="light"] .pose-btn,
+html[data-theme="light"] .dash-link-btn,
+html[data-theme="light"] .export-box {
+    background: #fff;
+    border-color: #888;
+    color: #000;
+}
+html[data-theme="light"] .dash-table th {
+    background: #f2f2f2;
+    color: #000;
+}
+html[data-theme="light"] .dash-table th,
+html[data-theme="light"] .dash-table td,
+html[data-theme="light"] .secondary-metric,
+html[data-theme="light"] .dash-chart {
+    border-color: #c8c8c8;
+}
+html[data-theme="light"] .comparison-track {
+    background: #d6d6d6;
+}
 @media (max-width: 980px) {
     .dash-row {
         grid-template-columns: 1fr;
@@ -219,10 +319,9 @@
 }
 </style>
 
-<div class="dash-wrap">
+<div class="dash-wrap" data-filter-layout="compact">
     <h2 class="dash-title">Player Dashboard</h2>
-
-    <div class="dash-panel">
+    <div class="dash-panel dashboard-filter-panel">
         <form id="player_form" method="get" action="/dashboard/player">
             <input type="hidden" name="sid" value="{{ sid }}">
             <div class="dash-row">
@@ -248,29 +347,65 @@
                 </select>
             </div>
             {% endif %}
+            {% if selected_hitter %}
+            <div class="dashboard-controls">
+                <label>Swings to summarize
+                    <select class="dash-select" name="window" onchange="this.form.submit()">
+                        <option value="5" {% if window_mode == '5' %}selected{% endif %}>Last 5 swings</option>
+                        <option value="10" {% if window_mode == '10' %}selected{% endif %}>Last 10 swings</option>
+                        <option value="20" {% if window_mode == '20' %}selected{% endif %}>Last 20 swings</option>
+                        <option value="50" {% if window_mode == '50' %}selected{% endif %}>Last 50 swings</option>
+                        <option value="days7" {% if window_mode == 'days7' %}selected{% endif %}>Last 7 days</option>
+                        <option value="days30" {% if window_mode == 'days30' %}selected{% endif %}>Last 30 days</option>
+                        <option value="days90" {% if window_mode == 'days90' %}selected{% endif %}>Last 90 days</option>
+                        <option value="all" {% if window_mode == 'all' %}selected{% endif %}>All swings</option>
+                    </select>
+                </label>
+                <label>Swing type
+                    <select class="dash-select" name="swing_type" onchange="this.form.submit()">
+                        <option value="all" {% if swing_type_filter == 'all' %}selected{% endif %}>All swing types</option>
+                        <option value="game" {% if swing_type_filter == 'game' %}selected{% endif %}>Game</option>
+                        <option value="batting_practice" {% if swing_type_filter == 'batting_practice' %}selected{% endif %}>Batting Practice</option>
+                        <option value="tee" {% if swing_type_filter == 'tee' %}selected{% endif %}>Tee</option>
+                        <option value="unclassified" {% if swing_type_filter == 'unclassified' %}selected{% endif %}>Unclassified</option>
+                    </select>
+                </label>
+                <label>Reference (best) swing
+                    <select class="dash-select" name="ref" onchange="this.form.submit()">
+                        <option value="0">Choose a reference swing</option>
+                        {% for s in reference_swings %}
+                        <option value="{{ s.id }}" {% if s.id == reference_id %}selected{% endif %}>{% if s.is_best %}★ Best — {% endif %}#{{ s.id }} — {{ s.description }} ({{ "%.3f"|format(s.swing_seconds) }}s)</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            {% endif %}
         </form>
 
     </div>
 
     {% if selected_hitter and summary %}
     <div class="dash-panel">
-        <h3 style="margin:0 0 10px 0;">{{ selected_hitter.hitter_name or "(unnamed player)" }} ({{ selected_hitter.team_name or "(no team)" }}): Swing Consistency</h3>
+        <h3 style="margin:0 0 10px 0;">{{ selected_hitter.hitter_name or "(unnamed player)" }}: Timing and Consistency</h3>
+        <div class="timing-explainer">Start-to-contact includes the movement you marked as the start. Moving is not necessarily committing to a swing. Longer or shorter is not automatically better; these summaries describe the timing and variation of your uploaded swings.</div>
         {% if summary_narrative %}
         <div class="summary-narrative">{{ summary_narrative }}</div>
         {% endif %}
-        <div class="kpi-grid">
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="The number of swing clips currently included for this player.">Total Swings</span></div><div class="kpi-value">{{ summary.count }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="A higher-level consistency measure derived from the spread of swing times. Higher usually means the player is repeating timing more closely.">Consistency Score</span></div><div class="kpi-value">{{ "%.1f"|format(summary.consistency_score) }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="The arithmetic mean of all swing durations in seconds.">Average (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.avg) }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="The middle swing duration after sorting all swings from fastest to slowest.">Median (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.median) }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="Standard deviation shows how spread out the swing times are around the average. Lower is tighter.">Std Dev (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.stddev) }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="Coefficient of variation: standard deviation divided by average. Useful for comparing consistency across players with different average swing times.">CV</span></div><div class="kpi-value">{{ "%.2f"|format(summary.cv * 100) }}%</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="The 10th and 90th percentile swing times. This shows the typical low and high ends without being overly affected by extreme outliers.">P10 / P90 (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.p10) }} / {{ "%.3f"|format(summary.p90) }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="Interquartile range: the spread between the 25th and 75th percentile swing times. A smaller IQR means the middle of the dataset is tighter.">IQR (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.iqr) }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="The difference between the slowest and fastest swing times in the current set.">Range (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.range) }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="Swings flagged as unusually far from the player's typical timing pattern.">Outliers</span></div><div class="kpi-value">{{ summary.outlier_count }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="The average swing duration across the 10 most recent swings.">Last 10 Avg (s)</span></div><div class="kpi-value">{{ "%.3f"|format(summary.last10_avg) }}</div></div>
-            <div class="kpi"><div class="kpi-label"><span class="hint" title="The estimated change in swing duration from one swing to the next over time. Negative means speeding up; positive means slowing down.">Trend / Swing</span></div><div class="kpi-value">{{ "%.4f"|format(summary.trend_per_swing) }}s</div></div>
+        <div class="kpi-grid primary-kpi-grid">
+            <div class="kpi"><div class="kpi-label">Swings included</div><div class="kpi-value">{{ summary.count }}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="The typical time from first move to contact. Shorter is not automatically better.">Typical overall timing</span></div><div class="kpi-value">{{ "%.3f"|format(summary.median) }}s</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="Standard deviation around the player's typical first-move-to-contact time. Lower means the timing is more repeatable.">Overall variation</span></div><div class="kpi-value">{% if summary.count > 1 %}±{{ "%.3f"|format(summary.stddev) }}s{% else %}Need 2 swings{% endif %}</div>{% if summary.count > 1 %}<div class="kpi-label">≈ {{ "%.1f"|format(summary.variation_frames) }} frames at {{ "%.0f"|format(summary.measurement_fps) }} FPS</div>{% endif %}</div>
+            <div class="kpi"><div class="kpi-label">Compared with reference</div><div class="kpi-value">{% if summary.reference_delta is not none %}{% if summary.reference_delta_abs < 0.0005 %}Same duration{% elif summary.reference_delta < 0 %}{{ "%.3f"|format(summary.reference_delta_abs) }}s shorter{% else %}{{ "%.3f"|format(summary.reference_delta) }}s longer{% endif %}{% else %}Not selected{% endif %}</div></div>
+            <div class="kpi"><div class="kpi-label"><span class="hint" title="Compares the player's independent overall timing variation with a 0.10-second reference interval; this is not a performance grade.">Variation vs. 0.10s interval</span></div><div class="kpi-value">{% if summary.count > 1 %}{{ "%.0f"|format(summary.pitch_variation_ratio * 100) }}%{% else %}Need 2 swings{% endif %}</div>{% if summary.count > 1 %}<div class="comparison-track"><div class="comparison-fill" style="width:{{ summary.pitch_variation_percent_capped }}%"></div></div>{% endif %}</div>
+            <div class="kpi"><div class="kpi-label">Typical middle range</div><div class="kpi-value">{{ "%.3f"|format(summary.p25) }}–{{ "%.3f"|format(summary.p75) }}s</div></div>
+        </div>
+        <div class="secondary-metric">
+            <div class="timing-explainer"><b>Commitment-to-contact timing</b>: use the same commitment criterion across clips. One frame can materially change this interval. Trends require at least 5 swings and a two-frame change; neither direction is graded as better.</div>
+            <div class="kpi-grid">
+                <div class="kpi"><div class="kpi-label">Typical decision to contact</div><div class="kpi-value">{% if decision_summary %}{{ "%.1f"|format(decision_summary.median_frames) }} frames{% else %}—{% endif %}</div><div class="kpi-label">{% if decision_summary %}{{ "%.3f"|format(decision_summary.median) }}s at approximately {{ "%.0f"|format(decision_summary.measurement_fps) }} FPS{% else %}Need tagged swings{% endif %}</div></div>
+                <div class="kpi"><div class="kpi-label">Decision-to-contact trend</div><div class="kpi-value">{% if not decision_summary %}Need tagged swings{% elif decision_summary.trend_status == 'insufficient' %}Need {{ 5 - decision_summary.count }} more{% elif decision_summary.trend_status == 'shorter' %}{{ "%.1f"|format(decision_summary.trend_frames_abs) }} frames shorter{% elif decision_summary.trend_status == 'longer' %}{{ "%.1f"|format(decision_summary.trend_frames_abs) }} frames longer{% else %}No clear change{% endif %}</div></div>
+                <div class="kpi"><div class="kpi-label">Measurement confidence</div><div class="kpi-value">{% if decision_summary %}{{ decision_summary.resolution_label }}{% else %}—{% endif %}</div><div class="kpi-label">Changes under 2 frames are not classified.</div></div>
+            </div>
         </div>
         <div class="dash-actions">
             <button type="button" class="pose-btn" onclick="copyDashboardForLlm()">Copy For LLM</button>
@@ -284,8 +419,53 @@
     </div>
 
     <div class="dash-panel">
-        <h3 style="margin:0 0 10px 0;">Swing Duration Columns (Newest to Oldest)</h3>
+        <h3 style="margin:0 0 10px 0;">Overall Timing Over Time</h3>
         <canvas id="duration_chart" class="dash-chart" width="620" height="150"></canvas>
+        {% if decision_summary %}
+        <h3 style="margin:14px 0 10px 0;">Decision to Contact Over Time</h3>
+        <canvas id="decision_chart" class="dash-chart" width="620" height="150"></canvas>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if ev_tracks %}
+    <div class="dash-panel">
+        <h3 style="margin:0 0 10px 0;">EV Tracking</h3>
+        <div style="margin:0 0 10px 0;">
+            <a class="dash-link-btn" href="/library?sid={{ sid }}&type=ev&hitter={{ (selected_hitter.hitter_name or '')|lower }}">Open EV Library</a>
+        </div>
+        <div class="dash-table-wrap">
+            <table class="dash-table">
+                <thead>
+                    <tr>
+                        <th>Track ID</th>
+                        <th>Description</th>
+                        <th>Saved</th>
+                        <th>EV</th>
+                        <th>LA</th>
+                        <th>Distance</th>
+                        <th>Hang</th>
+                        <th>Clips</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in ev_tracks %}
+                    <tr>
+                        <td>{{ r.id }}</td>
+                        <td>{{ r.description }}</td>
+                        <td>{{ r.created_at or "" }}</td>
+                        <td>{% if r.best_exit_velocity_mph is not none %}{{ "%.0f"|format(r.best_exit_velocity_mph) }} mph{% endif %}</td>
+                        <td>{% if r.best_launch_angle_deg is not none %}{{ "%.0f"|format(r.best_launch_angle_deg) }}°{% endif %}</td>
+                        <td>{% if r.best_distance_ft is not none %}{{ "%.0f"|format(r.best_distance_ft) }} ft{% endif %}</td>
+                        <td>{% if r.best_hang_time_s is not none %}{{ "%.1f"|format(r.best_hang_time_s) }}s{% endif %}</td>
+                        <td>
+                            <a href="{{ ev_predictor_url }}/predictor.html?ev_hit_id={{ r.id }}">Open EV Setup</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
     {% endif %}
 
@@ -305,9 +485,10 @@
                     <tr>
                         <th><span class="hint" title="The database ID for this swing clip.">Swing ID</span></th>
                         <th><span class="hint" title="The saved label or description attached to this swing clip.">Description</span></th>
-                        <th><span class="hint" title="When this swing clip was added to the system.">Created</span></th>
+                        <th><span class="hint" title="Whether this swing came from a game, batting practice, or tee work.">Type</span></th>
+                        <th><span class="hint" title="When the swing video was recorded or last modified, with the GameFrame-added date used only for older clips.">Swing Date</span></th>
                         <th><span class="hint" title="The measured duration of the swing clip in seconds.">Swing Time (s)</span></th>
-                        <th><span class="hint" title="The amount of time between the decision marker and the contact marker from the pose data. This only appears when valid pose event markers exist.">Commitment to Contact (s)</span></th>
+                        <th><span class="hint" title="The amount of time between the decision and contact markers. Frames are shown first because this interval is limited by the video's frame rate.">Decision to Contact</span></th>
                         <th><span class="hint" title="Open the swing clip playback page.">Swing</span></th>
                         <th><span class="hint" title="Linked matchup videos created from this swing.">Matchups</span></th>
                         <th><span class="hint" title="Whether pose-tracking data exists for this swing and can be copied out.">Pose Data</span></th>
@@ -319,9 +500,10 @@
                     <tr data-swing-seconds="{{ "%.6f"|format(r.swing_seconds or 0) }}">
                         <td>{{ r.id }}</td>
                         <td>{{ r.description }}</td>
+                        <td>{% if r.swing_type == 'game' %}Game{% elif r.swing_type == 'batting_practice' %}Batting Practice{% elif r.swing_type == 'tee' %}Tee{% else %}Unclassified{% endif %}</td>
                         <td>{{ r.created_at or "" }}</td>
                         <td>{{ "%.3f"|format(r.swing_seconds) }}</td>
-                        <td>{{ r.commitment_to_contact_display or "" }}</td>
+                        <td>{% if r.commitment_to_contact_frames is not none %}{{ "%.1f"|format(r.commitment_to_contact_frames) }} frames <span style="color:#999;">({{ r.commitment_to_contact_display }}s)</span>{% endif %}</td>
                         <td><a href="/play/swing?sid={{ sid }}&id={{ r.id }}">Open Swing</a></td>
                         <td>
                             {% if r.matchup_count and r.latest_matchup_id %}
@@ -781,65 +963,50 @@ async function openPoseAnimation(swingId) {
 }
 
 (() => {
-    const chart = document.getElementById("duration_chart");
-    if (!chart) return;
-    const series = [{% if summary %}{% for v in summary.series_desc %}{{ "%.6f"|format(v) }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}];
-    if (!series.length) return;
-
-    const ctx = chart.getContext("2d");
-    const W = chart.width;
-    const H = chart.height;
-    const pad = { l: 40, r: 12, t: 12, b: 24 };
-    const pw = W - pad.l - pad.r;
-    const ph = H - pad.t - pad.b;
-    const minV = Math.min(...series);
-    const maxV = Math.max(...series);
-    const padTop = ((maxV - minV) * 0.06 || 0.015);
-    const padBot = ((maxV - minV) * 0.04 || 0.01);
-    const top = Math.max(0, maxV + padTop);
-    const bot = Math.min(0, minV - padBot);
-    const yScale = ph / Math.max(1e-6, top - bot);
-    const toY = (v) => pad.t + ((top - v) * yScale);
-
-    ctx.fillStyle = "#101010";
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "#303030";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(pad.l, pad.t);
-    ctx.lineTo(pad.l, H - pad.b);
-    ctx.lineTo(W - pad.r, H - pad.b);
-    ctx.stroke();
-
-    const avg = series.reduce((a, b) => a + b, 0) / series.length;
-    ctx.strokeStyle = "#6e6e6e";
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.moveTo(pad.l, toY(avg));
-    ctx.lineTo(W - pad.r, toY(avg));
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const gap = 1;
-    const barW = Math.max(1, Math.floor((pw - (series.length - 1) * gap) / Math.max(1, series.length)));
-    let x = pad.l;
-    for (let i = 0; i < series.length; i += 1) {
-        const v = series[i];
-        const y = toY(v);
-        const y0 = toY(bot);
-        const h = Math.max(1, y0 - y);
-        ctx.fillStyle = (v >= avg) ? "#41d1ff" : "#2d7fa0";
-        ctx.fillRect(x, y, barW, h);
-        x += barW + gap;
+    function quantile(values, p) {
+        const sorted = [...values].sort((a, b) => a - b);
+        const pos = (sorted.length - 1) * p;
+        const lo = Math.floor(pos), hi = Math.ceil(pos), f = pos - lo;
+        return sorted[lo] * (1 - f) + sorted[hi] * f;
     }
-
-    ctx.fillStyle = "#d7d7d7";
-    ctx.font = "11px monospace";
-    ctx.fillText(top.toFixed(3) + "s", 4, pad.t + 4);
-    ctx.fillText(bot.toFixed(3) + "s", 4, H - pad.b - 2);
-    ctx.fillText("Newest", pad.l, H - 8);
-    ctx.fillText("Oldest", W - 58, H - 8);
-    ctx.fillText("avg " + avg.toFixed(3) + "s", W - 128, toY(avg) - 6);
+    function drawTimingChart(chart, newestFirst, referenceValue) {
+        if (!chart || !newestFirst.length) return;
+        const lightMode = document.documentElement.dataset.theme === "light";
+        const series = [...newestFirst].reverse();
+        const rolling = series.map((_, i) => {
+            const windowValues = series.slice(Math.max(0, i - 4), i + 1);
+            return { median: quantile(windowValues, .5), low: quantile(windowValues, .25), high: quantile(windowValues, .75) };
+        });
+        const ctx = chart.getContext("2d"), W = chart.width, H = chart.height;
+        const pad = { l: 40, r: 12, t: 12, b: 24 }, pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+        const scaleValues = series.concat(rolling.flatMap((r) => [r.low, r.high]));
+        if (Number.isFinite(referenceValue)) scaleValues.push(referenceValue);
+        const minV = Math.min(...scaleValues), maxV = Math.max(...scaleValues);
+        const top = maxV + ((maxV - minV) * .08 || .015), bot = Math.max(0, minV - ((maxV - minV) * .08 || .01));
+        const toY = (v) => pad.t + ((top - v) * ph / Math.max(1e-6, top - bot));
+        const toX = (i) => pad.l + (series.length === 1 ? pw / 2 : i * pw / (series.length - 1));
+        ctx.fillStyle = lightMode ? "#ffffff" : "#101010"; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = lightMode ? "#c8c8c8" : "#303030"; ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, H-pad.b); ctx.lineTo(W-pad.r, H-pad.b); ctx.stroke();
+        ctx.fillStyle = lightMode ? "rgba(0,93,138,.14)" : "rgba(65,209,255,.16)"; ctx.beginPath();
+        rolling.forEach((r,i) => { if (!i) ctx.moveTo(toX(i),toY(r.high)); else ctx.lineTo(toX(i),toY(r.high)); });
+        for (let i=rolling.length-1;i>=0;i-=1) ctx.lineTo(toX(i),toY(rolling[i].low));
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle=lightMode ? "#006b9c" : "#41d1ff"; ctx.lineWidth=2; ctx.beginPath();
+        rolling.forEach((r,i) => { if (!i) ctx.moveTo(toX(i),toY(r.median)); else ctx.lineTo(toX(i),toY(r.median)); }); ctx.stroke();
+        ctx.fillStyle=lightMode ? "#111" : "#fff"; series.forEach((v,i) => { ctx.beginPath(); ctx.arc(toX(i),toY(v),2.5,0,Math.PI*2); ctx.fill(); });
+        if (Number.isFinite(referenceValue)) { ctx.strokeStyle=lightMode ? "#8a6500" : "#ffd24a"; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(pad.l,toY(referenceValue)); ctx.lineTo(W-pad.r,toY(referenceValue)); ctx.stroke(); ctx.setLineDash([]); }
+        ctx.fillStyle=lightMode ? "#222" : "#d7d7d7"; ctx.font="11px monospace"; ctx.fillText(top.toFixed(3)+"s",4,pad.t+4); ctx.fillText(bot.toFixed(3)+"s",4,H-pad.b-2);
+        ctx.fillText("Oldest",pad.l,H-8); ctx.fillText("Newest",W-58,H-8); ctx.fillText("rolling median + middle range",pad.l+92,H-8);
+    }
+    const overall = dashboardResults.map((r) => Number(r.swing_seconds)).filter((v) => Number.isFinite(v) && v > 0);
+    const decision = dashboardResults.map((r) => Number(r.commitment_to_contact_seconds)).filter((v) => Number.isFinite(v) && v > 0);
+    const reference = {% if reference_swing %}{{ "%.6f"|format(reference_swing.swing_seconds) }}{% else %}null{% endif %};
+    const redrawTimingCharts = () => {
+        drawTimingChart(document.getElementById("duration_chart"), overall, reference);
+        drawTimingChart(document.getElementById("decision_chart"), decision, null);
+    };
+    redrawTimingCharts();
+    new MutationObserver(redrawTimingCharts).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 })();
 applyDurationFilter();
 if (posePlayBtn) posePlayBtn.onclick = () => startPoseAnimation();
@@ -867,10 +1034,7 @@ if (poseCloseBtn) {
 }
 if (poseModal) {
     poseModal.onclick = (ev) => {
-        if (ev.target === poseModal) {
-            stopPoseAnimation();
-            poseModal.style.display = "none";
-        }
+        // Backdrop clicks keep the pose review open.
     };
 }
 </script>

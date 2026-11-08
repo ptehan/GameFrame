@@ -23,6 +23,7 @@ AppImages.zip
 
 # Images and logos (optional)
 *.png
+!GameFrameJS/static/logo/gameframe-logo-app.png
 
 # WASM maps and debug
 *.map

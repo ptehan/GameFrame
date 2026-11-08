@@ -1,6 +1,14 @@
 {% extends 'base.html' %}
 {% block content %}
 
+<div id="finalizing-overlay" class="finalizing-overlay" role="status" aria-live="polite" aria-label="Finalizing swing">
+    <div class="finalizing-card">
+        <div class="finalizing-spinner" aria-hidden="true"></div>
+        <h2>Finalizing swing…</h2>
+        <p>Saving your tagged swing to the library. Please wait.</p>
+    </div>
+</div>
+
 <!-- PROGRESS BAR -->
 <div id="progress-container" style="display:none;">
     <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
@@ -217,7 +225,7 @@ h2,
     position: fixed;
     inset: 0;
     z-index: 10030;
-    background: rgba(0, 0, 0, 0.86);
+    background: rgba(10, 17, 22, 0.56);
     display: none;
     align-items: center;
     justify-content: center;
@@ -227,13 +235,15 @@ h2,
     width: min(1380px, calc(100vw - 12px));
     height: calc(100vh - 12px);
     overflow: hidden;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--gf-line, #d6dde1);
     border-radius: 10px;
-    background: #121212;
+    background: var(--gf-panel, #fff);
+    color: var(--gf-ink, #111820);
     padding: 10px;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 8px;
+    box-shadow: 0 24px 70px rgb(20 28 34 / .22);
 }
 .frame-modal-header {
     display: flex;
@@ -242,7 +252,7 @@ h2,
 }
 .frame-modal-stage {
     min-height: 0;
-    border: 1px solid #333;
+    border: 1px solid var(--gf-line, #d6dde1);
     background: #000;
     display: flex;
     align-items: center;
@@ -260,6 +270,64 @@ h2,
     width: 100%;
     margin: 0;
 }
+.frame-modal .trim-btn,
+.frame-modal .trim-small-btn,
+.frame-modal .trim-icon-btn {
+    min-height: 32px;
+    border: 1px solid var(--gf-line-strong, #bdc8ce);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--gf-ink, #111820);
+    font-weight: 700;
+    box-shadow: none;
+}
+.frame-modal .trim-btn:hover,
+.frame-modal .trim-small-btn:hover,
+.frame-modal .trim-icon-btn:hover {
+    border-color: #95a3aa;
+    background: var(--gf-panel-soft, #f5f7f8);
+    color: var(--gf-ink, #111820);
+}
+.frame-modal #frame_modal_finalize_btn {
+    border-color: var(--gf-accent-strong, #0f5d51);
+    background: var(--gf-accent-strong, #0f5d51);
+    color: #fff;
+}
+.frame-modal-note {
+    margin: 6px 0 0;
+    color: var(--gf-muted, #60717a);
+    font-size: 12px;
+    line-height: 1.35;
+}
+.trim-crop-panel {
+    display: grid;
+    grid-template-columns: auto repeat(3, minmax(140px, 1fr));
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid var(--gf-line, #d6dde1);
+    border-radius: 8px;
+    background: var(--gf-panel-soft, #f5f7f8);
+    color: var(--gf-ink, #111820);
+    font-size: 12px;
+}
+.trim-crop-panel label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+.trim-crop-check {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.trim-crop-panel input[type="range"] {
+    width: 100% !important;
+}
+.pending-focus-modal .frame-modal-note { grid-column: 2; }
 .trim-workspace.is-minimized {
     display: none;
 }
@@ -270,6 +338,38 @@ h2,
     box-sizing: border-box;
     margin: 0;
 }
+.pending-focus-body { display: contents; }
+.pending-focus-selector { display:flex; align-items:center; gap:8px; min-width:0; flex:1; }
+.pending-focus-selector select { min-width:260px; max-width:480px; height:38px; font-weight:700; }
+.pending-focus-arrow { display:grid; place-items:center; width:36px; height:36px; border:1px solid #444; border-radius:7px; color:#eee; text-decoration:none; }
+.pending-contact-badge,.pending-count-badge { padding:7px 10px; border-radius:999px; white-space:nowrap; font-size:12px; }
+.pending-contact-badge { color:#b9d8ff; background:#123763; }
+.pending-count-badge { margin-left:auto; color:#a9efbd; background:#173b25; }
+.pending-focus-modal .pending-focus-body { display:grid; grid-template-columns:minmax(0,1fr) 225px; gap:8px; min-height:0; }
+.pending-focus-modal .frame-modal-card { width:calc(100vw - 12px); }
+.pending-focus-modal .frame-modal-controls { display:grid; grid-template-columns:minmax(0,1fr) minmax(560px,1.5fr); column-gap:12px; align-items:center; }
+.pending-focus-modal .frame-modal-slider,.pending-focus-modal .trim-preview-controls { grid-column:1; }
+.pending-focus-modal .trim-row-3 { grid-column:2; grid-row:1 / span 2; margin:0!important; }
+.pending-focus-modal .pending-description-label { grid-column:1; display:flex; flex-direction:column; gap:4px; margin-top:6px; font-size:12px; }
+.pending-focus-modal .pending-description-label input { width:100%; box-sizing:border-box; }
+.pending-focus-modal .trim-row-2 { grid-column:2; margin:6px 0 0!important; }
+.pending-finalize-next { background:var(--gf-accent-strong, #0f5d51)!important; color:#fff!important; border-color:var(--gf-accent-strong, #0f5d51)!important; font-size:16px; font-weight:800; }
+.pending-batch-drawer { min-width:0; overflow-y:auto; border:1px solid #353535; border-radius:8px; background:#101010; }
+.pending-batch-title { position:sticky; top:0; display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#171717; font-weight:800; }
+.pending-batch-title button { padding:1px 7px; font-size:18px; }
+.pending-batch-item { display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:center; padding:10px; color:#ddd; text-decoration:none; border-left:3px solid transparent; }
+.pending-batch-item:hover { background:#1e1e1e; }
+.pending-batch-item.active { border-left-color:#ffdd00; background:#29250c; }
+.pending-batch-number { display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:#292929; font-weight:800; }
+.pending-batch-item.active .pending-batch-number { background:#ffdd00; color:#000; }
+.pending-batch-item small { display:block; margin-top:3px; color:#888; }
+.pending-focus-modal.batch-collapsed .pending-focus-body { grid-template-columns:1fr; }
+.pending-focus-modal.batch-collapsed .pending-batch-drawer { display:none; }
+html[data-theme="light"] .pending-batch-drawer { background:#fff; border-color:#ccc; }
+html[data-theme="light"] .pending-batch-title { background:#f2f2f2; }
+html[data-theme="light"] .pending-batch-item { color:#222; }
+html[data-theme="light"] .pending-batch-item.active { background:#fff8c9; }
+@media(max-width:1100px){.pending-contact-badge{display:none}.pending-focus-modal .pending-focus-body{grid-template-columns:1fr}.pending-batch-drawer{display:none}.pending-focus-modal .frame-modal-controls{grid-template-columns:1fr}.pending-focus-modal .trim-row-3,.pending-focus-modal .trim-row-2,.pending-focus-modal .frame-modal-note{grid-column:1;grid-row:auto}.pending-focus-selector select{min-width:180px}}
 
 .trim-splash {
     position: fixed;
@@ -346,6 +446,17 @@ h2,
     </div>
 
     <div class="trim-controls-pane">
+        <label style="display:block;margin-bottom:10px;">Description
+            <input id="tag_description" type="text" value="{{ description }}" style="width:100%;box-sizing:border-box;margin-top:5px;">
+        </label>
+        <label style="display:block;margin-bottom:10px;">Swing type
+            <select id="tag_swing_type" style="width:100%;box-sizing:border-box;margin-top:5px;" required>
+                <option value=""{% if not swing_type %} selected{% endif %}>Choose type</option>
+                <option value="game"{% if swing_type == 'game' %} selected{% endif %}>Game</option>
+                <option value="batting_practice"{% if swing_type == 'batting_practice' %} selected{% endif %}>Batting Practice</option>
+                <option value="tee"{% if swing_type == 'tee' %} selected{% endif %}>Tee</option>
+            </select>
+        </label>
         <div class="trim-row-2">
             <button id="open_help_btn" class="trim-btn">Help</button>
             <button id="repick_batter_btn" class="trim-btn">Re-pick Batter</button>
@@ -354,12 +465,6 @@ h2,
 
         <!-- MARKERS -->
         <div class="trim-row-3" style="margin-top:12px;">
-            <button id="goto_start_btn" class="trim-btn">Go to Start</button>
-            <button id="goto_decision_btn" class="trim-btn">Go to Decision</button>
-            <button id="goto_contact_btn" class="trim-btn">Go to Contact</button>
-        </div>
-
-        <div class="trim-row-3">
             <button id="set_start_btn" class="trim-btn">Set Start Manually</button>
             <button id="set_decision_btn" class="trim-btn">Set Decision Manually</button>
             <button id="set_contact_btn" class="trim-btn">Set Contact Manually</button>
@@ -402,33 +507,79 @@ h2,
     </div>
 </div>
 
-<div id="frame_modal" class="frame-modal">
+<div id="frame_modal" class="frame-modal guided-swing{% if pending_id %} pending-focus-modal{% endif %}" role="dialog" aria-modal="true" aria-labelledby="swing_step_title" data-step="crop">
     <div class="frame-modal-card">
         <div class="frame-modal-header">
-            <h3 style="margin:0;"></h3>
+            <h3 id="swing_step_title" aria-live="polite">Set Crop</h3>
+            {% if pending_id %}
+            <div class="pending-focus-selector">
+                {% if pending_count > 1 %}
+                <a class="pending-focus-arrow" href="/multi-swing/pending/tag?id={{ pending_swings[(pending_position - 1 + pending_count) % pending_count].id }}&sid={{ sid }}" aria-label="Previous pending swing">&#10094;</a>
+                {% endif %}
+                <select id="pending_swing_selector" aria-label="Choose pending swing">
+                    {% for item in pending_swings %}
+                    <option value="{{ item.id }}"{% if item.id == pending_id %} selected{% endif %}>Pending Swing {{ loop.index }} of {{ pending_count }} — {{ item.description or ('Swing ' + item.id) }}</option>
+                    {% endfor %}
+                </select>
+                {% if pending_count > 1 %}
+                <a class="pending-focus-arrow" href="/multi-swing/pending/tag?id={{ pending_swings[(pending_position + 1) % pending_count].id }}&sid={{ sid }}" aria-label="Next pending swing">&#10095;</a>
+                {% endif %}
+                <span class="pending-contact-badge">Contact pre-tagged</span>
+                <strong class="pending-count-badge">{{ pending_count }} pending</strong>
+            </div>
+            <button id="toggle_batch_drawer" class="trim-small-btn" type="button">Batch</button>
+            {% else %}
+            <h3 style="margin:0;">Tag Swing</h3>
             <button id="close_frame_modal_btn" class="trim-small-btn">Close</button>
+            {% endif %}
         </div>
+        <div class="pending-focus-body">
         <div class="frame-modal-stage">
             <canvas id="frame_modal_canvas" class="frame-modal-canvas" width="920" height="920"></canvas>
+        </div>
+        {% if pending_id %}
+        <aside id="pending_batch_drawer" class="pending-batch-drawer">
+            <div class="pending-batch-title">Batch <button id="close_batch_drawer" type="button" aria-label="Close batch list">×</button></div>
+            {% for item in pending_swings %}
+            <a class="pending-batch-item{% if item.id == pending_id %} active{% endif %}" href="/multi-swing/pending/tag?id={{ item.id }}&sid={{ sid }}">
+                <span class="pending-batch-number">{{ loop.index }}</span>
+                <span><strong>{{ item.description or ('Swing ' + item.id) }}</strong><small>{% if item.id == pending_id %}Tagging now{% else %}Pending{% endif %}</small></span>
+            </a>
+            {% endfor %}
+        </aside>
+        {% endif %}
         </div>
         <div class="frame-modal-controls">
             <input id="frame_modal_slider" class="frame-modal-slider" type="range" min="0" max="0" value="0">
             <div class="trim-preview-controls">
-                <button id="frame_modal_prev_btn" class="trim-icon-btn" title="Previous Frame" aria-label="Previous Frame">&#9664;</button>
-                <button id="frame_modal_next_btn" class="trim-icon-btn" title="Next Frame" aria-label="Next Frame">&#9654;</button>
+                <button id="frame_modal_prev_btn" class="trim-small-btn" type="button">Prev Frame</button>
+                <button id="frame_modal_play_btn" class="trim-small-btn" type="button">Play</button>
+                <button id="frame_modal_next_btn" class="trim-small-btn" type="button">Next Frame</button>
             </div>
             <div class="trim-row-3" style="margin-top:8px;">
-                <button id="frame_modal_set_start_btn" class="trim-btn">Set Start</button>
-                <button id="frame_modal_set_decision_btn" class="trim-btn">Set Decision</button>
-                <button id="frame_modal_set_contact_btn" class="trim-btn">Set Contact</button>
+                <button id="frame_modal_set_start_btn" class="trim-btn"><span id="pending_start_value">Start —</span><br><strong>Swing Start</strong></button>
+                <button id="frame_modal_set_decision_btn" class="trim-btn"><span id="pending_decision_value">Decision —</span><br><strong>Swing Decision</strong></button>
+                <button id="frame_modal_set_contact_btn" class="trim-btn"><span id="pending_contact_value">Contact{% if has_preset_contact %} {{ preset_contact_frame }}{% else %} —{% endif %}</span><br><strong>Contact</strong></button>
             </div>
-            <div class="trim-row-3" style="margin-top:8px;">
-                <button id="frame_modal_goto_start_btn" class="trim-btn">Go to Start</button>
-                <button id="frame_modal_goto_decision_btn" class="trim-btn">Go to Decision</button>
-                <button id="frame_modal_goto_contact_btn" class="trim-btn">Go to Contact</button>
+            <p class="frame-modal-note">Contact from the hit is already set. Continue with commitment and swing start.</p>
+            <div class="trim-crop-panel">
+                <label class="trim-crop-check"><input id="portrait_crop_enabled" type="checkbox" checked disabled> Crop</label>
+                <label>Horizontal position<input id="portrait_crop_x" type="range" min="0" max="1" step="0.001" value="0.5"></label>
+                <label>Vertical position<input id="portrait_crop_y" type="range" min="0" max="1" step="0.001" value="0.5"></label>
+                <label>Zoom<input id="portrait_crop_zoom" type="range" min="0" max="1" step="0.001" value="0"></label>
             </div>
+            <label class="pending-description-label">Swing description
+                <input id="frame_modal_description" type="text" value="{{ description }}" placeholder="Add a brief description…">
+            </label>
+            <label class="pending-description-label">Swing type
+                <select id="frame_modal_swing_type">
+                    <option value="game"{% if swing_type == 'game' %} selected{% endif %}>Game</option>
+                    <option value="batting_practice"{% if swing_type == 'batting_practice' %} selected{% endif %}>Batting Practice</option>
+                    <option value="tee"{% if swing_type == 'tee' %} selected{% endif %}>Tee</option>
+                </select>
+            </label>
             <div class="trim-row-2" style="margin-top:8px;">
-                <button id="frame_modal_finalize_btn" class="trim-btn">Finalize Swing</button>
+                <button id="frame_modal_finalize_btn" class="trim-btn{% if pending_id %} pending-finalize-next{% endif %}">{% if pending_id %}Finalize &amp; Open Next ›{% else %}Finalize Swing{% endif %}</button>
                 <button id="frame_modal_help_btn" class="trim-btn">Help</button>
             </div>
             <div id="frame_modal_progress" style="display:none; margin-top:8px;">
@@ -438,9 +589,52 @@ h2,
                 <div id="frame_modal_progress_label" style="margin-top:6px; font-size:13px;">Working...</div>
             </div>
             <div id="frame_modal_status" style="margin-top:8px; font-weight:bold; min-height:22px;"></div>
+            <div class="swing-step-actions">
+                <span id="swing_frame_label"></span>
+                <button id="swing_step_confirm" type="button" class="trim-btn">Confirm Crop</button>
+            </div>
         </div>
     </div>
 </div>
+
+<style>
+#frame_modal.guided-swing .frame-modal-header { padding:14px 18px; background:#edf5f2; border-bottom:2px solid #21776b; }
+#frame_modal.guided-swing .frame-modal-header > :not(#swing_step_title) { display:none; }
+#swing_step_title { margin:0; font-size:28px; line-height:1.25; letter-spacing:0; }
+#frame_modal.guided-swing .pending-focus-body { display:grid; grid-template-columns:minmax(0,1fr); min-height:0; }
+#frame_modal.guided-swing .pending-batch-drawer,
+#frame_modal.guided-swing .trim-row-3,
+#frame_modal.guided-swing .trim-row-2,
+#frame_modal.guided-swing .frame-modal-note { display:none; }
+#frame_modal.guided-swing .frame-modal-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 16px; }
+#frame_modal.guided-swing .frame-modal-controls > * { grid-column:1 / -1; grid-row:auto; }
+#frame_modal.guided-swing .frame-modal-controls > .pending-description-label { grid-column:auto; }
+#frame_modal.guided-swing .pending-description-label { display:flex; flex-direction:column; gap:4px; min-width:0; font-size:13px; }
+#frame_modal.guided-swing .pending-description-label input,
+#frame_modal.guided-swing .pending-description-label select { width:100%; box-sizing:border-box; height:36px; }
+#frame_modal.guided-swing .trim-crop-panel { display:block; margin:0; padding:0; border:0; background:transparent; }
+#frame_modal.guided-swing .trim-crop-panel label:not(:last-child) { display:none!important; }
+#frame_modal.guided-swing .trim-crop-panel label:last-child { display:flex; align-items:center; gap:12px; }
+#frame_modal.guided-swing .trim-crop-panel input[type=range] { width:100%; }
+#frame_modal.guided-swing[data-step="crop"] #frame_modal_canvas { cursor:grab; touch-action:none; }
+#frame_modal.guided-swing[data-step="crop"] #frame_modal_canvas:active { cursor:grabbing; }
+#frame_modal.guided-swing[data-step="crop"] .frame-modal-slider,
+#frame_modal.guided-swing[data-step="crop"] .trim-preview-controls,
+#frame_modal.guided-swing:not([data-step="crop"]) .trim-crop-panel,
+#frame_modal.guided-swing:not([data-step="crop"]) .pending-description-label { display:none; }
+#frame_modal.guided-swing #frame_modal_status:empty { display:none; }
+#frame_modal.guided-swing #frame_modal_status { margin:0!important; color:#9c341b; }
+.swing-step-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#frame_modal.guided-swing #swing_step_confirm { background:#126c5f; color:white; min-height:44px; padding:10px 20px; width:auto; margin-left:auto; }
+#swing_frame_label { white-space:nowrap; font-size:12px; }
+#frame_modal.guided-swing .trim-preview-controls button { min-height:42px; min-width:100px; }
+@media(max-width:600px) {
+  #swing_step_title { font-size:23px; }
+  #frame_modal.guided-swing .frame-modal-header { padding:12px; }
+  #frame_modal.guided-swing .frame-modal-controls { gap:6px 10px; }
+  #frame_modal.guided-swing .trim-preview-controls button { min-width:0; flex:1; }
+}
+</style>
 
 <div id="swing_help_modal" class="frame-modal" style="display:none;">
     <div class="frame-modal-card" style="max-width:760px;">
@@ -454,7 +648,7 @@ h2,
                 <li>Manual Start: first move, usually front foot lift or the first clear lateral move in a no-stride swing.</li>
                 <li>Manual Decision: when the hands launch.</li>
                 <li>Manual Contact: where the bat would meet the ball.</li>
-                <li>Use <strong>Show Stick Figure</strong> and <strong>Show Graphs + CSV</strong> when you want pose visualization.</li>
+                <li>Use <strong>"Show Stick Figure"</strong> and <strong>"Show Graphs + CSV"</strong> when you want pose visualization.</li>
                 <li>Finalize when all three markers look correct.</li>
             </ol>
         </div>
@@ -471,12 +665,11 @@ h2,
 
     <textarea id="pose_table_output"
               style="margin-top:10px;width:100%;max-width:1100px;height:180px;font-family:monospace;font-size:12px;"
-              placeholder="Build charts first, then click Export Pose Table CSV."></textarea>
+              placeholder='Build charts first, then click "Export Pose Table CSV".'></textarea>
 </div>
 
 <script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+<script src="/static/js/tag-frames.js?v=20261105-reuse"></script>
 
 <script>
 /*
@@ -511,6 +704,15 @@ const SID         = "{{ sid }}";
 const TEAM_ID     = "{{ team_id }}";
 const HITTER_ID   = "{{ hitter_id }}";
 const DESCRIPTION = "{{ description }}";
+const descriptionInput = document.getElementById("tag_description");
+const currentDescription = () => String(descriptionInput ? descriptionInput.value : DESCRIPTION).trim();
+const swingTypeInput = document.getElementById("tag_swing_type");
+const currentSwingType = () => String(swingTypeInput ? swingTypeInput.value : "{{ swing_type }}").trim();
+const VIDEO_CREATED_AT = "{{ video_created_at }}";
+const PRESET_CONTACT_FRAME = Number({{ preset_contact_frame|tojson }});
+const HAS_PRESET_CONTACT = {{ has_preset_contact|tojson }};
+const PENDING_ID = Number({{ pending_id|tojson }} || 0);
+const RETURN_URL = {{ return_url|tojson }};
 const AUTO_CAMERA_VIEW_SIDE_CHEST = "side_hitter_chest";
 const AUTO_CAMERA_VIEW_OTHER = "other";
 
@@ -520,6 +722,10 @@ let fps = 30;
 let startFrame    = 0;
 let decisionFrame = 0;
 let contactFrame  = 0;
+let startTagged = false;
+let decisionTagged = false;
+let contactTagged = HAS_PRESET_CONTACT;
+let autoFinalizeQueued = false;
 
 let previewScale = 1.0;
 const BASE_SIZE = 320;
@@ -553,6 +759,7 @@ const closeFrameModalBtn = document.getElementById("close_frame_modal_btn");
 const frameModalCanvas = document.getElementById("frame_modal_canvas");
 const frameModalSlider = document.getElementById("frame_modal_slider");
 const frameModalPrevBtn = document.getElementById("frame_modal_prev_btn");
+const frameModalPlayBtn = document.getElementById("frame_modal_play_btn");
 const frameModalNextBtn = document.getElementById("frame_modal_next_btn");
 const frameModalGotoStartBtn = document.getElementById("frame_modal_goto_start_btn");
 const frameModalGotoDecisionBtn = document.getElementById("frame_modal_goto_decision_btn");
@@ -566,6 +773,18 @@ const frameModalProgress = document.getElementById("frame_modal_progress");
 const frameModalProgressBar = document.getElementById("frame_modal_progress_bar");
 const frameModalProgressLabel = document.getElementById("frame_modal_progress_label");
 const frameModalStatus = document.getElementById("frame_modal_status");
+const pendingSwingSelector = document.getElementById("pending_swing_selector");
+const toggleBatchDrawerBtn = document.getElementById("toggle_batch_drawer");
+const closeBatchDrawerBtn = document.getElementById("close_batch_drawer");
+const frameModalDescription = document.getElementById("frame_modal_description");
+const frameModalSwingType = document.getElementById("frame_modal_swing_type");
+const pendingStartValue = document.getElementById("pending_start_value");
+const pendingDecisionValue = document.getElementById("pending_decision_value");
+const pendingContactValue = document.getElementById("pending_contact_value");
+const portraitCropEnabled = document.getElementById("portrait_crop_enabled");
+const portraitCropX = document.getElementById("portrait_crop_x");
+const portraitCropY = document.getElementById("portrait_crop_y");
+const portraitCropZoom = document.getElementById("portrait_crop_zoom");
 const contactCandidatesPanel = document.getElementById("contact_candidates_panel");
 const contactCandidateBtn1 = document.getElementById("contact_candidate_1");
 const contactCandidateBtn2 = document.getElementById("contact_candidate_2");
@@ -587,6 +806,69 @@ let scrubActive = false;
 let scrubLastX = 0;
 let scrubFrameFloat = 0;
 let frameModalOpen = false;
+let frameModalPlayTimer = null;
+const FIXED_PORTRAIT_ASPECT = 8 / 9;
+let portraitCropState = { enabled: false, x: 0.235, y: 0.03, w: 0.529, h: 0.94 };
+let swingTagStep = "crop";
+let swingTagBusy = false;
+let swingTagError = "";
+
+function swingTagBackoff(framesAt30) {
+    return Math.max(1, Math.round(framesAt30 * (Number(fps) || 30) / 30));
+}
+
+function renderSwingTagStep() {
+    const titles = {crop:"Set Crop", contact:"Set Swing Contact Frame", commitment:"Set Swing Commitment Frame", start:"Set Swing Start Frame"};
+    frameModal.dataset.step = swingTagStep;
+    document.getElementById("swing_step_title").textContent = titles[swingTagStep];
+    const button = document.getElementById("swing_step_confirm");
+    button.textContent = swingTagBusy ? "Saving Swing..." : swingTagStep === "crop" ? "Confirm Crop" : swingTagStep === "start" ? "Confirm Start And Save" : "Confirm Frame";
+    button.disabled = swingTagBusy || !frames.length;
+    frameModalStatus.textContent = swingTagError;
+    updateFrameModalUI(Number(slider.value) || 0);
+}
+
+async function confirmSwingTagStep() {
+    if (swingTagBusy || !frames.length) return;
+    stopFrameModalPlayback();
+    swingTagError = "";
+    const selected = Math.round(Number(slider.value) || 0);
+    if (swingTagStep === "crop") {
+        descriptionInput.value = frameModalDescription.value;
+        swingTypeInput.value = frameModalSwingType.value;
+        normalizePortraitCropFromControls();
+        swingTagStep = contactTagged ? "commitment" : "contact";
+        if (contactTagged) setFrameClamped(contactFrame - swingTagBackoff(5));
+    } else if (swingTagStep === "contact") {
+        if (selected < 2) swingTagError = "Choose contact after the start of the clip so commitment and start can be marked.";
+        else {
+            contactFrame = selected;
+            contactTagged = true;
+            swingTagStep = "commitment";
+            setFrameClamped(contactFrame - swingTagBackoff(5));
+        }
+    } else if (swingTagStep === "commitment") {
+        if (selected <= 0 || selected >= contactFrame) swingTagError = "Choose commitment before contact, leaving an earlier frame for swing start.";
+        else {
+            decisionFrame = selected;
+            decisionTagged = true;
+            swingTagStep = "start";
+            setFrameClamped(decisionFrame - swingTagBackoff(15));
+        }
+    } else if (swingTagStep === "start") {
+        if (selected >= decisionFrame) swingTagError = "Choose swing start before commitment.";
+        else {
+            startFrame = selected;
+            startTagged = true;
+            swingTagBusy = true;
+            renderSwingTagStep();
+            const saved = await trimAndUpload();
+            if (saved) return;
+            swingTagBusy = false;
+        }
+    }
+    renderSwingTagStep();
+}
 let referencePoseGuide = null;
 
 let analysisFrames = null;
@@ -803,9 +1085,19 @@ function ensurePose() {
     // Lazy initialize one MoveNet MultiPose detector for static-frame inference.
     if (poseInstance) return Promise.resolve(poseInstance);
     if (poseInitPromise) return poseInitPromise;
-    if (typeof poseDetection === "undefined" || typeof tf === "undefined") return Promise.resolve(null);
-
     poseInitPromise = (async () => {
+        const loadLibrary = (src, ready) => {
+            if (ready()) return Promise.resolve();
+            return new Promise((resolve,reject) => {
+                const script=document.createElement('script');script.src=src;script.async=true;
+                const timer=setTimeout(()=>{script.remove();reject(new Error('Pose tools took too long to download. Please retry.'));},20000);
+                script.onload=()=>{clearTimeout(timer);ready()?resolve():reject(new Error('Pose tools did not initialize.'));};
+                script.onerror=()=>{clearTimeout(timer);script.remove();reject(new Error('Could not download pose tools. Please retry.'));};
+                document.head.append(script);
+            });
+        };
+        await loadLibrary('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js',()=>typeof tf!=='undefined');
+        await loadLibrary('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js',()=>typeof poseDetection!=='undefined');
         await tf.setBackend("webgl");
         await tf.ready();
         const detectorConfig = {
@@ -818,7 +1110,7 @@ function ensurePose() {
             detectorConfig
         );
         return poseInstance;
-    })();
+    })().catch(error=>{poseInitPromise=null;throw error;});
 
     return poseInitPromise;
 }
@@ -1619,7 +1911,7 @@ async function ensurePoseViewApproved(options = {}) {
 // LOAD + DECODE VIDEO
 ////////////////////////////////////////////////////////////
 async function loadVideo() {
-    // Browser-side decode pipeline: fetch MP4, decode to per-frame ImageBitmaps for scrubbing.
+    // Decode each source frame sequentially, independent of browser seek rounding.
     manualSeedPoint = null;
     batterTapConfirmed = false;
     pendingFinalizeAfterPick = false;
@@ -1630,9 +1922,8 @@ async function loadVideo() {
     showProgress();
     updateProgress(5, "Fetching video...");
 
-    const resp = await fetch(`/raw/swing?id=${TEMP_ID}`);
-    const buf  = await resp.arrayBuffer();
-    let meta = { fps: 0, frame_count: 0, duration: 0 };
+    let meta = window.GameFrameTagFrames.metadata(TEMP_ID) || { fps: 0, frame_count: 0, duration: 0 };
+    if (!meta.frame_count) {
     try {
         const metaResp = await fetch(`/api/raw/swing-meta?id=${TEMP_ID}`);
         const metaJson = await metaResp.json();
@@ -1644,104 +1935,26 @@ async function loadVideo() {
             };
         }
     } catch (_) {}
-
-    updateProgress(20, "Preparing video...");
-
-    const blob = new Blob([buf], { type: "video/mp4" });
-    const video = document.createElement("video");
-    video.src = URL.createObjectURL(blob);
-    video.muted = true;
-    video.playsInline = true;
-
-    await new Promise((resolve, reject) => {
-        const onLoaded = () => {
-            cleanup();
-            resolve();
-        };
-        const onError = () => {
-            cleanup();
-            reject(new Error("Video metadata unavailable."));
-        };
-        const cleanup = () => {
-            video.removeEventListener("loadedmetadata", onLoaded);
-            video.removeEventListener("error", onError);
-        };
-        video.addEventListener("loadedmetadata", onLoaded, { once: true });
-        video.addEventListener("error", onError, { once: true });
-    }).catch(() => {});
-    if (video.readyState < 2) {
-        await new Promise((resolve) => {
-            const onLoadedData = () => {
-                video.removeEventListener("loadeddata", onLoadedData);
-                resolve();
-            };
-            video.addEventListener("loadeddata", onLoadedData, { once: true });
-        }).catch(() => {});
     }
 
-    updateProgress(35, "Initializing decoder...");
-
-    frames = [];
+    updateProgress(20, "Decoding source frames...");
     fps = meta.fps > 0 ? meta.fps : Math.max(1, Number({{ fps|tojson }} || 0) || 30);
-    const duration = Number.isFinite(video.duration) && video.duration > 0
-        ? Number(video.duration)
-        : Number(meta.duration || 0);
-    let exactFrameCount = Number(meta.frame_count || 0);
-    if (!exactFrameCount && fps > 0 && duration > 0) {
-        exactFrameCount = Math.max(1, Math.round(fps * duration));
-    }
-    if (!exactFrameCount) {
-        exactFrameCount = Math.max(1, Math.round(duration * 30));
-    }
-    updateProgress(40, "Decoding frames...");
-
-    const captureCanvas = document.createElement("canvas");
-    const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: false });
-    captureCanvas.width = Math.max(1, video.videoWidth || 1);
-    captureCanvas.height = Math.max(1, video.videoHeight || 1);
-
-    const seekTo = (timeSec) => new Promise((resolve, reject) => {
-        const onSeeked = () => {
-            cleanup();
-            resolve();
-        };
-        const onError = () => {
-            cleanup();
-            reject(new Error("Seek failed"));
-        };
-        const cleanup = () => {
-            video.removeEventListener("seeked", onSeeked);
-            video.removeEventListener("error", onError);
-        };
-        video.addEventListener("seeked", onSeeked, { once: true });
-        video.addEventListener("error", onError, { once: true });
-        const clamped = Math.max(0, Math.min(duration > 0 ? Math.max(0, duration - 0.0005) : timeSec, timeSec));
-        if (Math.abs((video.currentTime || 0) - clamped) < 0.00025) {
-            cleanup();
-            resolve();
-            return;
-        }
-        video.currentTime = clamped;
-    });
-
-    for (let fi = 0; fi < exactFrameCount; fi += 1) {
-        const frameTime = fps > 0 ? (fi / fps) : (duration > 0 ? (fi / exactFrameCount) * duration : 0);
-        await seekTo(frameTime);
-        captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
-        const bmp = await createImageBitmap(captureCanvas);
-        frames.push(bmp);
-        if (fi % 10 === 0 || fi === exactFrameCount - 1) {
-            updateProgress(
-                Math.min(40 + ((fi + 1) / Math.max(1, exactFrameCount)) * 40, 80),
-                `Decoding... ${fi + 1}/${exactFrameCount} frames`
-            );
-        }
+    frames = await loadExactTagFrames(TEMP_ID, (done, total) => {
+        updateProgress(35 + (done / total) * 45, `Decoding... ${done}/${total} frames`);
+    },meta);
+    if (meta.frame_count && frames.length !== meta.frame_count) {
+        throw new Error(`Decoded ${frames.length} frames, but source reports ${meta.frame_count}.`);
     }
 
     updateProgress(90, "Building preview...");
 
     slider.max = frames.length - 1;
-    drawFrame(0);
+    if (HAS_PRESET_CONTACT && Number.isFinite(PRESET_CONTACT_FRAME) && PRESET_CONTACT_FRAME >= 0) {
+        contactFrame = Math.max(0, Math.min(frames.length - 1, Math.round(PRESET_CONTACT_FRAME)));
+        decisionFrame = Math.max(0, contactFrame - Math.max(1, Math.round(fps * 0.17)));
+    }
+    slider.value = HAS_PRESET_CONTACT ? contactFrame : 0;
+    drawFrame(Number(slider.value));
 
     updateProgress(100, "Done!");
     hideProgress();
@@ -1750,7 +1963,9 @@ async function loadVideo() {
     info.textContent = `Frames: ${frames.length} | FPS: ${fps.toFixed(2)}`;
     updateSwingDurationDisplay();
     hideAutodetectSplash();
-    markerStatus.textContent = "Manual trim is ready. Use Show Stick Figure or Show Graphs + CSV for pose analysis.";
+    markerStatus.textContent = HAS_PRESET_CONTACT && Number.isFinite(PRESET_CONTACT_FRAME) && PRESET_CONTACT_FRAME >= 0
+        ? `Contact is already set at frame ${contactFrame}.`
+        : 'Manual trim is ready. Use "Show Stick Figure" or "Show Graphs + CSV" for pose analysis.';
     if (buildChartsBtn) buildChartsBtn.textContent = "Autodetect";
     loadReferencePoseGuide();
 }
@@ -1920,41 +2135,68 @@ function updateFrameModalUI(i) {
     if (!frameModalOpen) return;
     const f = frames[i];
     if (!f) return;
-    if (frameModalCanvas.width !== f.width || frameModalCanvas.height !== f.height) {
-        frameModalCanvas.width = f.width;
-        frameModalCanvas.height = f.height;
+    const crop = normalizePortraitCropFromControls();
+    const width = swingTagStep === "crop" ? f.width : Math.max(1, Math.round(f.width * crop.w));
+    const height = swingTagStep === "crop" ? f.height : Math.max(1, Math.round(f.height * crop.h));
+    if (frameModalCanvas.width !== width || frameModalCanvas.height !== height) {
+        frameModalCanvas.width = width;
+        frameModalCanvas.height = height;
     }
+    const stage = frameModalCanvas.parentElement;
+    const scale = Math.min((stage.clientWidth - 2) / width, (stage.clientHeight - 2) / height);
+    frameModalCanvas.style.width = `${Math.max(1, width * scale)}px`;
+    frameModalCanvas.style.height = `${Math.max(1, height * scale)}px`;
     const g = frameModalCanvas.getContext("2d");
     if (!g) return;
     const dstW = frameModalCanvas.width || 1;
     const dstH = frameModalCanvas.height || 1;
     g.fillStyle = "black";
     g.fillRect(0, 0, dstW, dstH);
-    g.drawImage(f, 0, 0, dstW, dstH);
-
-    // Keep frame/marker context visible in modal view.
-    const lines = [
-        `Frame: ${i} / ${Math.max(0, frames.length - 1)}`,
-        `Start: ${startFrame}`,
-        `Decision: ${decisionFrame}`,
-        `Contact: ${contactFrame}`,
-    ];
-    const boxX = 8;
-    const boxY = 8;
-    const lineH = 18;
-    const boxW = 240;
-    const boxH = 10 + lines.length * lineH;
-    g.fillStyle = "rgba(0,0,0,0.65)";
-    g.fillRect(boxX, boxY, boxW, boxH);
-    g.font = "14px monospace";
-    for (let li = 0; li < lines.length; li += 1) {
-        const textY = boxY + 15 + li * lineH;
-        if (li === 1) g.fillStyle = i === startFrame ? "#00ffff" : "#9adfff";
-        else if (li === 2) g.fillStyle = i === decisionFrame ? "#33ff66" : "#aaff99";
-        else if (li === 3) g.fillStyle = i === contactFrame ? "#66aaff" : "#aaccff";
-        else g.fillStyle = "#ffffff";
-        g.fillText(lines[li], boxX + 8, textY);
+    if (swingTagStep === "crop") {
+        g.drawImage(f, 0, 0, dstW, dstH);
+        drawPortraitCropOverlay(g, dstW, dstH);
+    } else {
+        g.drawImage(f, crop.x * f.width, crop.y * f.height, crop.w * f.width, crop.h * f.height, 0, 0, dstW, dstH);
     }
+    document.getElementById("swing_frame_label").textContent = swingTagStep === "crop" ? "" : `Frame ${i} / ${frames.length - 1}`;
+}
+
+function normalizePortraitCropFromControls() {
+    const zoom = portraitCropZoom ? Number(portraitCropZoom.value) : 0;
+    const h = Math.max(0.38, Math.min(0.98, 0.98 - Math.max(0, Math.min(1, zoom)) * 0.44));
+    const sourceFrame = frames[0];
+    const w = Math.min(1, h * FIXED_PORTRAIT_ASPECT * (sourceFrame ? sourceFrame.height / sourceFrame.width : 1));
+    const centerX = portraitCropX ? Number(portraitCropX.value) : 0.5;
+    const centerY = portraitCropY ? Number(portraitCropY.value) : 0.5;
+    const x = Math.max(0, Math.min(1 - w, centerX - w / 2));
+    const y = Math.max(0, Math.min(1 - h, centerY - h / 2));
+    portraitCropState = {
+        enabled: true,
+        x, y, w, h,
+    };
+    return portraitCropState;
+}
+
+function drawPortraitCropOverlay(g, w, h) {
+    const crop = normalizePortraitCropFromControls();
+    if (!crop.enabled) return;
+    const x = crop.x * w;
+    const y = crop.y * h;
+    const cw = crop.w * w;
+    const ch = crop.h * h;
+    g.save();
+    g.fillStyle = "rgba(0, 0, 0, 0.38)";
+    g.fillRect(0, 0, w, y);
+    g.fillRect(0, y + ch, w, h - y - ch);
+    g.fillRect(0, y, x, ch);
+    g.fillRect(x + cw, y, w - x - cw, ch);
+    g.strokeStyle = "#28c2a0";
+    g.lineWidth = Math.max(3, Math.round(w * 0.004));
+    g.strokeRect(x, y, cw, ch);
+    g.fillStyle = "rgba(40, 194, 160, 0.92)";
+    g.font = `${Math.max(16, Math.round(w * 0.018))}px sans-serif`;
+    g.fillText("Crop", x + 12, y + 26);
+    g.restore();
 }
 
 function openFrameModal() {
@@ -1963,34 +2205,83 @@ function openFrameModal() {
     if (trimWorkspace) trimWorkspace.classList.add("is-minimized");
     syncFrameModalStatus();
     updateFrameModalUI(+slider.value || 0);
+    renderSwingTagStep();
 }
 
 function closeFrameModal() {
+    stopFrameModalPlayback();
     frameModalOpen = false;
     frameModal.style.display = "none";
 }
 
 function syncFrameModalStatus() {
     if (!frameModalStatus || !markerStatus) return;
-    frameModalStatus.textContent = markerStatus.textContent || "";
+    frameModalStatus.textContent = swingTagError;
+    if (pendingStartValue) pendingStartValue.textContent = startTagged ? `Start ${startFrame}` : "Start —";
+    if (pendingDecisionValue) pendingDecisionValue.textContent = decisionTagged ? `Decision ${decisionFrame}` : "Decision —";
+    if (pendingContactValue) pendingContactValue.textContent = contactTagged ? `Contact ${contactFrame}` : "Contact —";
 }
 
 function setupFrameModal() {
     if (!openFrameModalBtn || !frameModal || !frameModalCanvas) return;
+    document.getElementById("swing_step_confirm").onclick = confirmSwingTagStep;
+    new ResizeObserver(() => updateFrameModalUI(Number(slider.value) || 0)).observe(frameModalCanvas.parentElement);
+    let cropDrag = null;
+    frameModalCanvas.addEventListener("pointerdown", event => {
+        if (swingTagStep !== "crop" || swingTagBusy || !frames.length) return;
+        const rect = frameModalCanvas.getBoundingClientRect();
+        const crop = normalizePortraitCropFromControls();
+        cropDrag = {x:event.clientX, y:event.clientY, centerX:crop.x + crop.w / 2, centerY:crop.y + crop.h / 2, rect};
+        frameModalCanvas.setPointerCapture(event.pointerId);
+        event.preventDefault();
+    });
+    frameModalCanvas.addEventListener("pointermove", event => {
+        if (!cropDrag) return;
+        const crop = normalizePortraitCropFromControls();
+        portraitCropX.value = Math.max(crop.w / 2, Math.min(1 - crop.w / 2, cropDrag.centerX + (event.clientX - cropDrag.x) / cropDrag.rect.width));
+        portraitCropY.value = Math.max(crop.h / 2, Math.min(1 - crop.h / 2, cropDrag.centerY + (event.clientY - cropDrag.y) / cropDrag.rect.height));
+        updateFrameModalUI(Number(slider.value) || 0);
+    });
+    const finishCropDrag = event => {
+        cropDrag = null;
+        if (frameModalCanvas.hasPointerCapture(event.pointerId)) frameModalCanvas.releasePointerCapture(event.pointerId);
+    };
+    frameModalCanvas.addEventListener("pointerup", finishCropDrag);
+    frameModalCanvas.addEventListener("pointercancel", finishCropDrag);
+    if (frameModalDescription && descriptionInput) {
+        frameModalDescription.oninput = () => { descriptionInput.value = frameModalDescription.value; };
+    }
+    if (frameModalSwingType && swingTypeInput) {
+        frameModalSwingType.onchange = () => { swingTypeInput.value = frameModalSwingType.value; };
+        swingTypeInput.onchange = () => { frameModalSwingType.value = swingTypeInput.value; };
+    }
+    if (pendingSwingSelector) {
+        pendingSwingSelector.onchange = () => {
+            const embedded = document.body.classList.contains("embedded-page") ? "&embedded=1" : "";
+            window.location.href = `/multi-swing/pending/tag?id=${encodeURIComponent(pendingSwingSelector.value)}&sid=${encodeURIComponent(SID)}${embedded}`;
+        };
+    }
+    const toggleBatchDrawer = () => frameModal.classList.toggle("batch-collapsed");
+    if (toggleBatchDrawerBtn) toggleBatchDrawerBtn.onclick = toggleBatchDrawer;
+    if (closeBatchDrawerBtn) closeBatchDrawerBtn.onclick = toggleBatchDrawer;
     openFrameModalBtn.onclick = () => openFrameModal();
     if (closeFrameModalBtn) {
         closeFrameModalBtn.onclick = () => closeFrameModal();
     }
     frameModal.onclick = (ev) => {
-        if (ev.target === frameModal) {
-            closeFrameModal();
-        }
+        // Backdrop clicks preserve frame selection.
     };
     if (frameModalSlider) {
         frameModalSlider.oninput = () => setFrameClamped(+frameModalSlider.value || 0);
     }
     if (frameModalPrevBtn) frameModalPrevBtn.onclick = () => setFrameClamped((+slider.value || 0) - 1);
+    if (frameModalPlayBtn) frameModalPlayBtn.onclick = toggleFrameModalPlayback;
     if (frameModalNextBtn) frameModalNextBtn.onclick = () => setFrameClamped((+slider.value || 0) + 1);
+    const refreshCrop = () => updateFrameModalUI(+slider.value || 0);
+    if (portraitCropEnabled) portraitCropEnabled.onchange = refreshCrop;
+    if (portraitCropX) portraitCropX.oninput = refreshCrop;
+    if (portraitCropY) portraitCropY.oninput = refreshCrop;
+    if (portraitCropZoom) portraitCropZoom.oninput = refreshCrop;
     if (frameModalGotoStartBtn) frameModalGotoStartBtn.onclick = () => setFrameClamped(startFrame);
     if (frameModalGotoDecisionBtn) frameModalGotoDecisionBtn.onclick = () => setFrameClamped(decisionFrame);
     if (frameModalGotoContactBtn) frameModalGotoContactBtn.onclick = () => setFrameClamped(contactFrame);
@@ -1999,12 +2290,6 @@ function setupFrameModal() {
     if (frameModalSetContactBtn) frameModalSetContactBtn.onclick = () => document.getElementById("set_contact_btn").click();
     if (frameModalFinalizeBtn) {
         frameModalFinalizeBtn.onclick = async () => {
-            if (!manualSeedPoint) {
-                beginBatterPickFlow(false, true);
-                markerStatus.textContent = "Click directly on the batter in the full screen frame to save.";
-                syncFrameModalStatus();
-                return;
-            }
             await trimAndUpload();
         };
     }
@@ -3921,27 +4206,6 @@ document.getElementById("next_frame_btn").onclick = () => {
     drawFrame(next);
 };
 
-document.getElementById("goto_start_btn").onclick = () => {
-    if (!frames.length) return;
-    const target = Math.max(0, Math.min(frames.length - 1, Number.isFinite(startFrame) ? startFrame : 0));
-    slider.value = target;
-    drawFrame(target);
-};
-
-document.getElementById("goto_decision_btn").onclick = () => {
-    if (!frames.length) return;
-    const target = Math.max(0, Math.min(frames.length - 1, Number.isFinite(decisionFrame) ? decisionFrame : 0));
-    slider.value = target;
-    drawFrame(target);
-};
-
-document.getElementById("goto_contact_btn").onclick = () => {
-    if (!frames.length) return;
-    const target = Math.max(0, Math.min(frames.length - 1, Number.isFinite(contactFrame) ? contactFrame : 0));
-    slider.value = target;
-    drawFrame(target);
-};
-
 if (toggleAnalyticsBtn && analyticsPanel) {
     toggleAnalyticsBtn.onclick = () => {
         if (poseViewVerification.status === "rejected") {
@@ -4051,6 +4315,7 @@ async function applySelectedContactFrame(selectedContactFrame) {
     markerStatus.textContent = `Charts built (subject=${subjectMode}, lead side=${ctx.lead}, contact-mode=${ctx.contactMode}, hips=${ctx.hipStats.visibleCount}/${ctx.n}, start=${startFrame}, decision=${decisionFrame}, contact=${contactFrame})`;
     updateSwingDurationDisplay();
     updateGraphLine(+slider.value || 0);
+    window.showCelebration?.("Swing Markers Locked!", `Start ${startFrame}  •  Decision ${decisionFrame}  •  Contact ${contactFrame}`, 1800);
 }
 
 function showContactCandidates(candidates, context) {
@@ -4089,28 +4354,99 @@ if (contactCandidatesRepickBtn) {
 ////////////////////////////////////////////////////////////
 // MARKERS
 ////////////////////////////////////////////////////////////
+function finalizeWhenAllSwingTagsAreSet() {
+    if (!startTagged || !decisionTagged || !contactTagged || autoFinalizeQueued) return false;
+    autoFinalizeQueued = true;
+    markerStatus.textContent = "All three swing markers are set. Finalizing…";
+    showFinalizing();
+    setTimeout(() => trimAndUpload(), 0);
+    return true;
+}
+
+function stopFrameModalPlayback() {
+    if (frameModalPlayTimer) clearInterval(frameModalPlayTimer);
+    frameModalPlayTimer = null;
+    if (frameModalPlayBtn) frameModalPlayBtn.textContent = "Play";
+}
+
+function toggleFrameModalPlayback() {
+    if (frameModalPlayTimer) {
+        stopFrameModalPlayback();
+        return;
+    }
+    if (frameModalPlayBtn) frameModalPlayBtn.textContent = "Pause";
+    frameModalPlayTimer = setInterval(() => {
+        const maxIdx = Math.max(0, frames.length - 1);
+        const next = (+slider.value || 0) + 1;
+        if (next > maxIdx) {
+            stopFrameModalPlayback();
+            return;
+        }
+        setFrameClamped(next);
+    }, Math.max(40, 1000 / Math.max(1, fps || 30)));
+}
+
+function showFinalizing() {
+    hideProgress();
+    document.getElementById("finalizing-overlay").classList.add("is-visible");
+}
+
+function hideFinalizing() {
+    document.getElementById("finalizing-overlay").classList.remove("is-visible");
+}
+
+function finishSwingAndReturn(savedSwingId) {
+    hideFinalizing();
+    const destination = new URL(RETURN_URL || `/matchup/select?sid=${SID}`, window.location.href);
+    if (destination.pathname === '/matchup/select' && Number(savedSwingId) > 0) {
+        destination.searchParams.set('swing_id', String(savedSwingId));
+    }
+    if (window.parent !== window || document.body.classList.contains("embedded-page")) {
+        destination.searchParams.set("embedded", "1");
+    }
+    window.showCelebration?.("Swing Complete!", destination.pathname === '/library' ? "Returning to library" : "Opening matchup selector", 1100);
+    // Navigation must not depend on an animation callback. This also gives the
+    // user a brief, unmistakable confirmation before returning to the queue.
+    setTimeout(() => window.location.replace(destination.href), 1150);
+}
+
 document.getElementById("set_start_btn").onclick = () => {
     startFrame = +slider.value;
+    startTagged = true;
     markerStatus.textContent =
         `Start = ${startFrame}`;
     updateSwingDurationDisplay();
     updateGraphLine(+slider.value || 0);
+    drawFrame(+slider.value || 0);
+    if (!finalizeWhenAllSwingTagsAreSet()) {
+        window.showCelebration?.("Swing Start Tagged!", `Frame ${startFrame}`);
+    }
 };
 
 document.getElementById("set_decision_btn").onclick = () => {
     decisionFrame = +slider.value;
+    decisionTagged = true;
     markerStatus.textContent =
         `Decision = ${decisionFrame}`;
     updateGraphLine(+slider.value || 0);
+    drawFrame(+slider.value || 0);
+    if (!finalizeWhenAllSwingTagsAreSet()) {
+        window.showCelebration?.("Decision Tagged!", `Frame ${decisionFrame}`);
+    }
 };
 
 document.getElementById("set_contact_btn").onclick = () => {
     contactFrame = +slider.value;
+    contactTagged = true;
     hideContactCandidates();
     markerStatus.textContent =
         `Contact = ${contactFrame}`;
     updateSwingDurationDisplay();
     updateGraphLine(+slider.value || 0);
+    drawFrame(+slider.value || 0);
+    if (!finalizeWhenAllSwingTagsAreSet()) {
+        window.showCelebration?.("Contact Tagged!", `Swing frame ${contactFrame}`);
+    }
 };
 
 async function runAutodetectFromManualSeed() {
@@ -4397,6 +4733,7 @@ canvas.addEventListener("click", async (ev) => {
 });
 if (frameModalCanvas) {
     frameModalCanvas.addEventListener("click", async (ev) => {
+        if (frameModal.classList.contains("guided-swing")) return;
         const rect = frameModalCanvas.getBoundingClientRect();
         const scaleX = frameModalCanvas.width / Math.max(1, rect.width);
         const scaleY = frameModalCanvas.height / Math.max(1, rect.height);
@@ -4432,7 +4769,7 @@ if (closeHelpBtn && swingHelpModal) {
 }
 if (swingHelpModal) {
     swingHelpModal.addEventListener("click", (ev) => {
-        if (ev.target === swingHelpModal) swingHelpModal.style.display = "none";
+        // Use the explicit close control.
     });
 }
 
@@ -4677,14 +5014,60 @@ async function trimAndUpload() {
     // - encode MP4 via FFmpeg WASM
     // - upload finalized clip
     if (contactFrame <= startFrame) {
-        alert("Contact must be after start.");
-        return;
+        autoFinalizeQueued = false;
+        swingTagError = "Contact must be after start.";
+        return false;
     }
-    if (finalizeRunning) return;
-    if (!manualSeedPoint) {
-        beginBatterPickFlow(false, true);
-        markerStatus.textContent = "Tap the batter in the preview to save.";
-        return;
+    if (finalizeRunning) return false;
+
+    // Fast path: native FFmpeg trims the existing local source. No frame PNGs,
+    // browser-side WASM encoding, or automatic pose pass is required to save.
+    {
+        finalizeRunning = true;
+        try {
+            showFinalizing();
+            let poseData = "";
+            if (poseViewIsApproved() && poseLandmarksFrames && poseLandmarksFrames.length) {
+                try { poseData = (buildPoseTableCSV().csv || "").trim(); } catch (_) {}
+            }
+            const nativeForm = new FormData();
+            nativeForm.append("sid", SID);
+            nativeForm.append("team_id", TEAM_ID);
+            nativeForm.append("hitter_id", HITTER_ID);
+            nativeForm.append("description", currentDescription());
+            nativeForm.append("swing_type", currentSwingType());
+            nativeForm.append("video_created_at", VIDEO_CREATED_AT);
+            nativeForm.append("temp_id", TEMP_ID);
+            nativeForm.append("camera_view", currentDetectedCameraView());
+            nativeForm.append("fps", fps);
+            nativeForm.append("start_frame", startFrame);
+            nativeForm.append("decision_frame_source", decisionFrame);
+            nativeForm.append("contact_frame", contactFrame);
+            nativeForm.append("pose_data", poseData);
+            nativeForm.append("portrait_crop", JSON.stringify(normalizePortraitCropFromControls()));
+            if (PENDING_ID > 0) nativeForm.append("pending_id", String(PENDING_ID));
+            const nativeResponse = await fetch("/upload/swing/finalize", {
+                method: "POST",
+                headers: {Accept: 'application/json'},
+                body: nativeForm
+            });
+            if (!nativeResponse.ok) {
+                const message = await nativeResponse.text().catch(() => "");
+                throw new Error(message || "Finalize failed.");
+            }
+            const saved = await nativeResponse.json().catch(() => ({}));
+            finishSwingAndReturn(saved.swing_id);
+            return true;
+        } catch (e) {
+            autoFinalizeQueued = false;
+            hideFinalizing();
+            swingTagError = e && e.message ? e.message : "Finalize failed.";
+            console.error(e);
+            hideProgress();
+            return false;
+        } finally {
+            finalizeRunning = false;
+        }
     }
 
     finalizeRunning = true;
@@ -4767,7 +5150,7 @@ async function trimAndUpload() {
             "library_out.mp4"
         );
 
-        updateProgress(90, "Uploading...");
+        updateProgress(90, "Loading to GameFrame...");
 
         const out = ffmpeg.FS("readFile", "out.mp4");
         const blob = new Blob([out.buffer], { type: "video/mp4" });
@@ -4778,7 +5161,9 @@ async function trimAndUpload() {
         form.append("sid", SID);
         form.append("team_id", TEAM_ID);
         form.append("hitter_id", HITTER_ID);
-        form.append("description", DESCRIPTION);
+        form.append("description", currentDescription());
+        form.append("swing_type", currentSwingType());
+        form.append("video_created_at", VIDEO_CREATED_AT);
         form.append("camera_view", currentDetectedCameraView());
         form.append("fps", fps);
         form.append("frame_count", selected.length);
@@ -4793,21 +5178,26 @@ async function trimAndUpload() {
             }
         }
         form.append("pose_data", poseData);
+        form.append("portrait_crop", JSON.stringify(normalizePortraitCropFromControls()));
+        if (PENDING_ID > 0) form.append("pending_id", String(PENDING_ID));
         form.append("file", blob, "trimmed_swing.mp4");
         form.append("library_file", libraryBlob, "library_swing.mp4");
 
         const r = await fetch(`/upload/swing/finalize`, {
             method: "POST",
+            headers: {Accept: 'application/json'},
             body: form
         });
 
         if (r.ok) {
             updateProgress(100, "Saved!");
-            window.location.href = `/library?sid=${SID}&type=swing`;
+            const saved = await r.json().catch(() => ({}));
+            finishSwingAndReturn(saved.swing_id);
         } else {
             alert("Upload failed.");
         }
     } catch (e) {
+        autoFinalizeQueued = false;
         alert("Finalize failed.");
         console.error(e);
     } finally {
@@ -4844,7 +5234,7 @@ document.getElementById("copy_pose_table_btn").onclick = async () => {
     }
     const ta = document.getElementById("pose_table_output");
     if (!ta.value) {
-        markerStatus.textContent = "Nothing to copy yet. Click Export Pose Table CSV.";
+        markerStatus.textContent = 'Nothing to copy yet. Click "Export Pose Table CSV".';
         return;
     }
     try {

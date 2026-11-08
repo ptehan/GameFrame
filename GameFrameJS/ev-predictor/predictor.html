@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script src="/static/js/modal-dismissal.js?v=20261102-2"></script>
+    <script>document.documentElement.classList.add("gf-guided");</script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>GameFrame Hit Metrics</title>
+    <script>if (window.parent !== window) document.documentElement.classList.add("embedded-workflow");</script>
+    <style>
+      html.embedded-workflow .topbar,
+      html.embedded-workflow #side-panel,
+      html.embedded-workflow #menu-scrim { display: none !important; }
+      html.embedded-workflow .workspace { grid-template-columns: minmax(0, 1fr); }
+      html.embedded-workflow .app-shell { padding: 0; }
+    </style>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/static/vendor/leaflet-1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="./styles.css?v=map-overlay-removed-20261105" />
+    <link rel="stylesheet" href="/static/css/guided-workspace.css?v=20261101-contact-picture-1" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <a class="app-logo-link" href="/" aria-label="Back to GameFrame landing page">
+            <img class="app-logo" src="./assets/gameframe-logo-app.png" alt="GameFrame" />
+          </a>
+          <h1>Hit Metrics</h1>
+          <p>Estimate exit velocity, launch angle, and carry from video.</p>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <div class="viewer-panel">
+          <div class="estimate-banner" id="estimate-banner">
+            <img class="banner-logo" src="./assets/gameframe-logo-video.png" alt="GameFrame" />
+            <div>
+              <span id="estimate-description">No description</span>
+              <strong id="estimate-summary">Load prediction for EV / LA / distance</strong>
+            </div>
+          </div>
+          <div class="viewer" id="viewer">
+            <video id="video" playsinline></video>
+            <canvas id="overlay"></canvas>
+          </div>
+          <div class="transport">
+            <div class="timeline-row">
+              <input id="timeline" type="range" min="0" max="0" step="0.033333" value="0" aria-label="Video timeline" />
+            </div>
+            <button id="back-frame" type="button" title="Previous frame ([ or Arrow Left)">Prev Frame</button>
+            <button id="play-pause" type="button">Play</button>
+            <button id="forward-frame" type="button" title="Next frame (] or Arrow Right)">Next Frame</button>
+            <div id="ground-view-controls" class="ground-view-controls" hidden>
+              <label>View zoom <input id="ground-view-zoom" type="range" min="1" max="6" step="0.25" value="1" aria-label="Ground contact viewing zoom" /></label>
+              <output id="ground-view-zoom-label">1×</output>
+              <button id="ground-view-reset" type="button">Reset view</button>
+              <span>Drag to pan when zoomed. Click to tag.</span>
+            </div>
+            <div class="mode-toggle" aria-label="Click mode">
+              <button id="mode-ball" class="active" type="button">Ball</button>
+              <button id="mode-landmark" type="button">Landmark</button>
+              <button id="mode-terminal" type="button" hidden>Ground Contact</button>
+              <button id="mode-eraser" type="button">Erase</button>
+            </div>
+          </div>
+        </div>
+        <section id="ev-library-panel" class="ev-library-panel" hidden>
+          <div class="library-panel-heading">
+            <div>
+              <h2>EV Library</h2>
+              <p id="ev-library-status">Saved EV hit videos and data from this side of GameFrame.</p>
+            </div>
+            <button id="close-ev-library" type="button">Back to Video</button>
+          </div>
+          <div class="ev-library-toolbar">
+            <label>
+              Search
+              <input id="ev-library-search" type="search" placeholder="Search hitter, team, description, metrics" />
+            </label>
+            <div class="ev-library-bulk-actions">
+              <button id="ev-library-select-visible" type="button">Select Visible</button>
+              <button id="ev-library-clear-selection" type="button">Clear Selection</button>
+              <button id="ev-library-delete-selected" type="button" disabled>Delete Selected</button>
+            </div>
+          </div>
+          <div id="ev-library-list" class="ev-library-list"></div>
+        </section>
+
+        <button id="menu-scrim" class="menu-scrim" type="button" aria-label="Close menu" hidden></button>
+        <aside id="side-panel" class="side-panel">
+              <button id="open-video-picker" class="menu-panel-link" type="button">EV Modeling</button>
+              <a class="menu-panel-link" href="/matchup/select?sid=x">Matchup</a>
+              <a class="menu-panel-link" href="/upload/pitch?sid=x">Pitch</a>
+              <a class="menu-panel-link" href="/multi-swing?sid=x">Swing</a>
+              <a class="menu-panel-link" href="/dashboard/player?sid=x" target="_top">Dashboard</a>
+              <a class="menu-panel-link" href="/teams?sid=x">Teams and Hitters</a>
+              <a id="open-ev-library" class="menu-panel-link" href="/library?sid=x">Library</a>
+              <dialog closedby="none" id="video-picker-modal">
+                <h2>Select your hit video</h2>
+                <button type="button" onclick="document.getElementById('video-file').click()">Choose Video</button>
+                <input id="video-file" type="file" accept="video/*" hidden />
+
+                <form method="dialog"><button type="submit">Cancel</button></form>
+              </dialog>
+
+          <div id="sidebar-deleted-controls" hidden inert aria-hidden="true">
+              <details class="panel-block video-details-panel loaded-only" hidden>
+                <summary>Video Wizard</summary>
+                <section class="description-panel" aria-label="Hit description">
+                  <label for="hit-description">Description</label>
+                  <textarea id="hit-description" rows="3" placeholder="e.g. 88-92 mph InShot source, right-handed batter"></textarea>
+                </section>
+                <button id="open-workflow" type="button">Open Video Wizard</button>
+
+              </details>
+
+          <details class="panel-block hit-parameters-panel loaded-only" hidden>
+            <summary>Hit Parameters</summary>
+          <details class="panel-block">
+            <summary>Timing</summary>
+            <dl class="metrics">
+              <div>
+                <dt>Video time</dt>
+                <dd id="current-time">0.000 s</dd>
+              </div>
+              <div>
+                <dt>Relative time</dt>
+                <dd id="relative-time">contact not set</dd>
+              </div>
+              <div>
+                <dt>Frame index</dt>
+                <dd id="frame-index">0</dd>
+              </div>
+            </dl>
+            <div class="button-row">
+              <button id="set-contact" type="button">Set Contact</button>
+              <button id="detect-contact-audio" type="button">Find Contact From Audio</button>
+              <button id="clear-contact" type="button">Clear</button>
+            </div>
+            <p id="contact-audio-status" class="hint">Audio contact not checked.</p>
+            <label>
+              Audio lead before crack (frames)
+              <input id="contact-audio-lead-frames" type="number" min="0" max="20" step="1" value="1" />
+            </label>
+            <label>
+              Contact confidence
+              <select id="contact-confidence">
+                <option>MEDIUM</option>
+                <option>HIGH</option>
+                <option>LOW</option>
+              </select>
+            </label>
+          </details>
+
+          <details class="panel-block">
+            <summary>Tagging</summary>
+            <label>
+              Click mode
+              <select id="click-mode">
+                <option value="ball">Ball point</option>
+                <option value="landmark">Field landmark</option>
+                <option value="terminal">Ground contact</option>
+                <option value="eraser">Eraser</option>
+              </select>
+            </label>
+            <label>
+              Landmark
+              <select id="landmark-type">
+                <option value="home_plate">Home plate</option>
+                <option value="pitching_rubber">Pitching rubber</option>
+                <option value="first_baseline_near">First-base line: point 1</option>
+                <option value="first_baseline_far">First-base line: point 2</option>
+                <option value="third_baseline_near">Third-base line: point 1</option>
+                <option value="third_baseline_far">Third-base line: point 2</option>
+                <option value="first_base">First base</option>
+                <option value="second_base">Second base</option>
+                <option value="third_base">Third base</option>
+                <option value="left_foul_line_far">Left field line</option>
+                <option value="right_foul_line_far">Right field line</option>
+              </select>
+            </label>
+            <label>
+              Ground event
+              <select id="terminal-type">
+                <option value="FIRST_GROUND_CONTACT">First ground contact</option>
+              </select>
+            </label>
+            <label>
+              Source
+              <select id="point-source">
+                <option>HUMAN</option>
+                <option>COMPUTER_VISION</option>
+                <option>COMBINED</option>
+              </select>
+            </label>
+            <label>
+              Confidence
+              <select id="point-confidence">
+                <option>MEDIUM</option>
+                <option>HIGH</option>
+                <option>LOW</option>
+                <option>VERY_LOW</option>
+              </select>
+            </label>
+            <label>
+              Uncertainty (px)
+              <input id="uncertainty" type="number" min="1" step="1" value="30" />
+            </label>
+            <label>
+              Note
+              <textarea id="point-note" rows="3" placeholder="blurred, net interference, possible false positive"></textarea>
+            </label>
+            <div class="button-row">
+              <button id="undo-observation" type="button">Undo Last Point</button>
+            </div>
+            <p id="landmark-status" class="hint">Select landmark mode and click the video to mark field points.</p>
+          </details>
+
+          <details class="panel-block">
+            <summary>Auto Flight Review</summary>
+            <label class="check-row">
+              <input id="show-auto-track" type="checkbox" checked />
+              Show detected path
+            </label>
+            <div class="button-row">
+              <button id="accept-auto-track" type="button">Use Detected Points</button>
+              <button id="clear-auto-track" type="button">Clear Detected Path</button>
+            </div>
+            <p id="auto-track-status" class="hint">No detected path loaded.</p>
+          </details>
+
+          <details class="panel-block" hidden>
+            <summary>Ground Contact Details</summary>
+            <label>
+              Timing uncertainty (frames)
+              <input id="terminal-uncertainty-frames" type="number" min="0.5" max="90" step="0.5" value="0.5" />
+            </label>
+            <div class="button-row">
+              <button id="set-ground-frame" type="button">Set Ground Frame</button>
+              <button id="clear-ground-contact" type="button">Clear Ground Contact</button>
+            </div>
+          </details>
+
+          <details class="panel-block">
+            <summary>Hit Setup</summary>
+            <div id="setup-controls-home"></div>
+            <div id="hit-setup-controls" class="setup-controls">
+              <input id="camera-vantage" type="hidden" value="unknown" />
+              <input id="direction" type="hidden" value="left_center" />
+              <div class="button-row geometry-map-actions">
+                <button id="expand-field-tool" type="button" hidden aria-hidden="true">Expand Field Diagram</button>
+                <button id="open-actual-field-map" type="button">Open Field Map</button>
+              </div>
+              <div class="field-tool" id="field-tool" aria-label="Legacy field diagram" hidden aria-hidden="true">
+                <button id="close-field-tool" class="field-close" type="button" aria-label="Close expanded field diagram">Close</button>
+                <svg viewBox="0 0 360 420" role="img" aria-label="Baseball field and fan area diagram">
+                  <rect x="0" y="316" width="360" height="104" class="fan-area" />
+                  <path d="M180 316 L38 174 Q180 26 322 174 Z" class="field-grass" />
+                  <path d="M76.1 212.1 A147 147 0 0 1 283.9 212.1" class="distance-arc" />
+                  <path d="M55.6 191.6 A176 176 0 0 1 304.4 191.6" class="distance-arc" />
+                  <path d="M35.1 171.1 A205 205 0 0 1 324.9 171.1" class="distance-arc" />
+                  <path d="M14.6 150.6 A234 234 0 0 1 345.4 150.6" class="distance-arc" />
+                  <path d="M180 316 L76 212" class="spray-line" />
+                  <path d="M180 316 L121 178" class="spray-line" />
+                  <path d="M180 316 L180 140" class="spray-line" />
+                  <path d="M180 316 L239 178" class="spray-line" />
+                  <path d="M180 316 L284 212" class="spray-line" />
+                  <path d="M180 316 L113 249 L180 182 L247 249 Z" class="infield" />
+                  <path d="M180 316 L38 174" class="foul-line" />
+                  <path d="M180 316 L322 174" class="foul-line" />
+                  <path d="M92 224 Q180 191 268 224" class="arc" />
+                  <path d="M108 332 Q180 354 252 332" class="backstop" />
+                  <circle cx="180" cy="316" r="4" class="base" />
+                  <circle cx="113" cy="249" r="4" class="base" />
+                  <circle cx="180" cy="182" r="4" class="base" />
+                  <circle cx="247" cy="249" r="4" class="base" />
+                  <text x="180" y="337">Home</text>
+                  <text x="180" y="386">fan/backstop area</text>
+                  <text x="80" y="184">LF</text>
+                  <text x="180" y="58">CF</text>
+                  <text x="280" y="184">RF</text>
+                  <text x="89" y="207" class="distance-label">250</text>
+                  <text x="67" y="187" class="distance-label">300</text>
+                  <text x="45" y="167" class="distance-label">350</text>
+                  <text x="24" y="147" class="distance-label">400</text>
+                </svg>
+                <button id="camera-marker" class="marker camera-marker" type="button" aria-label="Camera marker" title="Camera"></button>
+                <button id="landing-marker" class="marker landing-marker" type="button" aria-label="Landing marker" title="Estimated endpoint"></button>
+              </div>
+              <p class="hint">The actual field map is required for camera position, field direction, and landing distance.</p>
+            </div>
+            <div class="button-row">
+              <button id="set-apex-frame" type="button">Set Apex Frame</button>
+              <button id="clear-apex-frame" type="button">Clear Apex</button>
+            </div>
+            <p id="apex-status" class="hint">apex not marked</p>
+          </details>
+          </details>
+
+            <div class="panel-block output-panel loaded-only" hidden>
+              <button id="load-prediction" type="button">Prediction</button>
+              <button id="open-simulation" type="button">Simulation</button>
+              <button id="toggle-data-records" type="button" aria-expanded="false">Records</button>
+              <button id="download-clip" type="button">Export Video</button>
+              <button id="download-json" type="button" hidden>Observation JSON</button>
+              <div class="clip-progress" id="clip-progress-wrap" hidden>
+                <progress id="clip-progress" value="0" max="1"></progress>
+                <span id="clip-progress-text"></span>
+              </div>
+            </div>
+          </div>
+
+        </aside>
+      </section>
+
+      <dialog closedby="none" id="setup-modal" class="setup-modal">
+        <section class="setup-card">
+          <div class="setup-heading">
+            <div>
+              <h2 id="setup-title" aria-live="polite">Set Hit Geometry</h2>
+              <p id="setup-copy">Start with camera position, estimated landing distance, and distance confidence. Detection uses this before contact and ball tracking.</p>
+            </div>
+            <span id="setup-step-label" class="setup-step">Step 1</span>
+          </div>
+          <div id="workflow-viewer-slot" class="workflow-viewer-slot" hidden></div>
+          <div id="setup-controls-slot" class="setup-controls-slot"></div>
+          <div class="setup-actions">
+            <button id="setup-back" type="button">Back</button>
+            <button id="setup-cancel" type="button">Exit Wizard</button>
+            <button id="setup-secondary" type="button" hidden></button>
+            <button id="setup-continue" type="button">Continue to Video</button>
+          </div>
+        </section>
+      </dialog>
+
+      <dialog closedby="none" id="ev-people-modal" class="setup-modal" aria-labelledby="ev-people-title">
+        <form id="ev-people-form" style="padding:24px;max-width:480px;margin:auto">
+          <h2 id="ev-people-title">Who is hitting?</h2>
+          <p>Select the team and player for this hit.</p>
+                <div class="gameframe-player-panel">
+                  <label>
+                    Team
+                    <select id="gameframe-team"></select>
+                  </label>
+                  <label>
+                    Hitter
+                    <select id="gameframe-hitter"></select>
+                  </label>
+                  <details class="inline-add-panel">
+                    <summary>Add team or hitter</summary>
+                    <div class="inline-add-grid">
+                      <input id="new-team-name" type="text" placeholder="New team name" />
+                      <button id="add-team" type="button">Add Team</button>
+                      <input id="new-hitter-name" type="text" placeholder="New hitter name" />
+                      <button id="add-hitter" type="button">Add Hitter</button>
+                    </div>
+                  </details>
+                </div>
+          <p id="ev-people-status" role="status"></p>
+          <div class="button-row"><button type="button" id="ev-people-close">Close</button><button type="submit">Continue to field map</button></div>
+        </form>
+      </dialog>
+      <dialog closedby="none" id="actual-field-map-modal" class="setup-modal actual-field-map-modal">
+        <section class="setup-card">
+          <div class="setup-heading">
+            <div>
+              <h2 id="actual-field-map-title" aria-live="polite">Select The Field Address</h2>
+              <span id="video-preparation-status" role="status"></span>
+            </div>
+          </div>
+          <div class="actual-field-map-body">
+            <div class="actual-field-map-controls">
+              <label class="actual-map-address-control">
+                Field address
+                <div class="actual-map-search-row">
+                  <input id="actual-field-search" type="search" placeholder="Exact street address with city and state" />
+                  <button id="actual-field-search-button" type="button">Search</button>
+                </div>
+              </label>
+              <label class="actual-map-address-control">
+                Saved field locations
+                <select id="actual-field-saved-location">
+                  <option value="">Choose a saved location or search a new one</option>
+                </select>
+                <button id="actual-field-delete-location" type="button" disabled>Delete saved address</button>
+              </label>
+              <label class="actual-map-field-control">
+                Field type
+                <select id="field-size">
+                  <option value="43_60_softball">43/60 softball</option>
+                  <option value="45_60">45/60 small field</option>
+                  <option value="50_70">50/70 intermediate</option>
+                  <option value="60_90" selected>60/90 full field</option>
+                </select>
+              </label>
+              <p id="actual-field-map-status" class="actual-map-guide" role="status"></p>
+              <div class="actual-map-steps">
+                <span id="actual-map-camera-step" class="active">1. Camera</span>
+                <span id="actual-map-home-step">2. Home plate</span>
+                <span id="actual-map-axis-step">3. Second base</span>
+                <span id="actual-map-landing-step">4. Landing</span>
+              </div>
+              <div class="actual-map-camera-height-control">
+                <button id="camera-height-toggle" type="button" aria-expanded="false" aria-controls="camera-height-panel">Camera height / uphill filming</button>
+                <div id="camera-height-panel" hidden>
+                <label>Camera height above the playing field (ft)
+                  <input id="camera-height-ft" type="number" min="0.5" max="80" step="0.5" value="6" />
+                </label>
+                <p>Add the hill's elevation to the height you held the camera. For example: a 5 ft hill plus a camera held 6 ft high means 11 ft above the field.</p>
+                </div>
+              </div>
+              <div class="actual-map-results">
+                <div>
+                  <span>Distance</span>
+                  <strong id="actual-map-distance">-- ft</strong>
+                </div>
+                <div>
+                  <span>Direction</span>
+                  <strong id="actual-map-direction">--</strong>
+                </div>
+              </div>
+            </div>
+            <p id="map-distance-review" class="workflow-warning" hidden></p>
+            <div id="map-comparison-summary" class="map-comparison-summary" hidden aria-live="polite"></div>
+            <fieldset id="landing-certainty" hidden style="margin:12px 0;padding:12px;">
+              <legend>How sure are you where it first landed?</legend>
+              <p>Mark the first landing, not where the ball stopped rolling.</p>
+              <label><input type="radio" name="landing-certainty" value="guess" checked /> Low certainty — within 20 ft either way</label>
+              <label><input type="radio" name="landing-certainty" value="area" /> Medium certainty — within 10 ft either way</label>
+              <label><input type="radio" name="landing-certainty" value="clear" /> High certainty — within 5 ft either way</label>
+              <p class="hint">Use the outfielders and where they run to judge the landing area when the ball is hard to see. Landing distance and direction can change the EV estimate; medium certainty allows 10 ft either way.</p>
+            </fieldset>
+            <div class="actual-map-media">
+              <div id="actual-field-map" class="actual-field-map" aria-label="Satellite field map"></div>
+              <details id="actual-map-video-panel" class="actual-map-video-panel">
+                <summary>Watch hit video</summary>
+                <video id="actual-map-video" controls playsinline preload="metadata" aria-label="Original hit video"></video>
+              </details>
+            </div>
+          </div>
+          <div class="setup-actions">
+            <button id="actual-map-back-diagram" type="button">Back</button>
+            <span id="actual-map-confirm-status" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span> Saving field setup… Please wait.</span>
+            <button id="actual-map-keep-original" type="button" hidden>Keep original marks</button>
+            <button id="actual-map-reset" type="button">Redo</button>
+            <button id="actual-map-continue" type="button" disabled>Confirm Distance</button>
+          </div>
+        </section>
+      </dialog>
+
+      <dialog closedby="none" id="ev-complete-modal" class="setup-modal workflow-wide-modal">
+        <section class="setup-card">
+          <div class="setup-heading"><h2>Hit saved</h2></div>
+          <p id="ev-complete-notice" role="status" hidden></p>
+          <div style="position:relative;"><video id="ev-complete-video" controls playsinline preload="metadata" style="display:block;width:100%;max-height:62vh;object-fit:contain;background:#171b1d;"></video><div id="ev-complete-metrics" hidden style="position:absolute;top:0;left:0;right:0;padding:10px;color:white;background:#132b2edb;font-weight:700;pointer-events:none;"></div></div>
+          <div class="setup-actions">
+            <button id="ev-complete-download" type="button">Download video</button>
+            <button id="ev-complete-library" type="button">Library</button>
+            <button id="ev-complete-timing" type="button" style="background:#126c5f;color:white;">Finish swing timing</button>
+          </div>
+        </section>
+      </dialog>
+      <dialog closedby="none" id="prediction-modal" class="prediction-modal">
+        <section class="table-panel prediction-panel">
+          <div class="table-heading">
+            <h2>Prediction</h2>
+            <div class="modal-actions">
+              <span id="prediction-status">not loaded</span>
+              <button id="close-prediction" type="button" aria-label="Close prediction">Close</button>
+            </div>
+          </div>
+          <div id="prediction-warning" class="prediction-warning" hidden></div>
+          <div class="prediction-grid">
+            <div>
+              <h3>Model Result</h3>
+              <div id="prediction-unconstrained" class="prediction-card">No prediction loaded.</div>
+            </div>
+            <div>
+              <div class="flight-heading">
+                <h3>Simulation View</h3>
+                <div class="button-row">
+                  <button id="show-flight-view" type="button" disabled>Refresh Simulation</button>
+                  <button id="reset-flight-view" type="button" hidden>Reset View</button>
+                </div>
+                <div class="flight-controls">
+                  <button id="flight-video-view" type="button">Video View</button>
+                  <button id="flight-top-view" type="button">Top</button>
+                  <button id="flight-side-view" type="button">Side</button>
+                  <button id="flight-behind-view" type="button">Behind</button>
+                  <button id="flight-play" type="button">Play</button>
+                  <label class="flight-scrub-label">
+                    Time
+                    <input id="flight-time" type="range" min="0" max="1" step="0.001" value="0" />
+                  </label>
+                </div>
+              </div>
+              <div id="flight-viewer" class="flight-viewer">
+                <canvas id="flight-canvas" aria-label="Animated 3D simulation of the best matched synthetic flight path"></canvas>
+                <div class="flight-hud" id="flight-hud">Load a prediction to simulate the matched record.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </dialog>
+
+      <dialog closedby="none" id="library-overview-modal" class="library-overview-modal">
+        <section class="table-panel library-overview-panel">
+          <div class="table-heading">
+            <div>
+              <h2>Hit Data Overview</h2>
+              <span id="library-overview-status">Copy this hit's data into another LLM for review.</span>
+            </div>
+            <div class="modal-actions">
+              <button id="copy-library-overview" type="button">Copy Text</button>
+              <button id="close-library-overview" type="button">Close</button>
+            </div>
+          </div>
+          <textarea id="library-overview-text" class="library-overview-text" spellcheck="false"></textarea>
+        </section>
+      </dialog>
+
+      <div id="data-records" class="data-records" hidden>
+        <section class="table-panel">
+          <div class="table-heading">
+            <h2>Ball Observations</h2>
+            <span id="observation-count">0 rows</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>video_time_s</th>
+                  <th>relative_time_s</th>
+                  <th>image_x</th>
+                  <th>image_y</th>
+                  <th>uncertainty_px</th>
+                  <th>source</th>
+                  <th>confidence</th>
+                  <th>note</th>
+                </tr>
+              </thead>
+              <tbody id="observations-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="table-panel">
+          <div class="table-heading">
+            <h2>Field Landmarks</h2>
+            <span id="landmark-count">0 rows</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>landmark</th>
+                  <th>image_x</th>
+                  <th>image_y</th>
+                  <th>uncertainty_px</th>
+                  <th>source</th>
+                  <th>confidence</th>
+                  <th>note</th>
+                </tr>
+              </thead>
+              <tbody id="landmarks-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="table-panel">
+          <div class="table-heading">
+            <h2>Ground Contact</h2>
+            <span id="terminal-status">not marked</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>type</th>
+                  <th>video_time_s</th>
+                  <th>relative_time_s</th>
+                  <th>image_x</th>
+                  <th>image_y</th>
+                  <th>timing_uncertainty_s</th>
+                  <th>position_uncertainty_px</th>
+                  <th>confidence</th>
+                </tr>
+              </thead>
+              <tbody id="terminal-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="/static/vendor/html2canvas-1.4.1/html2canvas.min.js"></script>
+    <script src="/static/vendor/leaflet-1.9.4/leaflet.js"></script>
+    <dialog closedby="none" id="watch-source-modal" aria-labelledby="watch-source-title">
+      <div class="setup-heading">
+        <h2 id="watch-source-title">Watch video</h2>
+        <button id="watch-source-close" type="button">Back to setup</button>
+      </div>
+      <video id="watch-source-video" controls playsinline preload="metadata" aria-label="Original hit video"></video>
+      <p id="watch-source-status" role="status">Review the original video. Your marks and current step stay in place.</p>
+    </dialog>
+    <script src="/static/js/ev-draft-store.js"></script>
+    <script src="/static/js/ball-assist-handoff.js"></script>
+    <script src="/static/js/contact-review-picture.js?v=20261101-1"></script>
+    <script src="/static/js/ball-frame-preparation.js?v=20261105-1"></script>
+    <script src="/static/js/ev-estimate-preparation.js?v=20261103-1"></script>
+    <script src="/static/js/ev-video-ready.js?v=20261105-2"></script>
+    <script src="/static/js/ev-video-notifications.js?v=20261105-popup"></script>
+<script src="./app.js?v=save-progress-20261107"></script>
+    <script src="/static/js/workflow-help.js?v=20261101-contact-picture-1"></script>
+    <script src="/static/js/tagging-fullscreen.js"></script>
+    <script src="/static/js/guided-workspace.js?v=20261028-1"></script>
+    <script src="/static/js/ev-dialog-presentation.js?v=20261105-people-map"></script>
+  </body>
+</html>

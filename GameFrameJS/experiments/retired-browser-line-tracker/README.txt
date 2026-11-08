@@ -1,0 +1,1 @@
+Retired November 7, 2026. These checked the removed browser line-guided tracker. The app now uses native automatic ball assistance and manual interval tags. Backend trajectory inference and physical-model tests remain active. These historical checks are not part of the active test suite.

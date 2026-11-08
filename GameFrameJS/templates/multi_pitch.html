@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.ms-wrap{max-width:1350px;margin:0 auto}.ms-grid{display:grid;grid-template-columns:minmax(430px,1.25fr) minmax(390px,.75fr);gap:18px}.ms-panel{background:#151515;border:1px solid #383838;border-radius:12px;padding:16px}.ms-panel h2,.ms-panel h3{margin-top:0}.ms-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ms-fields .wide{grid-column:1/-1}.ms-fields label{display:flex;flex-direction:column;gap:5px;font-size:13px}.ms-fields input,.ms-fields select{width:100%;box-sizing:border-box}.ms-video{width:100%;max-height:62vh;background:#000;border-radius:8px}.ms-marker{display:grid;grid-template-columns:30px 68px 86px 58px 34px 34px 62px;gap:5px;align-items:center;padding:8px 3px;border-bottom:1px solid #333}.ms-marker.active{background:#29250c}.ms-marker input{width:100%;box-sizing:border-box}.ms-primary{background:#ffdd00!important;color:#000!important;border-color:#ffdd00!important;font-weight:700}.ms-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.ms-status{min-height:22px;margin-top:10px;opacity:.78}.pending-list{display:grid;gap:10px}.pending-card{display:grid;grid-template-columns:180px 1fr;gap:12px;border:1px solid #3b3b3b;border-radius:10px;padding:10px}.pending-card video{width:180px;background:#000;border-radius:7px}.pending-meta{display:flex;flex-direction:column;gap:6px}.pending-done{opacity:.63}.badge{display:inline-block;width:max-content;border-radius:999px;padding:3px 8px;font-size:12px;background:#3a3210;color:#ffdf55}.pending-done .badge{background:#173b25;color:#8ee3a9}.ms-note{font-size:13px;line-height:1.4;opacity:.75}html[data-theme="light"] .ms-panel{background:#fff;border-color:#ccc;color:#111}html[data-theme="light"] .ms-marker{border-color:#ddd}html[data-theme="light"] .ms-marker.active{background:#fff8c9}html[data-theme="light"] .pending-card{border-color:#ccc}html[data-theme="light"] .badge{color:#604f00;background:#fff1a8}@media(max-width:950px){.ms-grid{grid-template-columns:1fr}.pending-card{grid-template-columns:140px 1fr}.pending-card video{width:140px}}@media(max-width:650px){.ms-fields{grid-template-columns:1fr}.ms-fields .wide{grid-column:auto}.ms-marker{grid-template-columns:25px 60px 78px 48px 30px 30px 55px;font-size:12px}.pending-card{grid-template-columns:1fr}.pending-card video{width:100%}}
+.ms-progress-track{height:14px;background:#333;border-radius:7px;overflow:hidden}.ms-progress-bar{height:100%;width:0;background:#ffdd00;transition:width .25s ease}.ms-progress-label{margin-top:5px;font-size:12px;opacity:.78}html[data-theme="light"] .ms-progress-track{background:#ddd}
+</style>
+<div class="ms-wrap">
+  <h1>Split Multi Pitch Video to Clips</h1>
+  <p>Find likely pitch contact points, correct them visually, and create a pending list ready for the normal pitch finalization workflow.</p>
+  <div class="ms-grid">
+    <section class="ms-panel">
+      <h2>1. Load video</h2>
+      <form id="analyze-form" class="ms-fields">
+        <label>Team<select id="team" name="team_id" required><option value="">Choose team</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
+        <label>Pitcher<select id="pitcher" name="pitcher_id" required><option value="">Choose pitcher</option>{% for h in pitchers %}<option value="{{ h.id }}" data-team="{{ h.team_id }}">{{ h.name }}</option>{% endfor %}</select></label>
+        <label class="wide">Multi-pitch video<input id="source-file" type="file" name="file" accept="video/*" required></label>
+        <button class="ms-primary wide" type="submit">Find Contact Points</button>
+      </form>
+      <div id="load-status" class="ms-status"></div>
+      <div id="ms-progress" hidden><div class="ms-progress-track"><div id="ms-progress-bar" class="ms-progress-bar"></div></div><div id="ms-progress-label" class="ms-progress-label"></div></div>
+      <div id="review" hidden>
+        <h2 style="margin-top:18px">2. Review contact</h2>
+        <video id="source-video" class="ms-video" controls preload="metadata"></video>
+        <p id="review-now" class="ms-status">Select a suggestion to review it.</p>
+        <p class="ms-note">GameFrame uses sound only to locate a short search window, then requires visible play motion and chooses the frame from the video. Verify every suggestion; no fixed frame subtraction is applied.</p>
+        <div class="ms-actions"><button id="add-marker" type="button">+ Add Contact Here</button></div>
+        <div id="markers"></div>
+        <button id="split" class="ms-primary" style="width:100%;margin-top:14px" type="button">Create Pending Pitch Clips</button>
+        <div id="split-status" class="ms-status"></div>
+      </div>
+    </section>
+    {% if pending.length %}<section class="ms-panel">
+      <h2>Pending Pitch Clips</h2>
+      <p class="ms-note">Contact is already saved. Choose a pending clip, verify Contact in the normal pitch tagger, and finalize it. You will return here for the next clip.</p>
+      <div class="pending-list">
+      {% for p in pending %}
+        <article class="pending-card {% if p.status == 'completed' %}pending-done{% endif %}">
+          <video src="/multi-pitch/pending/video?id={{ p.id }}" controls preload="metadata"></video>
+          <div class="pending-meta">
+            <strong>{{ p.description }}</strong><span>{{ p.pitcher_name or 'Unknown pitcher' }} · {{ p.team_name or 'Unknown team' }}</span>
+            <span>Contact frame {{ p.contact_frame }}</span>
+            <span class="badge">{% if p.status == 'completed' %}Completed{% else %}Ready to tag{% endif %}</span>
+            {% if p.status == 'pending' %}<div class="ms-actions"><a href="/multi-pitch/pending/tag?id={{ p.id }}&sid={{ sid }}"><button class="ms-primary" type="button">Verify &amp; Finalize Pitch</button></a><form method="post" action="/multi-pitch/pending/delete"><input type="hidden" name="sid" value="{{ sid }}"><input type="hidden" name="id" value="{{ p.id }}"><button type="submit">Remove</button></form></div>{% else %}<a href="/library?sid={{ sid }}&type=pitch">View tagged pitch</a>{% endif %}
+          </div>
+        </article>
+      {% else %}<p id="empty-pending">No pending pitch clips yet.</p>{% endfor %}
+      </div>
+    </section>{% endif %}
+  </div>
+</div>
+<script>
+const SID={{ sid|tojson }}; let analysis=null, markers=[], active=0;
+let progressTimer=null;
+function progress(pct,label){const box=document.getElementById('ms-progress');box.hidden=false;document.getElementById('ms-progress-bar').style.width=Math.max(0,Math.min(100,pct))+'%';document.getElementById('ms-progress-label').textContent=label||''}
+function postWithProgress(url,body,label){return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',url);if(!(body instanceof FormData))xhr.setRequestHeader('Content-Type','application/json');xhr.upload.onprogress=e=>{if(e.lengthComputable)progress(5+(e.loaded/e.total)*40,'Loading to GameFrame…')};xhr.upload.onload=()=>{let pct=45;progress(pct,label);clearInterval(progressTimer);progressTimer=setInterval(()=>{pct=Math.min(92,pct+2);progress(pct,label)},500)};xhr.onload=()=>{clearInterval(progressTimer);let data={};try{data=JSON.parse(xhr.responseText||'{}')}catch(_){}if(xhr.status>=200&&xhr.status<300){progress(100,'Complete');resolve(data)}else reject(new Error(data.error||'Operation failed.'))};xhr.onerror=()=>{clearInterval(progressTimer);reject(new Error('Connection failed.'))};xhr.send(body instanceof FormData?body:JSON.stringify(body))})}
+const team=document.getElementById('team'), pitcher=document.getElementById('pitcher'), video=document.getElementById('source-video');
+const allPitchers=[...pitcher.options].slice(1).map(o=>({value:o.value,text:o.textContent,team:o.dataset.team}));
+team.onchange=()=>{const previous=pitcher.value;pitcher.innerHTML='<option value="">Choose pitcher</option>';allPitchers.filter(h=>h.team===team.value).forEach(h=>{const o=new Option(h.text,h.value);pitcher.add(o)});if([...pitcher.options].some(o=>o.value===previous))pitcher.value=previous};
+const fmt=t=>Number(t).toFixed(3), frame=t=>Math.round(Number(t)*(analysis?.fps||30));
+function seek(t){video.pause();video.currentTime=Math.max(0,Number(t)||0);document.getElementById('review-now').textContent=`Contact ${active+1}: ${fmt(t)} seconds — source frame ${frame(t)}`}
+function renderMarkers(){const root=document.getElementById('markers');root.innerHTML='';markers.forEach((t,i)=>{const row=document.createElement('div');row.className='ms-marker'+(i===active?' active':'');row.innerHTML=`<b>${i+1}</b><button type="button">Review</button><input type="number" min="0" max="${analysis.duration}" step="${1/analysis.fps}" value="${fmt(t)}"><span>F ${frame(t)}</span><button type="button">◀</button><button type="button">▶</button><button type="button">Remove</button>`;const b=row.querySelectorAll('button'),input=row.querySelector('input');b[0].onclick=()=>{active=i;seek(markers[i]);renderMarkers()};input.onchange=()=>{markers[i]=Math.max(0,Math.min(analysis.duration,Number(input.value)||0));active=i;seek(markers[i]);renderMarkers()};b[1].onclick=()=>adjust(i,-1);b[2].onclick=()=>adjust(i,1);b[3].onclick=()=>{markers.splice(i,1);active=Math.max(0,Math.min(active,markers.length-1));renderMarkers()};root.appendChild(row)})}
+function adjust(i,n){markers[i]=Math.max(0,Math.min(analysis.duration,markers[i]+n/analysis.fps));active=i;seek(markers[i]);renderMarkers()}
+document.getElementById('add-marker').onclick=()=>{markers.push(video.currentTime||0);markers.sort((a,b)=>a-b);active=markers.findIndex(t=>Math.abs(t-(video.currentTime||0))<.001);renderMarkers()};
+document.getElementById('analyze-form').onsubmit=async e=>{e.preventDefault();const status=document.getElementById('load-status'),file=document.getElementById('source-file').files[0],form=new FormData(e.target);if(file?.lastModified)form.append('video_created_at',new Date(file.lastModified).toISOString());status.textContent='Loading to GameFrame and finding likely contact points…';try{const j=await postWithProgress('/multi-pitch/analyze',form,'Analyzing sound and visible motion…');analysis=j;analysis.team_id=team.value;analysis.pitcher_id=pitcher.value;analysis.description='Pitch';markers=j.candidates.map(c=>c.time);video.src=`/multi-pitch/source?id=${encodeURIComponent(j.temp_id)}`;document.getElementById('review').hidden=false;status.textContent=`Found ${markers.length} suggestions. Review, remove false matches, and add anything missed.`;renderMarkers();if(markers.length)seek(markers[0])}catch(err){status.textContent=err.message||'Analysis failed.'}};
+document.getElementById('split').onclick=async()=>{if(!analysis||!markers.length)return alert('Keep at least one contact marker.');const status=document.getElementById('split-status');status.textContent=`Creating ${markers.length} pending clips locally…`;try{const j=await postWithProgress('/multi-pitch/split',{temp_id:analysis.temp_id,markers,suggested:analysis.candidates.map(c=>c.time),source_name:analysis.source_name,team_id:analysis.team_id,pitcher_id:analysis.pitcher_id,description:analysis.description,video_created_at:analysis.video_created_at},`Creating ${markers.length} clips…`);status.textContent=`Created ${j.count} pending pitch clips.`;window.location.href=`/multi-pitch?sid=${encodeURIComponent(SID)}`}catch(err){status.textContent=err.message||'Could not create clips.'}};
+</script>
+{% endblock %}
+

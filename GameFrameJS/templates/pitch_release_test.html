@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.pv { max-width:1200px; margin:auto; }
+.pv h2 { font-size:22px; }
+.pv-toolbar { display:flex; flex-wrap:wrap; gap:12px; align-items:end; padding:16px 0; border-bottom:1px solid #cbd4dd; }
+.pv label { display:grid; gap:6px; min-width:0; }
+.pv select,.pv input { max-width:100%; min-height:36px; }
+.pv-toolbar label:first-child { flex:1 1 260px; }
+.pv video { display:block; width:100%; max-height:440px; margin:16px 0; background:#20252a; }
+.pv-status { padding:12px 0; color:#38535b; white-space:pre-wrap; }
+.pv-status:empty { display:none; }
+.pv-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; width:100%; }
+.pv-actions button { margin:0; min-height:36px; }
+.pv-results { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.pv-result { min-width:0; border-top:3px solid #168677; padding-top:10px; }
+.pv-result:nth-child(2) { border-color:#c58a20; }
+.pv img { display:block; width:100%; height:auto; }
+.pv figure { margin:12px 0; }
+.pv figcaption { font-size:13px; padding:6px 0; }
+.pv progress { width:100%; }
+.pv-settings { display:flex; flex-wrap:wrap; gap:12px; border:0; padding:12px 0; margin:0; width:100%; }
+.pv-settings input { width:140px; }
+.pv-speed { border-top:1px solid #cbd4dd; padding:14px 0; }
+.pv [hidden] { display:none !important; }
+html:has(.pv-picker[open]),body:has(.pv-picker[open]) { overflow:hidden; }
+.pv-picker { box-sizing:border-box; width:calc(100vw - 24px); max-width:none; height:calc(100dvh - 24px); max-height:none; overflow:hidden; padding:0; border:1px solid #bac8c9; border-radius:8px; color:#18282c; background:#fff; }
+.pv-picker[open] { display:grid; grid-template-rows:auto minmax(0,1fr) auto; }
+.pv-picker::backdrop { background:rgb(0 0 0 / 55%); }
+.pv-picker header,.pv-picker footer,.pv-picker-controls { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.pv-picker header { padding:12px 20px; border-bottom:1px solid #dce4e4; }
+.pv-picker h3 { margin:0; font-size:22px; }
+.pv-guided > h2,.pv-guided .pv-picker header { padding:14px 18px; background:#edf5f2; border-bottom:2px solid #21776b; }
+.pv-guided > h2,.pv-guided .pv-picker h3 { font-size:28px; line-height:1.25; letter-spacing:0; }
+.pv-guided #pv-pitch-label { display:none; }
+.pv-guided[data-step="setup"] .pv-adjustment,
+.pv-guided[data-step="review"] .pv-setup-field { display:none; }
+.pv-guided .pv-settings { gap:16px; }
+.pv-guided .pv-actions button { min-height:44px; }
+.pv-guided #pv-save,.pv-guided #pv-preview { background:#126c5f; color:white; }
+@media(max-width:600px) { .pv-guided > h2,.pv-guided .pv-picker h3 { font-size:23px; } }
+.pv-picker-images { container-type:size; display:flex; justify-content:center; gap:0; min-height:0; background:#fff; }
+.pv-picker-images .pv-frame-choice { box-sizing:border-box; flex:0 0 auto; width:min(calc((100cqw - 112px) / 2),calc((100cqh - 36px) * var(--frame-aspect,1))); height:100%; min-width:0; min-height:0; margin:0; padding:3px; border:3px solid transparent; border-radius:4px; background:#fff; display:grid; grid-template-rows:minmax(0,1fr) 30px; cursor:pointer; }
+.pv-picker-images .pv-frame-choice[aria-pressed="true"] { border-color:#127668; background:#e8f4f0; }
+.pv-picker-images .pv-half-gap { flex:0 0 112px; padding:0; border:0; background:#fff; cursor:pointer; display:grid; place-items:center; }
+.pv-picker-images button:focus-visible { outline:3px solid #127668; outline-offset:-3px; }
+.pv-picker-images img { width:100%; height:100%; min-height:0; object-fit:contain; }
+.pv-picker-images .pv-frame-label { color:#18282c; padding:5px 0; font-size:14px; }
+.pv-picker-panel { min-width:0; padding:8px 20px 12px; }
+.pv-picker-controls { display:grid; grid-template-columns:auto 1fr auto; gap:12px; margin-bottom:8px; }
+.pv-picker-controls output { text-align:center; font-size:18px; font-weight:600; }
+.pv-picker-controls button { min-height:48px; padding:10px 20px; font-size:17px; font-weight:700; }
+.pv-half-gap span { box-sizing:border-box; display:grid; place-items:center; width:104px; min-height:88px; padding:10px 6px; border:1px dashed #789b92; border-radius:4px; font-size:14px; line-height:1.4; font-weight:600; white-space:normal; }
+.pv-half-gap[aria-pressed="true"] span { background:#127668; color:#fff; border:1px solid #127668; }
+.pv-picker #pv-confirm-release { min-height:48px; font-size:17px; padding:10px 24px; }
+.pv-picker input[type="number"] { width:110px; }
+.pv-picker footer { margin-top:8px; }
+.pv-picker summary { cursor:pointer; font-size:13px; color:#38535b; padding:6px 0; }
+.pv-picker [role="alert"]:empty { display:none; }
+.pv-picker #pv-confirm-release { background:#127668; color:#fff; border-color:#127668; }
+@media(max-width:700px) { .pv-picker { width:100vw; height:100dvh; border:0; border-radius:0; } .pv-picker header { padding:10px 12px; } .pv-picker-panel { padding:8px 12px; } .pv-picker-controls { grid-template-columns:1fr 1fr; gap:6px; } .pv-picker-controls output { grid-column:1 / -1; grid-row:2; font-size:15px; } .pv-picker-controls button { padding:8px; font-size:14px; } .pv-picker footer { font-size:12px; } }
+@media(max-height:500px) { .pv-picker header { padding:4px 12px; } .pv-picker-panel { padding:4px 12px; } .pv-picker-controls { margin-bottom:4px; } .pv-picker-controls button,.pv-picker #pv-confirm-release { min-height:36px; padding:6px 12px; font-size:14px; } .pv-picker footer { margin-top:4px; } }
+.pv-picker [role="alert"] { color:#a12626; }
+@media(max-width:700px) { .pv-results { grid-template-columns:1fr; } .pv-toolbar>* { width:100%; } }
+</style>
+<section class="pv{% if integration %} pv-guided{% endif %}" data-step="setup">
+  <h2 id="pv-step-title" style="display:block!important">{% if integration %}Set Pitch Distance and Speed Range{% else %}Pitch Speed Test{% endif %}</h2>
+  {% if integration %}<script id="pv-integration" type="application/json">{{ integration | tojson }}</script>{% endif %}
+  <form id="pv-form" class="pv-toolbar">
+    <label id="pv-pitch-label">Saved pitch<select id="pv-pitch" name="pitch_id">
+      {% for pitch in pitches %}{% if pitch.contact_frame > 0 %}<option value="{{ pitch.id }}" data-fps="{{ pitch.fps }}">#{{ pitch.id }} - {{ pitch.pitcher_name }} - Contact {{ pitch.contact_frame }} - {{ pitch.description }}</option>{% endif %}{% endfor %}
+    </select></label>
+    <output id="pv-fps" aria-label="Video frame rate"></output>
+    <fieldset id="pv-settings" class="pv-settings">
+      <label class="pv-setup-field">Mound distance<select id="pv-field" name="field">
+        <option value="45/60">45 ft</option><option value="50/70">50 ft</option><option value="60/90" selected>60 ft 6 in</option><option value="custom">Custom</option>
+      </select></label>
+      <label class="pv-setup-field" id="pv-pitching-label" hidden>Rubber to plate back tip (ft)<input name="pitching_feet" id="pv-pitching" type="number" min="10" max="100" step="0.01" value="60.5" disabled required></label>
+      <label class="pv-setup-field">Guessed release speed<select name="speed_range">
+        <option value="">Unknown</option><option value="45-55">45-55 mph</option><option value="55-65">55-65 mph</option><option value="65-75">65-75 mph</option><option value="75-85">75-85 mph</option><option value="85-95">85-95 mph</option><option value="95-105">95-105 mph</option>
+      </select></label>
+      <label class="pv-adjustment">Release extension (ft)<input name="search_extension_feet" type="number" min="0" max="15" step="0.5" value="6" required></label>
+      <label class="pv-adjustment">Contact ahead of plate back point (ft)<input name="search_contact_feet" type="number" min="0" max="15" step="0.5" value="3" required></label>
+    </fieldset>
+    <div class="pv-actions">
+      <button id="pv-preview" type="submit">Review Release</button>
+      <button id="pv-pick-release" type="button" hidden>Adjust Release</button>
+      {% if integration %}
+      <button id="pv-change-setup" type="button" hidden>Change Setup</button>
+      <button id="pv-save" type="button" disabled>Save Speed to Pitch</button>
+      <a id="pv-export" href="/export/pitch-speed?id={{ integration.id }}" data-pitch-speed-export hidden>Download Pitch Speed Video</a>
+      <a id="pv-continue" href="{{ integration.continue_url }}" hidden>View Pitch in Library</a>
+      {% endif %}
+    </div>
+  </form>
+  <progress id="pv-progress" hidden aria-label="Preparing release frames"></progress>
+  <div id="pv-status" class="pv-status" role="status" aria-live="polite"></div>
+  <section id="pv-speed" class="pv-speed" hidden></section>
+  <video id="pv-video" controls playsinline preload="metadata" hidden></video>
+  <dialog closedby="none" id="pv-picker" class="pv-picker" aria-labelledby="pv-picker-title">
+    <header><h3 id="pv-picker-title">Select Release</h3><button id="pv-picker-close" type="button" aria-label="Close release picker" title="Close">&#215;</button></header>
+    <div class="pv-picker-images" role="group" aria-label="Release frame or halfway gap">
+      <button id="pv-select-before" class="pv-frame-choice" type="button"><img id="pv-frame-before" alt="Earlier source frame"><span class="pv-frame-label" id="pv-before-label"></span></button>
+      <button id="pv-select-half" class="pv-half-gap" type="button"><span>Real release is between frames</span></button>
+      <button id="pv-select-after" class="pv-frame-choice" type="button"><img id="pv-frame-after" alt="Later source frame"><span class="pv-frame-label" id="pv-after-label"></span></button>
+    </div>
+    <div class="pv-picker-panel">
+    <input id="pv-timeline" class="pv-release-timeline" type="range" min="0" max="0" step="0.5" value="0" aria-label="Release frame timeline">
+    <div class="pv-picker-controls">
+      <button id="pv-frame-prev" type="button" title="Previous whole frame" aria-label="Previous whole frame">&#8592; Previous Frame</button>
+      <output id="pv-release-label" aria-live="polite"></output>
+      <button id="pv-frame-next" type="button" title="Next whole frame" aria-label="Next whole frame">Next Frame &#8594;</button>
+    </div>
+    <p id="pv-picker-error" role="alert"></p>
+    <footer><span id="pv-picker-meta"></span><button id="pv-confirm-release" type="button" disabled>Confirm &amp; Calculate</button></footer>
+    </div>
+  </dialog>
+</section>
+<script src="/static/js/pitch-release-picker.js"></script>
+<script src="/static/js/pitch-speed-download.js"></script>
+<script>
+(() => {
+  const form = document.getElementById('pv-form');
+  const select = document.getElementById('pv-pitch');
+  const preview = document.getElementById('pv-preview');
+  const video = document.getElementById('pv-video');
+  const status = document.getElementById('pv-status');
+  const progress = document.getElementById('pv-progress');
+  const settings = document.getElementById('pv-settings');
+  const field = document.getElementById('pv-field');
+  const speed = document.getElementById('pv-speed');
+  const adjust = document.getElementById('pv-pick-release');
+  const integration = JSON.parse(document.getElementById('pv-integration')?.textContent || 'null');
+  const save = document.getElementById('pv-save');
+  let currentResult = null;
+  let currentPreview = null;
+  const extension = form.elements.namedItem('search_extension_feet');
+  const contactDistance = form.elements.namedItem('search_contact_feet');
+  let selectedRelease = null;
+  function syncGuidedStep(review) {
+    if (!integration) return;
+    document.querySelector('.pv').dataset.step = review ? 'review' : 'setup';
+    document.getElementById('pv-step-title').textContent = review ? 'Review Pitch Speed' : 'Set Pitch Distance and Speed Range';
+    preview.hidden = review;
+    preview.textContent = 'Continue to Release';
+    save.hidden = !review;
+    document.getElementById('pv-change-setup').hidden = !review || integration.locked;
+    video.hidden = !review;
+  }
+  function renderSpeed(result) {
+    currentResult = result;
+    syncGuidedStep(true);
+    if (save) { save.disabled = false; save.textContent = 'Save Speed to Pitch'; document.getElementById('pv-export').hidden = true; document.getElementById('pv-continue').hidden = true; }
+    speed.replaceChildren(); speed.hidden = false;
+    const heading = document.createElement('h3'); heading.textContent = result.mph.toFixed(1) + ' mph out of the hand'; speed.append(heading);
+    for (const line of [
+      result.average.toFixed(1) + ' mph average'
+    ]) { const p = document.createElement('p'); p.textContent = line; speed.append(p); }
+  }
+  const picker = createPitchReleasePicker(document, result => {
+    selectedRelease = result.release;
+    extension.value = result.extension;
+    contactDistance.value = result.contactDistance;
+    currentPreview.settings.search_extension_feet = result.extension;
+    currentPreview.settings.search_contact_feet = result.contactDistance;
+    renderSpeed(result);
+  });
+
+  adjust.onclick = () => picker.open(currentPreview,selectedRelease);
+  function clearReview() { picker.reset(); currentPreview = null; selectedRelease = null; currentResult = null; if (save) { save.disabled = true; document.getElementById('pv-export').hidden = true; document.getElementById('pv-continue').hidden = true; } adjust.hidden = true; speed.hidden = true; status.textContent = ''; syncGuidedStep(false); }
+  field.onchange = () => {
+    document.getElementById('pv-pitching-label').hidden = field.value !== 'custom';
+    document.getElementById('pv-pitching').disabled = field.value !== 'custom';
+  };
+  settings.oninput = event => {
+    if (event.target !== extension && event.target !== contactDistance) { clearReview(); return; }
+    if (!currentPreview) return;
+    if (!extension.checkValidity() || !contactDistance.checkValidity()) {
+      currentResult = null; if (save) save.disabled = true;
+      speed.hidden = true;
+      status.textContent = 'Enter valid release extension and contact distances.';
+      return;
+    }
+    currentPreview.settings.search_extension_feet = Number(extension.value);
+    currentPreview.settings.search_contact_feet = Number(contactDistance.value);
+    if (selectedRelease === null) return;
+    try {
+      renderSpeed(calculateManualPitch(currentPreview,selectedRelease,Number(extension.value),Number(contactDistance.value)));
+      status.textContent = '';
+    } catch (error) {
+      currentResult = null; if (save) save.disabled = true;
+      speed.hidden = true;
+      status.textContent = error.message;
+    }
+  };
+  function sourceChanged() {
+    clearReview();
+    const fps = Number(select.selectedOptions[0]?.dataset.fps);
+    document.getElementById('pv-fps').textContent = fps > 0 ? Math.round(fps) + ' FPS' : 'FPS unavailable';
+    video.hidden = !select.value;
+    if (select.value) video.src = '/stream/pitch_clip?id=' + encodeURIComponent(select.value);
+    else video.removeAttribute('src');
+  }
+  select.onchange = sourceChanged; sourceChanged();
+  if (save) save.onclick = async () => {
+    if (!currentResult) return;
+    save.disabled = true; settings.disabled = true; adjust.disabled = true; preview.disabled = true;
+    try {
+      const response = await fetch('/api/pitch/speed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        pitch_id:integration.id,release_frame:currentResult.release,mound_distance:currentResult.mound,
+        extension:currentResult.extension,contact_adjustment:currentResult.contactDistance
+      })});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save pitch speed.');
+      renderSpeed(result.speed);
+      document.getElementById('pv-export').hidden = false;
+      document.getElementById('pv-continue').hidden = false;
+      status.textContent = ''; save.textContent = 'Saved'; save.disabled = true;
+      window.location.assign(integration.continue_url);
+    } catch(error) { status.textContent = error.message; save.disabled = false; }
+    finally { settings.disabled = false; adjust.disabled = false; preview.disabled = false; }
+  };
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (!select.value) { status.textContent = 'Choose a saved pitch with a contact marker.'; return; }
+    clearReview();
+    const data = new FormData(form);
+    preview.disabled = select.disabled = settings.disabled = true;
+    progress.hidden = false; status.textContent = 'Preparing release frames...';
+    try {
+      const response = await fetch('/api/pitch-release/preview', {method:'POST',body:data});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not prepare frames.');
+      currentPreview = result; adjust.hidden = false;
+      document.getElementById('pv-fps').textContent = Math.round(result.timing_fps) + ' FPS';
+      status.textContent = '';
+      await picker.open(result,integration?.speed?.release);
+    } catch(error) { status.textContent = error.message; }
+    finally { preview.disabled = select.disabled = settings.disabled = false; progress.hidden = true; }
+  };
+  if (integration) {
+    syncGuidedStep(false);
+    document.getElementById('pv-change-setup').onclick = clearReview;
+    if (integration.speed) {
+      field.value = 'custom'; field.onchange();
+      document.getElementById('pv-pitching').value = integration.speed.mound;
+      extension.value = integration.speed.extension;
+      contactDistance.value = integration.speed.contactDistance;
+    }
+    if (integration.locked) {
+      renderSpeed(integration.speed);
+      settings.disabled = select.disabled = true;
+      preview.hidden = adjust.hidden = save.hidden = true;
+      const download = document.getElementById('pv-export');
+      download.hidden = false;
+      download.href = '/download/pitch-speed?id=' + integration.id;
+      download.textContent = 'Download Saved Export';
+      document.getElementById('pv-continue').hidden = false;
+      status.textContent = 'Pitch speed is locked. Export saved.';
+      form.onsubmit = event => event.preventDefault();
+    }
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+const fs=require('node:fs'),assert=require('node:assert/strict');
+(async()=>{
+ const data=JSON.parse(fs.readFileSync('demo-output/ball-assist-lab/background-rejection-night.json'));
+ const seed=JSON.parse(fs.readFileSync('demo-output/ball-assist-lab/'+data.session.id+'/721b9540-efd8-45e0-88a7-1fdfc25fa7e0-contact-input.json'));
+ const packet=JSON.parse(fs.readFileSync('demo-output/night-saved-73.json')).package;
+ const scale=packet.video_metadata.width_px/data.session.width;
+ packet.hit.contact.timestamp_s=data.session.start;
+ packet.hit.distance_observation.distance_ft=318;
+ packet.hit.distance_observation.uncertainty_ft=10;
+ packet.ball_observations=[{video_time_s:data.session.start,image_x:seed.contact.x*scale,image_y:seed.contact.y*scale,role:'CONTACT_POINT',source:'HUMAN',confidence:'MEDIUM',uncertainty_px:6},...data.result.points.map(p=>({video_time_s:data.session.times[p.frame],image_x:p.x*scale,image_y:p.y*scale,source:'COMPUTER_VISION',human_reviewed:true,confidence:'MEDIUM',uncertainty_px:6}))].map((p,i)=>({...p,index:i+1,relative_time_s:p.video_time_s-data.session.start}));
+ fs.writeFileSync('demo-output/night-overlay-test-package.json',JSON.stringify(packet));
+ const response=await fetch('http://127.0.0.1:8000/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet)});
+ if(!response.ok)throw Error(await response.text());
+ const prediction=await response.json();
+ fs.writeFileSync('demo-output/night-overlay-fresh-prediction.json',JSON.stringify(prediction,null,2));
+ const review=prediction.distance_review.required?prediction.distance_review:prediction.direction_first_match, observed=review.observed_pixels;
+ const rows=review.diagnostic_alternatives||review.alternatives||[review.best];
+ const report={fresh_inference:true,exact_live_draft:false,source:'Saved hit 73 field setup, latest eight raw-image detections, 318 ft; no saved estimate supplied',source_width:packet.video_metadata.width_px,display_width:777,candidates:rows.map(row=>{
+  assert.equal(observed.length,row.projected_pixels.length);
+  const errors=observed.map((p,i)=>Math.hypot(p[0]-row.projected_pixels[i][0],p[1]-row.projected_pixels[i][1]));
+  const rms=Math.sqrt(errors.reduce((s,e)=>s+e*e,0)/errors.length);
+  assert.ok(Math.abs(rms-row.projected_path_rmse_px)<1e-5,'Reported RMS must match exact overlay point pairs');
+  const segmentDistance=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],den=dx*dx+dy*dy,t=den?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/den)):0;return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);};
+  const path=[review.contact_pixel,...row.projected_pixels];
+  const nearest=observed.map(p=>Math.min(...path.slice(1).map((q,i)=>segmentDistance(p,path[i],q))));
+  return {distance_ft:row.distance_ft,ev:row.exit_velocity_mph,reported_rms:rms,display_rms:rms*777/packet.video_metadata.width_px,nearest_line_rms:Math.sqrt(nearest.reduce((s,e)=>s+e*e,0)/nearest.length),points:observed.map((p,i)=>({time:review.observation_times_s[i],observed:p,predicted:row.projected_pixels[i],error:errors[i],nearest_line:nearest[i]}))};
+ })};
+ fs.writeFileSync('demo-output/night-overlay-error-check.json',JSON.stringify(report,null,2));
+ console.log(JSON.stringify(report,null,2));
+})().catch(e=>{console.error(e);process.exitCode=1;});

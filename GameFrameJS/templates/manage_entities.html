@@ -1,7 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
+<nav class="record-tabs" aria-label="Record type">
+{% for kind, label in [['teams', 'Teams'], ['hitters', 'Hitters'], ['pitchers', 'Pitchers']] %}
+<a href="/{{ kind }}?sid={{ sid }}{% if embedded %}&amp;embedded=1{% endif %}" {% if view == kind %}aria-current="page"{% endif %}>{{ label }}</a>
+{% endfor %}
+</nav>
+{% if request.query_params.error == 'in_use' %}<p role="alert" class="record-alert">This record is linked to players or saved videos. Reassign or remove those records before deleting it.</p>{% endif %}
+{% if request.query_params.error == 'name' %}<p role="alert" class="record-alert">Enter a name.</p>{% endif %}
+{% if request.query_params.error == 'team' %}<p role="alert" class="record-alert">Select an existing team.</p>{% endif %}
+{% if request.query_params.error == 'missing' %}<p role="alert" class="record-alert">That record no longer exists.</p>{% endif %}
 <style>
+.record-tabs{display:flex;gap:20px;border-bottom:1px solid var(--gf-line);margin-bottom:20px}
+.record-tabs a{padding:12px 0;color:var(--gf-muted);text-decoration:none;font-weight:700}
+.record-tabs a[aria-current]{color:var(--gf-ink);border-bottom:3px solid #258779}
+.record-alert{padding:12px;border-left:3px solid #a12828;background:#fff0f0;color:#802222}
+#main>form{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:20px}
+#main>form input,#main>form select{flex:1 1 150px;min-width:0}
+#main table{width:100%;table-layout:fixed}#main td{overflow-wrap:anywhere}
+.manage-actions{flex-wrap:wrap}
+@media(max-width:700px){.pitch-workspace,html[data-theme="light"] .pitch-workspace{grid-template-columns:minmax(0,1fr)}#sidebar,html[data-theme="light"] #sidebar{min-height:0}.manage-modal-row{grid-template-columns:1fr!important}}
 .manage-actions { display: inline-flex; gap: 6px; }
+#main .manage-actions{align-items:center}
+#main .manage-actions form{display:block;margin:0;padding:0;flex:0 0 80px}
+#main .manage-actions .manage-edit-btn,#main .manage-actions .manage-delete-btn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:80px;min-width:80px;height:36px;min-height:36px;margin:0;padding:0;flex:0 0 80px;font-size:13px;line-height:1;font-family:Arial,sans-serif}
 .manage-edit-btn {
   background: #1f6aa5; color: #fff; border: 1px solid #195584;
   border-radius: 6px; padding: 4px 8px; cursor: pointer;
@@ -15,14 +36,17 @@
   display: none; align-items: center; justify-content: center; padding: 14px;
 }
 .manage-modal-card {
-  width: min(520px, 96vw); border: 1px solid #3a3a3a; border-radius: 10px;
-  background: #141414; padding: 14px;
+  width: min(520px, 96vw); border: 1px solid var(--gf-line); border-radius: 8px;
+  background: var(--gf-panel,#fff); color:var(--gf-ink,#111); padding: 20px;
 }
 .manage-modal-row {
   display: grid; grid-template-columns: 120px 1fr; gap: 10px;
   align-items: center; margin-bottom: 10px;
 }
 .manage-modal-row input, .manage-modal-row select { width: 100%; }
+#main .manage-modal form{display:block;width:100%}
+#main .manage-modal-row{display:grid;width:100%;margin-bottom:14px}
+#main .manage-modal-row input,#main .manage-modal-row select{box-sizing:border-box;width:100%;max-width:none;min-height:36px}
 .manage-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 </style>
 
@@ -249,6 +273,21 @@
 {% endif %}
 
 <script>
+document.querySelectorAll('form').forEach(form => {
+  const embedded = document.createElement('input');
+  embedded.type = 'hidden'; embedded.name = 'embedded'; embedded.value = '{{ 1 if embedded else 0 }}';
+  form.appendChild(embedded);
+  const name = form.querySelector('input[name="name"]');
+  if (name) name.required = true;
+  if (form.action.endsWith('/delete')) {
+    form.addEventListener('submit', event => {
+      if (!confirm('Delete this record?')) event.preventDefault();
+    });
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') document.querySelectorAll('.manage-modal').forEach(modal => { modal.style.display = 'none'; });
+});
 function closeManageModal(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = "none";
@@ -289,7 +328,7 @@ document.querySelectorAll(".js-pitcher-edit").forEach((btn) => {
 
 document.querySelectorAll(".manage-modal").forEach((modal) => {
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) modal.style.display = "none";
+    // Backdrop clicks preserve this form.
   });
 });
 </script>

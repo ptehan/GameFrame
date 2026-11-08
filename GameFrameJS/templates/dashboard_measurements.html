@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.measurement-dashboard {max-width:1100px;margin:0 auto;}
+.measurement-tabs {display:flex;gap:24px;border-bottom:1px solid #ccd5d3;margin-bottom:20px;padding:10px 0;}
+.measurement-tabs a[aria-current="page"] {font-weight:700;border-bottom:3px solid #16796b;}
+.measurement-filters {display:flex;flex-wrap:wrap;gap:16px;align-items:end;margin:16px 0;}
+.measurement-filters label {display:grid;gap:6px;min-width:180px;flex:1;}
+.measurement-filters select {width:100%;height:42px;box-sizing:border-box;}
+.measurement-stats {display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:24px;margin:24px 0;border-block:1px solid #ccd5d3;padding:18px 0;}
+.measurement-stats h3 {font-size:16px;margin:0 0 10px;}
+.measurement-stats dl {display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0;}
+.measurement-stats dd {margin:0;text-align:right;}
+.measurement-table {overflow-x:auto;}
+.measurement-table table {border-collapse:collapse;width:100%;}
+.measurement-table th,.measurement-table td {padding:12px 8px;text-align:left;border-bottom:1px solid #dce2e4;}
+.measurement-note {color:#526169;font-size:14px;line-height:1.5;}
+</style>
+<section class="measurement-dashboard">
+  <nav class="measurement-tabs" aria-label="Dashboard views">
+    <a href="/dashboard/player?sid={{ sid }}">Timing</a>
+    <a href="/dashboard/measurements?view=pitching&sid={{ sid }}" {% if view == 'pitching' %}aria-current="page"{% endif %}>Pitching</a>
+    <a href="/dashboard/measurements?view=hitting&sid={{ sid }}" {% if view == 'hitting' %}aria-current="page"{% endif %}>Hitting</a>
+  </nav>
+  <h2>{{ title }}</h2>
+  <form class="measurement-filters" method="get">
+    <input type="hidden" name="sid" value="{{ sid }}"><input type="hidden" name="view" value="{{ view }}">
+    <label>{{ player_label }}<select name="player"><option value="">Select {{ player_label | lower }}</option>{% for person in people %}<option value="{{ person.id }}" {% if person.id == player %}selected{% endif %}>{{ person.name }}{% if person.team_name %} - {{ person.team_name }}{% endif %}</option>{% endfor %}</select></label>
+    <label>Uploaded during<select name="days">{% for choice in windows %}<option value="{{ choice.value }}" {% if choice.value == days %}selected{% endif %}>{{ choice.label }}</option>{% endfor %}</select></label>
+    <button type="submit">Show</button>
+  </form>
+  <p class="measurement-note">These summaries describe uploaded {{ noun }}, not every pitch or hit in a game or season. Video-based estimates are not radar measurements. Reusing a clip in a matchup or downloading its export does not add another measurement.</p>
+  {% if player %}
+  {% if rows.length %}
+  <p><strong>{{ rows.length }}</strong> uploaded {% if rows.length == 1 %}{% if view == 'pitching' %}pitch{% else %}hit{% endif %}{% else %}{{ noun }}{% endif %} in this period.</p>
+  <div class="measurement-stats">{% for metric in metrics %}
+    <section><h3>{{ metric.label }}</h3><dl>
+      <dt>Measured samples</dt><dd>{{ metric.summary.count }}</dd>
+      <dt>Average</dt><dd>{{ metric.display.mean }}</dd>
+      <dt>Median</dt><dd>{{ metric.display.median }}</dd>
+      <dt>Range</dt><dd>{{ metric.display.range }}</dd>
+      <dt>Standard deviation</dt><dd>{{ metric.display.deviation }}</dd>
+    </dl></section>
+  {% endfor %}</div>
+  <div class="measurement-table"><table><thead><tr><th>Uploaded</th><th>Video</th>{% for metric in metrics %}<th>{{ metric.label }}</th>{% endfor %}</tr></thead><tbody>
+    {% for row in rows %}<tr><td>{{ row.measured_at }}</td><td><a href="{{ row.url }}">{{ row.description }}</a></td>{% for value in row.values %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p>No uploaded {{ noun }} for this player in this period.</p>{% endif %}
+  {% else %}<p>Select a player to review their uploaded measurements.</p>{% endif %}
+</section>
+{% endblock %}

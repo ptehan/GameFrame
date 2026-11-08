@@ -1,6 +1,14 @@
 {% extends 'base.html' %}
 {% block content %}
 
+<div id="finalizing-overlay" class="finalizing-overlay" role="status" aria-live="polite" aria-label="Finalizing pitch">
+    <div class="finalizing-card">
+        <div class="finalizing-spinner" aria-hidden="true"></div>
+        <h2>Finalizing pitch…</h2>
+        <p>Saving your tagged pitch to the library. Please wait.</p>
+    </div>
+</div>
+
 <!-- PROGRESS BAR -->
 <div id="progress-container" style="margin-top:15px; width:360px; display:none;">
     <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
@@ -180,7 +188,7 @@
     position: fixed;
     inset: 0;
     z-index: 10030;
-    background: rgba(0, 0, 0, 0.86);
+    background: rgba(10, 17, 22, 0.56);
     display: none;
     align-items: center;
     justify-content: center;
@@ -190,9 +198,10 @@
     width: min(1380px, calc(100vw - 12px));
     height: calc(100vh - 12px);
     overflow: hidden;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--gf-line, #d6dde1);
     border-radius: 10px;
-    background: #121212;
+    background: var(--gf-panel, #fff);
+    color: var(--gf-ink, #111820);
     padding: 10px;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
@@ -205,7 +214,7 @@
 }
 .frame-modal-stage {
     min-height: 0;
-    border: 1px solid #333;
+    border: 1px solid var(--gf-line, #d6dde1);
     background: #000;
     display: flex;
     align-items: center;
@@ -239,6 +248,52 @@
     min-height: 22px;
     font-weight: 600;
 }
+.frame-modal .trim-btn,
+.frame-modal .trim-small-btn,
+.frame-modal .trim-icon-btn {
+    min-height: 32px;
+    border: 1px solid var(--gf-line-strong, #bdc8ce);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--gf-ink, #111820);
+    font-weight: 700;
+    box-shadow: none;
+}
+.frame-modal .trim-btn:hover,
+.frame-modal .trim-small-btn:hover,
+.frame-modal .trim-icon-btn:hover {
+    border-color: #95a3aa;
+    background: var(--gf-panel-soft, #f5f7f8);
+    color: var(--gf-ink, #111820);
+}
+.trim-crop-panel {
+    display: grid;
+    grid-template-columns: auto repeat(3, minmax(140px, 1fr));
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid var(--gf-line, #d6dde1);
+    border-radius: 8px;
+    background: var(--gf-panel-soft, #f5f7f8);
+    color: var(--gf-ink, #111820);
+    font-size: 12px;
+}
+.trim-crop-panel label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+.trim-crop-check {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.trim-crop-panel input[type="range"] {
+    width: 100% !important;
+}
 </style>
 
 <div class="trim-page-shell">
@@ -270,11 +325,17 @@
  </div>
 
 <div class="trim-controls-pane">
+<label style="display:block;margin-bottom:10px;">Description
+    <input id="tag_description" type="text" value="{{ description }}" style="width:100%;box-sizing:border-box;margin-top:5px;">
+</label>
 <div class="trim-controls-card">
     <h3 class="trim-controls-title">Trim Controls</h3>
-    <p class="trim-controls-copy">Use the frame scrubber or arrow buttons to move to ball contact, set the contact frame, then finalize the pitch clip.</p>
+    <p class="trim-controls-copy">Choose the frame when the ball reaches the contact point just in front of home plate, whether the pitch is hit, taken or missed.</p>
     <div class="trim-primary-actions">
-        <button id="set_contact_btn" class="trim-btn">Set Contact Manually</button>
+        <button id="auto_plate_btn" class="trim-btn" type="button">Auto Detect Ball</button>
+        <button id="pick_pitcher_btn" class="trim-btn" type="button">Pick Pitcher</button>
+        <button id="toggle_pose_btn" class="trim-btn" type="button">Show Pose Landmarks</button>
+        <button id="set_contact_btn" class="trim-btn">Set Contact &amp; Finalize</button>
     </div>
 </div>
 
@@ -283,18 +344,7 @@
     <div class="trim-status-stack">
         <div id="marker_status" class="trim-status-box">Select the contact frame, then finalize the clip.</div>
         <div id="upload_status" class="trim-status-box">Trim status will appear here.</div>
-    </div>
-</div>
-
-<div class="trim-controls-card">
-    <h3 class="trim-controls-title">Finalize</h3>
-    <p class="trim-controls-copy">When the contact frame looks right, save the trimmed pitch clip.</p>
-    <div class="trim-primary-actions">
-        <button id="finalize_btn"
-                class="trim-btn"
-                style="font-size:18px;">
-            Finalize Pitch
-        </button>
+        <div id="release_status" class="trim-release-box">Detection details will appear here.</div>
     </div>
 </div>
 
@@ -302,10 +352,11 @@
 </div>
 </div>
 
-<div id="frame_modal" class="frame-modal">
+<div id="frame_modal" class="frame-modal guided-pitch" role="dialog" aria-modal="true" aria-labelledby="pitch_step_title" data-step="crop">
   <div class="frame-modal-card">
     <div class="frame-modal-header">
-      <h3 style="margin:0;"></h3>
+      <h3 id="pitch_step_title" aria-live="polite">Set Crop</h3>
+      <button id="close_frame_modal_btn" class="trim-small-btn" type="button">Close</button>
     </div>
     <div class="frame-modal-stage">
       <canvas id="frame_modal_canvas" class="frame-modal-canvas" width="920" height="920"></canvas>
@@ -313,15 +364,18 @@
     <div class="frame-modal-controls">
       <input id="frame_modal_slider" class="frame-modal-slider" type="range" min="0" max="0" value="0">
       <div class="trim-preview-controls">
-        <button id="frame_modal_prev_btn" class="trim-icon-btn" title="Previous Frame" aria-label="Previous Frame">&#9664;</button>
-        <button id="frame_modal_next_btn" class="trim-icon-btn" title="Next Frame" aria-label="Next Frame">&#9654;</button>
+        <button id="frame_modal_prev_btn" class="trim-small-btn" type="button">Prev Frame</button>
+        <button id="frame_modal_play_btn" class="trim-small-btn" type="button">Play</button>
+        <button id="frame_modal_next_btn" class="trim-small-btn" type="button">Next Frame</button>
       </div>
-      <div class="trim-row-2" style="margin-top:8px;">
-        <button id="frame_modal_set_contact_btn" class="trim-btn">Set Contact</button>
-        <button id="frame_modal_goto_contact_btn" class="trim-btn">Go to Contact</button>
+      <div class="trim-row-1" style="margin-top:8px;">
+        <button id="frame_modal_set_contact_btn" class="trim-btn">Set Contact &amp; Finalize</button>
       </div>
-      <div class="trim-row-2" style="margin-top:8px;">
-        <button id="frame_modal_finalize_btn" class="trim-btn">Finalize Pitch</button>
+      <div class="trim-crop-panel">
+        <label class="trim-crop-check"><input id="portrait_crop_enabled" type="checkbox" checked disabled> Crop</label>
+        <label>Horizontal position<input id="portrait_crop_x" type="range" min="0" max="1" step="0.001" value="0.5"></label>
+        <label>Vertical position<input id="portrait_crop_y" type="range" min="0" max="1" step="0.001" value="0.5"></label>
+        <label>Zoom<input id="portrait_crop_zoom" type="range" min="0" max="1" step="0.001" value="0"></label>
       </div>
       <div id="frame_modal_progress" class="frame-modal-progress">
         <div style="background:#333; width:100%; height:14px; border-radius:4px; overflow:hidden;">
@@ -330,11 +384,44 @@
         <div id="frame_modal_progress_label" style="margin-top:6px; font-size:13px;">Working...</div>
       </div>
       <div id="frame_modal_status" class="frame-modal-status"></div>
+      <label class="pitch-description">Pitch description<input id="pitch_modal_description" value="{{ description }}" type="text"></label>
+      <div class="pitch-step-actions"><span id="pitch_frame_label"></span><button id="pitch_step_confirm" type="button">Confirm Crop</button></div>
     </div>
   </div>
 </div>
 
+<style>
+#frame_modal.guided-pitch .frame-modal-header { padding:14px 18px; background:#edf5f2; border-bottom:2px solid #21776b; }
+#pitch_step_title { margin:0; font-size:28px; line-height:1.25; letter-spacing:0; }
+#frame_modal.guided-pitch #close_frame_modal_btn,
+#frame_modal.guided-pitch .trim-row-1 { display:none; }
+#frame_modal.guided-pitch .frame-modal-controls { display:grid; gap:8px; }
+#frame_modal.guided-pitch .trim-crop-panel { display:block; padding:0; margin:0; border:0; background:transparent; }
+#frame_modal.guided-pitch .trim-crop-panel label:not(:last-child) { display:none!important; }
+#frame_modal.guided-pitch .trim-crop-panel label:last-child { display:flex; align-items:center; gap:12px; }
+#frame_modal.guided-pitch[data-step="crop"] .frame-modal-slider,
+#frame_modal.guided-pitch[data-step="crop"] .trim-preview-controls,
+#frame_modal.guided-pitch:not([data-step="crop"]) .trim-crop-panel,
+#frame_modal.guided-pitch:not([data-step="crop"]) .pitch-description { display:none; }
+#frame_modal.guided-pitch[data-step="crop"] canvas { cursor:grab; touch-action:none; }
+#frame_modal.guided-pitch[data-step="crop"] canvas:active { cursor:grabbing; }
+.pitch-description { display:grid; gap:4px; font-size:13px; }
+.pitch-description input { width:100%; box-sizing:border-box; height:36px; }
+.pitch-step-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#pitch_frame_label { font-size:12px; white-space:nowrap; }
+#pitch_step_confirm { margin-left:auto; min-height:44px; padding:10px 20px; background:#126c5f; color:white; }
+#frame_modal.guided-pitch .trim-preview-controls button { min-height:42px; min-width:100px; }
+#frame_modal.guided-pitch .frame-modal-status { margin:0; color:#9c341b; }
+#frame_modal.guided-pitch .frame-modal-status:empty { display:none; }
+@media(max-width:600px) {
+  #pitch_step_title { font-size:23px; }
+  #frame_modal.guided-pitch .frame-modal-header { padding:12px; }
+  #frame_modal.guided-pitch .trim-preview-controls button { min-width:0; flex:1; }
+}
+</style>
+
 <script src="/static/js/ffmpeg/ffmpeg.min.js"></script>
+<script src="/static/js/tag-frames.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
 
 <script>
@@ -360,6 +447,13 @@ const SID         = "{{ sid }}";
 const TEAM_ID     = "{{ team_id }}";
 const PITCHER_ID  = "{{ pitcher_id }}";
 const DESCRIPTION = "{{ description }}";
+const descriptionInput = document.getElementById("tag_description");
+const currentDescription = () => String(descriptionInput ? descriptionInput.value : DESCRIPTION).trim();
+const VIDEO_CREATED_AT = "{{ video_created_at }}";
+const PRESET_CONTACT_FRAME = Number({{ preset_contact_frame|tojson }});
+const HAS_PRESET_CONTACT = {{ has_preset_contact|tojson }};
+const PENDING_PITCH_ID = Number({{ pending_pitch_id|tojson }} || 0);
+const RETURN_URL = {{ return_url|tojson }};
 
 let frames = [];
 let fps = 30;
@@ -372,6 +466,7 @@ const slider       = document.getElementById("frame_slider");
 const canvas       = document.getElementById("preview");
 const ctx          = canvas.getContext("2d");
 const info         = document.getElementById("info");
+const trimPageShell = document.querySelector(".trim-page-shell");
 const frameStatus  = document.getElementById("frame_status");
 const prevBtn      = document.getElementById("prev_btn");
 const nextBtn      = document.getElementById("next_btn");
@@ -389,17 +484,22 @@ const smoothScrubFill = document.getElementById("smooth_scrub_fill");
 const smoothScrubHandle = document.getElementById("smooth_scrub_handle");
 const openFrameModalBtn = document.getElementById("open_frame_modal_btn");
 const frameModal = document.getElementById("frame_modal");
+const closeFrameModalBtn = document.getElementById("close_frame_modal_btn");
 const frameModalCanvas = document.getElementById("frame_modal_canvas");
 const frameModalSlider = document.getElementById("frame_modal_slider");
 const frameModalPrevBtn = document.getElementById("frame_modal_prev_btn");
+const frameModalPlayBtn = document.getElementById("frame_modal_play_btn");
 const frameModalNextBtn = document.getElementById("frame_modal_next_btn");
 const frameModalSetContactBtn = document.getElementById("frame_modal_set_contact_btn");
 const frameModalGotoContactBtn = document.getElementById("frame_modal_goto_contact_btn");
-const frameModalFinalizeBtn = document.getElementById("frame_modal_finalize_btn");
 const frameModalProgress = document.getElementById("frame_modal_progress");
 const frameModalProgressBar = document.getElementById("frame_modal_progress_bar");
 const frameModalProgressLabel = document.getElementById("frame_modal_progress_label");
 const frameModalStatus = document.getElementById("frame_modal_status");
+const portraitCropEnabled = document.getElementById("portrait_crop_enabled");
+const portraitCropX = document.getElementById("portrait_crop_x");
+const portraitCropY = document.getElementById("portrait_crop_y");
+const portraitCropZoom = document.getElementById("portrait_crop_zoom");
 let autoDetectBusy = false;
 let releaseFrame = null;
 let manualPitcherSeed = null;
@@ -407,6 +507,7 @@ let awaitingPitcherPick = false;
 let showPoseOverlay = false;
 let poseOverlayLandmarks = null;
 let poseOverlayThrowSide = null;
+let yoloBallTrack = null;
 
 const POSE_CONNECTIONS = [
     [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
@@ -420,6 +521,38 @@ let scrubActive = false;
 let scrubLastX = 0;
 let scrubFrameFloat = 0;
 let frameModalOpen = false;
+let frameModalPlayTimer = null;
+const FIXED_PORTRAIT_ASPECT = 8 / 9;
+let portraitCropState = { enabled: false, x: 0.235, y: 0.03, w: 0.529, h: 0.94 };
+let pitchStep = 'crop';
+let pitchStepBusy = false;
+function renderPitchStep() {
+    frameModal.dataset.step = pitchStep;
+    document.getElementById('pitch_step_title').textContent = pitchStep === 'crop' ? 'Set Crop' : 'Set Pitch Contact Frame';
+    const confirm = document.getElementById('pitch_step_confirm');
+    confirm.textContent = pitchStepBusy ? 'Saving Pitch...' : pitchStep === 'crop' ? 'Confirm Crop' : 'Confirm Contact';
+    confirm.disabled = pitchStepBusy || !frames.length;
+    updateFrameModalUI(Number(slider.value) || 0);
+}
+async function confirmPitchStep() {
+    if (pitchStepBusy || !frames.length) return;
+    stopFrameModalPlayback();
+    setModalStatus('');
+    if (pitchStep === 'crop') {
+        descriptionInput.value = document.getElementById('pitch_modal_description').value;
+        normalizePortraitCropFromControls();
+        if (!HAS_PRESET_CONTACT) {
+            pitchStep = 'contact';
+            renderPitchStep();
+            return;
+        }
+    } else contactFrame = Number(slider.value);
+    if (contactFrame <= 0) { setModalStatus('Choose a contact frame after the beginning of the clip.'); return; }
+    pitchStepBusy = true;
+    renderPitchStep();
+    const saved = await trimAndUpload();
+    if (!saved) { pitchStepBusy = false; renderPitchStep(); }
+}
 
 const PITCH_PROFILES = {
     softball35: { label: "Softball Youth", moundFt: 35.0, extensionFt: 3.0, defaultMph: 42 },
@@ -460,6 +593,32 @@ function estimatePlateFrameFromRelease(releaseFrame, fpsVal) {
     };
 }
 
+async function detectPitchBallWithYolo() {
+    const body = new URLSearchParams();
+    body.set("temp_id", TEMP_ID);
+    body.set("start_frame", "0");
+    body.set("end_frame", String(Math.max(0, frames.length - 1)));
+    body.set("fps", String(Number.isFinite(fps) && fps > 0 ? fps : 30));
+    const crop = portraitCropEnabled && portraitCropEnabled.checked ? normalizePortraitCropFromControls() : null;
+    if (crop && crop.enabled) {
+        body.set("crop_x", String(crop.x));
+        body.set("crop_y", String(crop.y));
+        body.set("crop_w", String(crop.w));
+        body.set("crop_h", String(crop.h));
+    }
+    const resp = await fetch("/api/pitch-release/yolo", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+    });
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok || !json || !json.ok) {
+        throw new Error((json && json.error) || "ball detector failed");
+    }
+    if (!json.accepted || !json.best || !Number.isFinite(Number(json.releaseFrame))) return null;
+    return json;
+}
+
 function showProgress() {
     // Display shared progress widget.
     document.getElementById("progress-container").style.display = "block";
@@ -470,6 +629,22 @@ function hideProgress() {
     // Hide shared progress widget.
     document.getElementById("progress-container").style.display = "none";
     if (frameModalProgress) frameModalProgress.style.display = "none";
+}
+
+function showFinalizing() {
+    hideProgress();
+    document.getElementById("finalizing-overlay").classList.add("is-visible");
+}
+
+function hideFinalizing() {
+    document.getElementById("finalizing-overlay").classList.remove("is-visible");
+}
+
+function finishPitchAndReturn() {
+    hideFinalizing();
+    const destination = RETURN_URL || `/matchup/select?sid=${SID}${document.body.classList.contains("embedded-page") ? "&embedded=1" : ""}`;
+    window.showCelebration?.("Pitch Saved!", "Opening matchup selector", 1100);
+    setTimeout(() => window.location.replace(destination), 1150);
 }
 
 function updateProgress(pct, msg = "") {
@@ -1065,17 +1240,61 @@ async function detectReleaseFrameFromPitcherPose() {
 }
 
 async function autoDetectPlateFrame() {
-    // Release-first autodetect:
-    // 1) detect release frame from pitcher pose
-    // 2) add travel frames from distance/mph model
+    // Ball-first autodetect:
+    // 1) detect the pitched ball track with YOLO
+    // 2) fall back to pose release if the ball track is unavailable
+    // 3) add travel frames from distance/mph model
     if (autoDetectBusy) return;
     if (!frames.length) return;
     autoDetectBusy = true;
     showProgress();
-    updateProgress(8, "Detecting pitcher release...");
-    markerStatus.textContent = "Detecting release frame...";
-    if (releaseStatus) releaseStatus.textContent = "Release debug: running pose-based release detector...";
+    updateProgress(8, "Detecting pitched ball...");
+    markerStatus.textContent = "Detecting pitched ball...";
+    if (releaseStatus) releaseStatus.textContent = "Release debug: running ball detector...";
     try {
+        let ballResult = null;
+        try {
+            ballResult = await detectPitchBallWithYolo();
+        } catch (ballError) {
+            console.warn("Ball detector failed; falling back to pose release", ballError);
+            if (releaseStatus) releaseStatus.textContent = `Ball debug: ${ballError && ballError.message ? ballError.message : "unavailable"}\nFalling back to pose release...`;
+        }
+
+        if (ballResult) {
+            updateProgress(84, "Estimating contact from ball release + speed...");
+            releaseFrame = Number(ballResult.releaseFrame);
+            yoloBallTrack = ballResult.best || null;
+            poseOverlayLandmarks = null;
+            poseOverlayThrowSide = null;
+            const est = estimatePlateFrameFromRelease(releaseFrame, fps);
+            if (!est || !Number.isFinite(est.frame)) {
+                markerStatus.textContent = "Autodetect failed: ball release found, but contact estimate failed.";
+                if (releaseStatus) releaseStatus.textContent = "Ball debug: ball release found, but contact estimate failed.";
+                return;
+            }
+
+            contactFrame = Math.max(0, Math.min(frames.length - 1, Math.round(est.frame)));
+            slider.value = contactFrame;
+            drawFrame(contactFrame);
+            window.showCelebration?.("Contact Tagged!", `Pitch frame ${contactFrame}`);
+            markerStatus.textContent =
+                `Auto plate frame = ${contactFrame} (ball release=${Math.round(releaseFrame)}, +${Math.round(est.framesToPlate)}f @ ${Math.round(est.profile.mph)} mph input, ${Math.round(est.adjustedMph)} mph internal)`;
+            if (releaseStatus) {
+                const trackFrames = Array.isArray(ballResult.best.frames) ? ballResult.best.frames : [];
+                releaseStatus.textContent =
+                    `Ball release frame: ${Math.round(releaseFrame)}\n` +
+                    `First detected ball frame: ${Number.isFinite(Number(ballResult.frame)) ? Math.round(Number(ballResult.frame)) : "-"}\n` +
+                    `Track frames: ${trackFrames.length ? trackFrames.join(", ") : "-"}\n` +
+                    `Detector score: ${Number.isFinite(Number(ballResult.score)) ? Number(ballResult.score).toFixed(4) : "n/a"}`;
+            }
+            updateProgress(100, "Done!");
+            drawFrame(+slider.value || contactFrame);
+            return;
+        }
+
+        updateProgress(18, "Detecting pitcher release...");
+        markerStatus.textContent = "Detecting release frame...";
+        if (releaseStatus) releaseStatus.textContent = "Release debug: running pose-based release detector...";
         const release = await detectReleaseFrameFromPitcherPose();
         if (!release || !Number.isFinite(release.frame)) {
             markerStatus.textContent = "Autodetect failed: could not find release frame. Set contact manually.";
@@ -1085,6 +1304,7 @@ async function autoDetectPlateFrame() {
 
         updateProgress(84, "Estimating contact from release + speed...");
         releaseFrame = release.frame;
+        yoloBallTrack = null;
         poseOverlayLandmarks = release.landmarksSeq || null;
         poseOverlayThrowSide = release.throwSide || null;
         const est = estimatePlateFrameFromRelease(releaseFrame, fps);
@@ -1097,6 +1317,7 @@ async function autoDetectPlateFrame() {
         contactFrame = Math.max(0, Math.min(frames.length - 1, Math.round(est.frame)));
         slider.value = contactFrame;
         drawFrame(contactFrame);
+        window.showCelebration?.("Contact Tagged!", `Pitch frame ${contactFrame}`);
         markerStatus.textContent =
             `Auto plate frame = ${contactFrame} (release=${Math.round(releaseFrame)} ${release.throwSide}, +${Math.round(est.framesToPlate)}f @ ${Math.round(est.profile.mph)} mph input, ${Math.round(est.adjustedMph)} mph internal)`;
         if (releaseStatus) {
@@ -1130,70 +1351,49 @@ if (pitchLevelEl && speedGuessEl) {
 }
 
 async function loadVideo() {
-    // Decode source MP4 to per-frame ImageBitmaps for scrubbing and analysis.
+    // Decode every source frame in order; real-time capture can silently drop frames.
     info.textContent = "Fetching video…";
     showProgress();
     updateProgress(5, "Fetching video…");
 
-    const resp = await fetch(`/raw/pitch?id=${TEMP_ID}`);
-    const buf  = await resp.arrayBuffer();
+    updateProgress(20, "Reading source metadata…");
 
-    updateProgress(20, "Decoding headers…");
-
-    const blob = new Blob([buf], { type: "video/mp4" });
-    const video = document.createElement("video");
-    video.src = URL.createObjectURL(blob);
-    video.muted = true;
-    video.playsInline = true;
-
-    await video.play().catch(() => {});
-    updateProgress(35, "Preparing decoder…");
-
-    const stream = video.captureStream();
-    const tracks = stream.getVideoTracks();
-
-    if (tracks.length === 0) {
-        info.textContent = "Browser cannot decode this MP4.";
-        return;
-    }
-
-    const processor = new MediaStreamTrackProcessor(tracks[0]);
-    const reader    = processor.readable.getReader();
-
-    frames = [];
-    let count = 0;
-    updateProgress(40, "Decoding frames…");
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        count++;
-        const bmp = await createImageBitmap(value);
-        frames.push(bmp);
-        value.close();
-
-        if (count % 20 === 0) {
-            const pct = 40 + Math.floor((count / 5000) * 40);
-            updateProgress(Math.min(pct, 80), `Decoding… ${count} frames`);
+    // Fetch metadata to get actual FPS
+    let detectedFps = 30;
+    try {
+        const metaResp = await fetch(`/api/raw/pitch-meta?id=${TEMP_ID}`);
+        const metaJson = await metaResp.json();
+        if (metaResp.ok && metaJson && metaJson.ok && metaJson.fps > 0) {
+            detectedFps = metaJson.fps;
         }
-    }
+    } catch (_) {}
+    fps = detectedFps;
+
+    frames = await loadExactTagFrames(TEMP_ID, (done, total) => {
+        updateProgress(35 + (done / total) * 45, `Decoding… ${done}/${total} frames`);
+    });
 
     updateProgress(90, "Building preview…");
 
     slider.max = frames.length - 1;
-    drawFrame(0);
+    if (HAS_PRESET_CONTACT && Number.isFinite(PRESET_CONTACT_FRAME) && PRESET_CONTACT_FRAME >= 0) {
+        contactFrame = Math.max(0, Math.min(frames.length - 1, Math.round(PRESET_CONTACT_FRAME)));
+    }
+    slider.value = HAS_PRESET_CONTACT ? contactFrame : 0;
+    drawFrame(Number(slider.value));
 
     updateProgress(100, "Done!");
     hideProgress();
+    if (trimPageShell) trimPageShell.style.display = "block";
 
-    info.textContent = `Frames: ${frames.length}  |  FPS approx: ${fps}`;
-    setModalStatus("Set the contact frame, then finalize the pitch.");
+    info.textContent = `Frames: ${frames.length}  |  FPS: ${fps.toFixed(2)}`;
+    setModalStatus('');
     if (frameModal && !frameModalOpen) {
         frameModalOpen = true;
         frameModal.style.display = "flex";
-        updateFrameModalUI(0);
+        updateFrameModalUI(Number(slider.value));
     }
+    renderPitchStep();
 }
 
 ////////////////////////////////////////////////////////////
@@ -1222,6 +1422,34 @@ function drawFrame(i) {
         Math.round((size - h) / 2),
         w, h
     );
+
+    if (yoloBallTrack && Array.isArray(yoloBallTrack.points)) {
+        const left = Math.round((size - w) / 2);
+        const top = Math.round((size - h) / 2);
+        const sx = w / Math.max(1, f.width);
+        const sy = h / Math.max(1, f.height);
+        const points = yoloBallTrack.points.filter((p) => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)));
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(0,229,255,0.95)";
+        ctx.fillStyle = "rgba(0,229,255,0.95)";
+        ctx.beginPath();
+        points.forEach((p, idx) => {
+            const px = left + Number(p.x) * sx;
+            const py = top + Number(p.y) * sy;
+            if (idx === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        for (const p of points) {
+            const px = left + Number(p.x) * sx;
+            const py = top + Number(p.y) * sy;
+            ctx.beginPath();
+            ctx.arc(px, py, Number(p.frame) === i ? 5 : 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
 
     if (showPoseOverlay && poseOverlayLandmarks && poseOverlayLandmarks[i]) {
         const lm = poseOverlayLandmarks[i];
@@ -1363,43 +1591,93 @@ function updateFrameModalUI(i) {
     if (!frameModalOpen) return;
     const f = frames[i];
     if (!f) return;
-    if (frameModalCanvas.width !== f.width || frameModalCanvas.height !== f.height) {
-        frameModalCanvas.width = f.width;
-        frameModalCanvas.height = f.height;
+    const crop = normalizePortraitCropFromControls();
+    const width = pitchStep === 'crop' ? f.width : Math.max(1, Math.round(f.width * crop.w));
+    const height = pitchStep === 'crop' ? f.height : Math.max(1, Math.round(f.height * crop.h));
+    if (frameModalCanvas.width !== width || frameModalCanvas.height !== height) {
+        frameModalCanvas.width = width;
+        frameModalCanvas.height = height;
     }
+    const stage = frameModalCanvas.parentElement;
+    const scale = Math.min((stage.clientWidth - 2) / width, (stage.clientHeight - 2) / height);
+    frameModalCanvas.style.width = `${Math.max(1, width * scale)}px`;
+    frameModalCanvas.style.height = `${Math.max(1, height * scale)}px`;
     const modalCtx = frameModalCanvas.getContext("2d");
     if (!modalCtx) return;
     const dstW = frameModalCanvas.width || 1;
     const dstH = frameModalCanvas.height || 1;
     modalCtx.fillStyle = "black";
     modalCtx.fillRect(0, 0, dstW, dstH);
-    modalCtx.drawImage(f, 0, 0, dstW, dstH);
+    if (pitchStep === 'crop') {
+        modalCtx.drawImage(f, 0, 0, dstW, dstH);
+        drawPortraitCropOverlay(modalCtx, dstW, dstH);
+    } else modalCtx.drawImage(f, crop.x*f.width, crop.y*f.height, crop.w*f.width, crop.h*f.height, 0, 0, dstW, dstH);
+    document.getElementById('pitch_frame_label').textContent = pitchStep === 'crop' ? '' : `Frame ${i} / ${frames.length - 1}`;
+}
 
-    // Keep frame/marker context visible in modal view.
-    const lines = [
-        `Frame: ${i} / ${Math.max(0, frames.length - 1)}`,
-        `Release: ${Number.isFinite(releaseFrame) ? releaseFrame : "-"}`,
-        `Contact: ${Number.isFinite(contactFrame) ? contactFrame : "-"}`,
-    ];
-    const boxX = 8;
-    const boxY = 8;
-    const lineH = 18;
-    const boxW = 250;
-    const boxH = 10 + lines.length * lineH;
-    modalCtx.fillStyle = "rgba(0,0,0,0.65)";
-    modalCtx.fillRect(boxX, boxY, boxW, boxH);
-    modalCtx.font = "14px monospace";
-    for (let li = 0; li < lines.length; li += 1) {
-        const textY = boxY + 15 + li * lineH;
-        if (li === 1) modalCtx.fillStyle = i === releaseFrame ? "#66e0ff" : "#a8ecff";
-        else if (li === 2) modalCtx.fillStyle = i === contactFrame ? "#33ff66" : "#b0ffb8";
-        else modalCtx.fillStyle = "#ffffff";
-        modalCtx.fillText(lines[li], boxX + 8, textY);
-    }
+function normalizePortraitCropFromControls() {
+    const zoom = portraitCropZoom ? Number(portraitCropZoom.value) : 0;
+    const h = Math.max(0.38, Math.min(0.98, 0.98 - Math.max(0, Math.min(1, zoom)) * 0.44));
+    const sourceFrame = frames[0];
+    const w = Math.min(1, h * FIXED_PORTRAIT_ASPECT * (sourceFrame ? sourceFrame.height / sourceFrame.width : 1));
+    const centerX = portraitCropX ? Number(portraitCropX.value) : 0.5;
+    const centerY = portraitCropY ? Number(portraitCropY.value) : 0.5;
+    const x = Math.max(0, Math.min(1 - w, centerX - w / 2));
+    const y = Math.max(0, Math.min(1 - h, centerY - h / 2));
+    portraitCropState = {
+        enabled: true,
+        x, y, w, h,
+    };
+    return portraitCropState;
+}
+
+function drawPortraitCropOverlay(g, w, h) {
+    const crop = normalizePortraitCropFromControls();
+    if (!crop.enabled) return;
+    const x = crop.x * w;
+    const y = crop.y * h;
+    const cw = crop.w * w;
+    const ch = crop.h * h;
+    g.save();
+    g.fillStyle = "rgba(0, 0, 0, 0.38)";
+    g.fillRect(0, 0, w, y);
+    g.fillRect(0, y + ch, w, h - y - ch);
+    g.fillRect(0, y, x, ch);
+    g.fillRect(x + cw, y, w - x - cw, ch);
+    g.strokeStyle = "#28c2a0";
+    g.lineWidth = Math.max(3, Math.round(w * 0.004));
+    g.strokeRect(x, y, cw, ch);
+    g.fillStyle = "rgba(40, 194, 160, 0.92)";
+    g.font = `${Math.max(16, Math.round(w * 0.018))}px sans-serif`;
+    g.fillText("Crop", x + 12, y + 26);
+    g.restore();
 }
 
 function setupFrameModal() {
     if (!frameModal || !openFrameModalBtn) return;
+    document.getElementById('pitch_step_confirm').onclick = confirmPitchStep;
+    new ResizeObserver(() => updateFrameModalUI(Number(slider.value) || 0)).observe(frameModalCanvas.parentElement);
+    let cropDrag = null;
+    frameModalCanvas.addEventListener('pointerdown', event => {
+        if (pitchStep !== 'crop' || pitchStepBusy || !frames.length) return;
+        const crop = normalizePortraitCropFromControls();
+        cropDrag = {x:event.clientX,y:event.clientY,cx:crop.x+crop.w/2,cy:crop.y+crop.h/2,rect:frameModalCanvas.getBoundingClientRect()};
+        frameModalCanvas.setPointerCapture(event.pointerId);
+        event.preventDefault();
+    });
+    frameModalCanvas.addEventListener('pointermove', event => {
+        if (!cropDrag) return;
+        const crop = normalizePortraitCropFromControls();
+        portraitCropX.value = clamp(cropDrag.cx+(event.clientX-cropDrag.x)/cropDrag.rect.width,crop.w/2,1-crop.w/2);
+        portraitCropY.value = clamp(cropDrag.cy+(event.clientY-cropDrag.y)/cropDrag.rect.height,crop.h/2,1-crop.h/2);
+        updateFrameModalUI(Number(slider.value) || 0);
+    });
+    const finishDrag = event => {
+        cropDrag = null;
+        if (frameModalCanvas.hasPointerCapture(event.pointerId)) frameModalCanvas.releasePointerCapture(event.pointerId);
+    };
+    frameModalCanvas.addEventListener('pointerup',finishDrag);
+    frameModalCanvas.addEventListener('pointercancel',finishDrag);
     const open = () => {
         frameModalOpen = true;
         frameModal.style.display = "flex";
@@ -1407,6 +1685,15 @@ function setupFrameModal() {
     };
 
     openFrameModalBtn.onclick = open;
+    const close = () => {
+        stopFrameModalPlayback();
+        frameModalOpen = false;
+        frameModal.style.display = "none";
+    };
+    if (closeFrameModalBtn) closeFrameModalBtn.onclick = close;
+    frameModal.onclick = (ev) => {
+        // Backdrop clicks preserve frame selection.
+    };
 
     if (frameModalSlider) {
         frameModalSlider.oninput = () => {
@@ -1427,6 +1714,12 @@ function setupFrameModal() {
             drawFrame(+slider.value || 0);
         };
     }
+    if (frameModalPlayBtn) frameModalPlayBtn.onclick = toggleFrameModalPlayback;
+    const refreshCrop = () => updateFrameModalUI(+slider.value || 0);
+    if (portraitCropEnabled) portraitCropEnabled.onchange = refreshCrop;
+    if (portraitCropX) portraitCropX.oninput = refreshCrop;
+    if (portraitCropY) portraitCropY.oninput = refreshCrop;
+    if (portraitCropZoom) portraitCropZoom.oninput = refreshCrop;
     if (frameModalSetContactBtn) {
         frameModalSetContactBtn.onclick = () => {
             if (contactBtn && typeof contactBtn.onclick === "function") contactBtn.onclick();
@@ -1439,9 +1732,29 @@ function setupFrameModal() {
             drawFrame(+slider.value || 0);
         };
     }
-    if (frameModalFinalizeBtn) {
-        frameModalFinalizeBtn.onclick = trimAndUpload;
+}
+
+function stopFrameModalPlayback() {
+    if (frameModalPlayTimer) clearInterval(frameModalPlayTimer);
+    frameModalPlayTimer = null;
+    if (frameModalPlayBtn) frameModalPlayBtn.textContent = "Play";
+}
+
+function toggleFrameModalPlayback() {
+    if (frameModalPlayTimer) {
+        stopFrameModalPlayback();
+        return;
     }
+    if (frameModalPlayBtn) frameModalPlayBtn.textContent = "Pause";
+    frameModalPlayTimer = setInterval(() => {
+        const maxIdx = Math.max(0, frames.length - 1);
+        const next = (+slider.value || 0) + 1;
+        if (next > maxIdx) {
+            stopFrameModalPlayback();
+            return;
+        }
+        setFrameClamped(next);
+    }, Math.max(40, 1000 / Math.max(1, fps || 30)));
 }
 
 if (togglePoseBtn) {
@@ -1498,13 +1811,14 @@ canvas.addEventListener("click", (ev) => {
         y: clamp(ny, 0, 1),
     };
     awaitingPitcherPick = false;
-    markerStatus.textContent = `Pitcher locked at frame ${i}. Click Auto Detect Plate.`;
+    markerStatus.textContent = `Pitcher locked at frame ${i}. Click "Auto Detect Plate".`;
 });
 
 contactBtn.onclick = () => {
     contactFrame = +slider.value;
     markerStatus.textContent = `Contact Frame = ${contactFrame}`;
-    setModalStatus(`Contact frame set to ${contactFrame}. Finalize when ready.`);
+    setModalStatus(`Contact frame set to ${contactFrame}. Saving pitch…`);
+    trimAndUpload();
 };
 
 ////////////////////////////////////////////////////////////
@@ -1657,8 +1971,46 @@ async function trimAndUpload() {
     // Finalization pipeline: trim -> encode MP4 -> upload endpoint.
     if (contactFrame <= 0) {
         setModalStatus("Set the contact frame before finalizing.");
-        alert("Set contact frame first.");
-        return;
+        return false;
+    }
+
+    // Fast path: the source clip is already on the local server. Send only the
+    // selected frame so native FFmpeg can trim it without PNG conversion/WASM.
+    {
+        setModalStatus("Finalizing pitch...");
+        showFinalizing();
+        try {
+        const nativeForm = new FormData();
+        nativeForm.append("sid", SID);
+        nativeForm.append("team_id", TEAM_ID);
+        nativeForm.append("pitcher_id", PITCHER_ID);
+        nativeForm.append("description", currentDescription());
+        nativeForm.append("video_created_at", VIDEO_CREATED_AT);
+        nativeForm.append("temp_id", TEMP_ID);
+        nativeForm.append("fps", fps);
+        nativeForm.append("contact_frame", contactFrame);
+        nativeForm.append("portrait_crop", JSON.stringify(normalizePortraitCropFromControls()));
+        if (document.body.classList.contains("embedded-page")) nativeForm.append("embedded", "1");
+        if (PENDING_PITCH_ID > 0) nativeForm.append("pending_pitch_id", String(PENDING_PITCH_ID));
+        const nativeResponse = await fetch("/upload/pitch/finalize", {
+            method: "POST",
+            body: nativeForm
+        });
+        if (!nativeResponse.ok) {
+            const message = await nativeResponse.text().catch(() => "");
+            setModalStatus(message || "Finalize failed. Please try again.");
+            hideFinalizing();
+            return false;
+        }
+        setModalStatus("Pitch saved.");
+        const savedPitch = await nativeResponse.json();
+        window.location.replace(savedPitch.speed_url);
+        return true;
+        } catch (error) {
+            hideFinalizing();
+            setModalStatus("Finalize failed. Please try again.");
+            return false;
+        }
     }
 
     setModalStatus("Finalizing pitch...");
@@ -1698,7 +2050,7 @@ async function trimAndUpload() {
         "out.mp4"
     );
 
-    updateProgress(90, "Uploading…");
+    updateProgress(90, "Loading to GameFrame…");
 
     const out = ffmpeg.FS("readFile", "out.mp4");
     const blob = new Blob([out.buffer], { type: "video/mp4" });
@@ -1707,9 +2059,13 @@ async function trimAndUpload() {
     form.append("sid", SID);
     form.append("team_id", TEAM_ID);
     form.append("pitcher_id", PITCHER_ID);
-    form.append("description", DESCRIPTION);
+    form.append("description", currentDescription());
+    form.append("video_created_at", VIDEO_CREATED_AT);
     form.append("fps", fps);
     form.append("contact_frame", contactFrame);
+    form.append("portrait_crop", JSON.stringify(normalizePortraitCropFromControls()));
+    if (document.body.classList.contains("embedded-page")) form.append("embedded", "1");
+    if (PENDING_PITCH_ID > 0) form.append("pending_pitch_id", String(PENDING_PITCH_ID));
     form.append("file", blob, "trimmed_pitch.mp4");
 
     const r = await fetch(`/upload/pitch/finalize`, {
@@ -1720,19 +2076,24 @@ async function trimAndUpload() {
     if (r.ok) {
         updateProgress(100, "Saved!");
         setModalStatus("Pitch saved.");
-        window.location.href = `/library?sid=${SID}&type=pitch`;
+        window.location.replace(r.url);
     } else {
         setModalStatus("Upload failed.");
         alert("Upload failed.");
     }
 }
 
-document.getElementById("finalize_btn").onclick = trimAndUpload;
-
 ////////////////////////////////////////////////////////////
 // START
 ////////////////////////////////////////////////////////////
-loadVideo();
+loadVideo().catch((error) => {
+    console.error("Pitch trim load failed", error);
+    hideProgress();
+    if (trimPageShell) trimPageShell.style.display = "block";
+    if (info) info.textContent = "Could not open this pitch clip.";
+    if (markerStatus) markerStatus.textContent = "The pitch clip could not be loaded. Go back and upload the pitch again.";
+    setModalStatus(error && error.message ? error.message : "Could not open pitch clip.");
+});
 setupSmoothScrub();
 setupFrameModal();
 </script>
