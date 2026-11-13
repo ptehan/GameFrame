@@ -4000,6 +4000,7 @@ function startBackgroundPrediction(reason = "marking complete") {
 }
 
 async function runLivePrediction({ openModal = true, signal = null } = {}) {
+  if (window.GAMEFRAME_HOSTED && state.hostedUpload) await state.hostedUpload;
   if (state.observations.length < 2) {
     throw new Error("Add at least two ball points in the Ball Path step before building prediction.");
   }
@@ -6413,7 +6414,21 @@ function loadVideoFile(file) {
   updateMenuAvailability();
   setMenuOpen(true);
   openSetupModal();
-  void startSelectionPreparation(file);
+  if (window.GAMEFRAME_HOSTED) {
+    state.hostedUpload = (async () => {
+      const accountResponse = await fetch('/api/account');
+      if (!accountResponse.ok) throw Error('Sign in before uploading footage.');
+      const account = await accountResponse.json();
+      const form = new FormData(); form.set('file', file);
+      const response = await fetch('/api/source', {method:'POST', headers:{'X-CSRF-Token':account.csrf}, body:form});
+      const source = await response.json();
+      if (!response.ok) throw Error(source.error || 'Video upload failed.');
+      if (state.videoFile === file) state.videoMetadata.source_path = source.source_path;
+    })();
+    state.hostedUpload.then(() => startSelectionPreparation(file)).catch(error => {
+      els.autoTrackStatus.textContent = error.message;
+    });
+  } else { void startSelectionPreparation(file); }
   persistDraft();
 }
 
