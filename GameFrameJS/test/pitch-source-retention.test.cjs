@@ -6,6 +6,11 @@ const Database=require('better-sqlite3');
 test('original pitch upload survives trimming, speed measurement, and pending promotion', {timeout:360000}, async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gf-pitch-source-'));
  process.env.DB_PATH=path.join(dir,'app.db');
+ const childProcess=require('node:child_process'),originalSpawn=childProcess.spawnSync,probes=[];
+ childProcess.spawnSync=(exe,args,...options)=>{
+  if(args.includes('-show_entries')&&args.includes('-of')&&args.includes('json'))probes.push([...args]);
+  return originalSpawn(exe,args,...options);
+ };
  const {startServer,closeDatabase}=require('../server');
  const server=startServer(0,'127.0.0.1');await new Promise(r=>server.listening?r():server.once('listening',r));
  const db=new Database(process.env.DB_PATH),base=`http://127.0.0.1:${server.address().port}`;
@@ -25,11 +30,13 @@ test('original pitch upload survives trimming, speed measurement, and pending pr
  try{
   const upload=form({team_id:team,pitcher_id:pitcher,start_sec:0});upload.set('file',new Blob([original]),'Hilton original.mp4');
   const response=await post('/upload/pitch',upload),redirect=new URL(response.headers.get('location'),base),tempId=redirect.searchParams.get('temp_id');
+  assert.ok(probes.length>0);assert.equal(probes[0].includes('-count_frames'),false,'Original upload must read metadata without decoding the entire recording');
   const source=db.prepare('SELECT * FROM pitch_video_sources WHERE id=?').get(tempId);
   assert.equal(source.original_file_name,'Hilton original.mp4');assert.equal(source.sha256,hash);
   assert.deepEqual(fs.readFileSync(path.join(dir,'source-videos',source.stored_file_name)),original);
   const finalize=await post('/upload/pitch/finalize',form({temp_id:tempId,team_id:team,pitcher_id:pitcher,contact_frame:45}));
   const saved=await finalize.json();await checkOriginal(saved.pitch_id);
+  assert.ok(probes.some(args=>args.includes('-count_frames')),'Frame-exact counts remain enabled for the short tagging/finalization clips');
   assert(!fs.existsSync(path.join(os.tmpdir(),`gf_${tempId}.mp4`)));
   await post('/api/pitch/speed',new URLSearchParams({pitch_id:saved.pitch_id,release_frame:30,mound_distance:60.5,extension:6,contact_adjustment:3}));
   await checkOriginal(saved.pitch_id);
@@ -53,5 +60,5 @@ test('original pitch upload survives trimming, speed measurement, and pending pr
   const completed=await(await post('/upload/pitch/finalize',form({temp_id:tagTemp,team_id:team,pitcher_id:pitcher,contact_frame:45,pending_pitch_id:batch.ids[0]}))).json();
   await checkOriginal(completed.pitch_id);assert.equal(db.prepare('SELECT id FROM pending_pitch_clips WHERE id=?').get(batch.ids[0]),undefined);
   console.log('Verified exact original bytes, filename, saved location, temporary-file cleanup, Library visibility, speed save, pending promotion, and legacy handling.');
- }finally{db.close();await new Promise(r=>server.close(r));closeDatabase();}
+ }finally{childProcess.spawnSync=originalSpawn;db.close();await new Promise(r=>server.close(r));closeDatabase();}
 });

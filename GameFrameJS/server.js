@@ -16,6 +16,7 @@ const {
   completeDesktopMatchup,
 } = require("./usage-auth");
 
+function createApplication(options = {}) {
 const app = express();
 const ROOT = __dirname;
 const APP_VERSION = require("./package.json").version;
@@ -24,19 +25,27 @@ const EV_PREDICTOR_URL = '/ev';
 const ballAssistTest = fs.existsSync(path.join(ROOT, 'experiments/ball-assist/app-integration.cjs'))
   ? require('./experiments/ball-assist/app-integration.cjs')
   : { available: () => false, install: () => {} };
-const DB_PATH = process.env.DB_PATH
+const DB_PATH = options.databasePath ? path.resolve(options.databasePath) : process.env.DB_PATH
   ? path.resolve(process.env.DB_PATH)
   : path.join(ROOT, "app.db");
 const CONTACT_REVIEW_LOG = path.join(path.dirname(DB_PATH), "contact-review-history.jsonl");
-const TMP_DIR = os.tmpdir();
+const TMP_DIR = options.dataDirectory ? path.join(options.dataDirectory, "temporary") : os.tmpdir();
+fs.mkdirSync(TMP_DIR, { recursive: true });
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new Database(DB_PATH);
 const pitchSources = require('./pitch-source').createPitchSourceStore(db, path.join(path.dirname(DB_PATH), 'source-videos'));
 const upload = multer({
   dest: TMP_DIR,
-  limits: { fileSize: Math.max(100, Number(process.env.MAX_UPLOAD_MB || 4096)) * 1024 * 1024 },
+  limits: { fileSize: Math.max(100, Number(options.hostedWorkspace ? 250 : process.env.MAX_UPLOAD_MB || 4096)) * 1024 * 1024 },
 });
 
+if (options.hostedWorkspace) app.use((req, res, next) => {
+  // The gateway owns identity, billing and administration. A workspace cannot
+  // restore a database supplied by a customer or expose desktop admin APIs.
+  if (/^\/(?:settings|debug|auth|api\/v1)(?:\/|$)/.test(req.path) ||
+      /^\/(?:external_video|external|import\/youtube|api\/pitch-vision|api\/pitch-release|pitch-release-test)/.test(req.path)) return res.sendStatus(404);
+  next();
+});
 app.use(express.urlencoded({ extended: true, limit: "200mb" }));
 app.use(express.json({ limit: "200mb" }));
 app.use((req, res, next) => {
@@ -71,11 +80,16 @@ function sidOf(req) {
   return (req.query.sid || req.body.sid || "x").toString();
 }
 
+function validateTemporaryId(id) {
+  if (options.hostedWorkspace && !/^[a-zA-Z0-9_-]{1,100}$/.test(String(id))) throw new Error("Invalid temporary video identifier");
+}
 function tempPath(id) {
+  validateTemporaryId(id);
   return path.join(TMP_DIR, `gf_${id}.mp4`);
 }
 
 function sourceTempPath(id) {
+  validateTemporaryId(id);
   return path.join(TMP_DIR, `gf_src_${id}.mp4`);
 }
 
@@ -255,11 +269,17 @@ function runCmd(cmd, args, options = {}) {
   return result;
 }
 
-function ffprobeMeta(filePath) {
+function ffprobeMeta(filePath, settings) {
+  const metadata = uncheckedFfprobeMeta(filePath, settings);
+  if (options.hostedWorkspace && metadata.duration > 300) throw Object.assign(new Error('Videos must be 5 minutes or shorter.'), { status: 413 });
+  return metadata;
+}
+
+function uncheckedFfprobeMeta(filePath, { countFrames = true, requireExactFrameCount = false } = {}) {
   try {
     const r = runCmd("ffprobe", [
       "-v", "error",
-      "-count_frames",
+      ...(countFrames ? ["-count_frames"] : []),
       "-select_streams", "v:0",
       "-show_entries", "stream=nb_read_frames,nb_frames,avg_frame_rate,r_frame_rate,duration:stream_tags=creation_time",
       "-show_entries", "format=duration:format_tags=creation_time",
@@ -271,6 +291,9 @@ function ffprobeMeta(filePath) {
     const fmt = j.format || {};
     const fps = parseFraction(stream.avg_frame_rate) || parseFraction(stream.r_frame_rate);
     let frameCount = Number(stream.nb_read_frames || stream.nb_frames || 0);
+    if (!countFrames && requireExactFrameCount && (!Number.isFinite(frameCount) || frameCount <= 0)) {
+      return ffprobeMeta(filePath, { countFrames: true });
+    }
     const duration = Number(stream.duration || fmt.duration || 0);
     const creationTime = normalizedVideoDate(
       (stream.tags && stream.tags.creation_time) || (fmt.tags && fmt.tags.creation_time)
@@ -780,8 +803,14 @@ function analyzeSwingContactAudio(filePath, duration, fps) {
 
 function analyzeEvStyleContactAudio(filePath, duration, fps) {
   const rate = 44100;
-  const audio = runCmd("ffmpeg", ["-v", "error", "-i", filePath, "-vn", "-ac", "1", "-ar", String(rate), "-f", "f32le", "pipe:1"],
-    { maxBuffer: 192 * 1024 * 1024 });
+  let audio;
+  try {
+    audio = runCmd("ffmpeg", ["-v", "error", "-i", filePath, "-vn", "-ac", "1", "-ar", String(rate), "-f", "f32le", "pipe:1"],
+      { maxBuffer: 192 * 1024 * 1024 });
+  } catch (error) {
+    if (/does not contain any stream|matches no streams/i.test(error.message)) return null;
+    throw error;
+  }
   const raw = audio.stdout || Buffer.alloc(0);
   if (raw.length < 8) return null;
   const samples = new Float32Array(Math.floor(raw.length / 4));
@@ -1066,6 +1095,17 @@ function uploadedFiles(req) {
 }
 
 function requireProcessingSpace(req, res, next) {
+  if (options.hostedWorkspace) {
+    try {
+      for (const file of uploadedFiles(req)) {
+        const metadata = ffprobeMeta(file.path, { countFrames: false });
+        if (!(metadata.duration > 0) || !(metadata.fps > 0)) throw new Error('Upload a readable video of 5 minutes or less.');
+      }
+    } catch (error) {
+      for (const file of uploadedFiles(req)) { try { fs.unlinkSync(file.path); } catch (_) {} }
+      return res.status(413).json({ error: error.message });
+    }
+  }
   try {
     if (typeof fs.statfsSync !== "function") return next();
     const files = uploadedFiles(req);
@@ -1161,8 +1201,12 @@ function buildSummaryNarrative(summary, decisionSummary, referenceSwing) {
 }
 
 ensureSchemaCompatibility();
-installUsageAuth(app, db);
-const evWorker = createEvWorker({ root: ROOT, databasePath: DB_PATH });
+if (!options.hostedWorkspace) installUsageAuth(app, db);
+app.post('/api/source', upload.single('file'), requireProcessingSpace, (req, res) => {
+  if (!options.hostedWorkspace || !req.file) return res.sendStatus(404);
+  res.json({ source_path: req.file.path, file_name: req.file.originalname });
+});
+const evWorker = createEvWorker({ root: ROOT, databasePath: DB_PATH, dataDirectory: options.dataDirectory });
 app.use(['/api/predict', '/api/track', '/api/landmarks', '/api/clip', '/api/gameframe'], evWorker.handle);
 app.get(['/ev', '/ev/', '/ev/index.html', '/index.html'], (req, res) => res.redirect('/'));
 app.get('/predictor.html', (req, res) => res.redirect(`/ev/predictor.html${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`));
@@ -1171,7 +1215,7 @@ app.use('/ev', (req, res, next) => {
   if (!['/predictor.html', '/app.js', '/styles.css'].includes(req.path) && !req.path.startsWith('/assets/')) return res.sendStatus(404);
   next();
 }, express.static(path.join(ROOT, 'ev-predictor')));
-app.use('/comparison_output/live', express.static(path.join(ROOT, 'ev-predictor', 'comparison_output', 'live')));
+app.use('/comparison_output/live', express.static(options.dataDirectory ? path.join(options.dataDirectory, 'ev', 'live') : path.join(ROOT, 'ev-predictor', 'comparison_output', 'live')));
 backfillSwingClipMetrics();
 
 app.get("/manifest.json", (req, res) => {
@@ -1533,6 +1577,37 @@ app.get("/library", (req, res) => {
     sid: sidOf(req),
     type: (req.query.type || "matchup").toString(),
   });
+});
+
+app.get('/library/ev/report', (req, res) => {
+  if (!hasTable('ev_hit_tracks')) return res.status(404).send('EV hit not found');
+  const hit = db.prepare('SELECT id, description, source_file_name, created_at, prediction_json FROM ev_hit_tracks WHERE id=?').get(Number(req.query.id));
+  if (!hit) return res.status(404).send('EV hit not found');
+  let prediction = {};
+  let unavailable = 'No prediction was saved for this hit. Open the EV editor and run matching to save a report.';
+  try { prediction = JSON.parse(hit.prediction_json || '{}') || {}; }
+  catch (_) { unavailable = 'The saved prediction could not be read. Run matching again in the EV editor.'; }
+  const fit = prediction.direction_first_match || {};
+  const candidates = Array.isArray(prediction.ev_candidates) ? prediction.ev_candidates : [];
+  const evidence = {};
+  for (const key of ['method', 'estimation_pipeline', 'evidence_policy', 'identifiability', 'primary_result', 'warnings', 'blockers', 'projected_path_evidence']) {
+    if (prediction[key] != null) evidence[key] = prediction[key];
+  }
+  for (const key of ['selection_policy', 'assumptions', 'acceptable', 'supported_ranges', 'supported_candidate_count', 'hang_time_evidence', 'rejected_observations', 'pixel_error', 'at_speed_boundary']) {
+    if (fit[key] != null) evidence[key] = fit[key];
+  }
+  const scorePolicy = candidates[0]?.score_policy || '';
+  const scoring = scorePolicy.startsWith('joint_path_and_distance')
+    ? 'Candidates must meet the video path and landing-distance tolerances. The score adds squared path error divided by its tolerance and squared distance error divided by its tolerance.'
+    : scorePolicy.startsWith('timed_pixel_error')
+      ? 'Candidates are ranked by error between projected and marked video positions. Landing distance did not contribute to this score.' : '';
+  render(req, res, 'ev_report.html', { hit, candidates: candidates.slice(0, 25), scoring,
+    hangScored: scorePolicy.endsWith('_and_hang_time'),
+    policies: Object.entries(prediction.evidence_policy || {}),
+    reason: prediction.identifiability?.reason || '',
+    diagnostic: fit.acceptable === false || fit.selection_policy?.joint_fit_found === false,
+    evidence: JSON.stringify(evidence, null, 2), unavailable,
+    back: `/library?type=ev&sid=${encodeURIComponent(sidOf(req))}` });
 });
 
 app.get("/library/data", async (req, res) => {
@@ -2119,16 +2194,16 @@ app.post("/upload/pitch", upload.single("file"), requireProcessingSpace, async (
   const origPath = req.file.path;
   const trimmedPath = tempPath(tempId);
   const start = Number(req.body.start_min || 0) * 60 + Number(req.body.start_sec || 0);
-  const sourceMeta = ffprobeMeta(origPath);
+  const sourceMeta = ffprobeMeta(origPath, { countFrames: false });
   const videoCreatedAt = sourceMeta.creationTime || normalizedVideoDate(req.body.video_created_at) || "";
   if (!Number.isFinite(start) || start < 0 || !sourceMeta.duration || start >= sourceMeta.duration + 0.05) {
     fsp.unlink(origPath).catch(() => {});
     return res.status(400).send(`That start time is too late. Choose a time before the video ends (${sourceMeta.duration.toFixed(1)} seconds).`);
   }
-  await pitchSources.retain(req.file, tempId);
+  const retainedSource = await pitchSources.retain(req.file, tempId, { move: true });
   try {
     runCmd("ffmpeg", [
-      "-y", "-ss", String(start), "-i", origPath, "-t", "5",
+      "-y", "-ss", String(start), "-i", retainedSource.path, "-t", "5",
       "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-an", trimmedPath,
     ]);
   } finally {
@@ -2152,7 +2227,7 @@ app.post("/upload/swing", upload.single("file"), requireProcessingSpace, (req, r
   const origPath = req.file.path;
   const trimmedPath = tempPath(tempId);
   const start = Number(req.body.start_min || 0) * 60 + Number(req.body.start_sec || 0);
-  const sourceMeta = ffprobeMeta(origPath);
+  const sourceMeta = ffprobeMeta(origPath, { countFrames: false });
   const videoCreatedAt = sourceMeta.creationTime || normalizedVideoDate(req.body.video_created_at) || "";
   if (!Number.isFinite(start) || start < 0 || !sourceMeta.duration || start + 5 > sourceMeta.duration + 0.05) {
     fsp.unlink(origPath).catch(() => {});
@@ -2403,7 +2478,7 @@ app.post("/multi-pitch/analyze", upload.single("file"), requireProcessingSpace, 
     const target = tempPath(tempId);
     try { await fsp.rename(req.file.path, target); }
     catch (_) { await fsp.copyFile(req.file.path, target); await fsp.unlink(req.file.path).catch(() => {}); }
-    const meta = ffprobeMeta(target);
+    const meta = ffprobeMeta(target, { countFrames: false });
     if (!meta.fps || !meta.duration) throw new Error("GameFrame could not read this video's frame rate or duration.");
     if (meta.duration > 1800) throw new Error("Multi-pitch videos are currently limited to 30 minutes.");
     await pitchSources.retain({ ...req.file, path: target }, tempId);
@@ -2420,7 +2495,7 @@ app.post("/multi-pitch/split", async (req, res, next) => {
     if (!/^[a-f0-9-]{20,}$/i.test(tempId)) return res.status(400).json({ error: "Invalid source video." });
     const source = tempPath(tempId);
     if (!fs.existsSync(source)) return res.status(404).json({ error: "The source video expired. Load it again." });
-    const meta = ffprobeMeta(source);
+    const meta = ffprobeMeta(source, { countFrames: false });
     const markers = (Array.isArray(req.body.markers) ? req.body.markers : []).map(Number)
       .filter((v) => Number.isFinite(v) && v >= 0 && v <= meta.duration).sort((a, b) => a - b).slice(0, 100);
     if (!markers.length) return res.status(400).json({ error: "Keep at least one contact marker." });
@@ -2523,7 +2598,7 @@ app.post("/multi-swing/analyze", upload.single("file"), requireProcessingSpace, 
     const target = tempPath(tempId);
     try { await fsp.rename(req.file.path, target); }
     catch (_) { await fsp.copyFile(req.file.path, target); await fsp.unlink(req.file.path).catch(() => {}); }
-    const meta = ffprobeMeta(target);
+    const meta = ffprobeMeta(target, { countFrames: false });
     if (!meta.fps || !meta.duration) throw new Error("GameFrame could not read this video's frame rate or duration.");
     if (meta.duration > 1800) throw new Error("Multi-swing videos are currently limited to 30 minutes.");
     const candidates = analyzeSwingContactAudio(target, meta.duration, meta.fps);
@@ -2542,29 +2617,28 @@ app.post("/multi-swing/prepare-tag", upload.single("file"), requireProcessingSpa
     sourcePath = tempPath(sourceId);
     try { await fsp.rename(req.file.path, sourcePath); }
     catch (_) { await fsp.copyFile(req.file.path, sourcePath); await fsp.unlink(req.file.path).catch(() => {}); }
-    const meta = ffprobeMeta(sourcePath);
+    const meta = ffprobeMeta(sourcePath, { countFrames: false, requireExactFrameCount: true });
     if (!meta.fps || !meta.duration || !meta.frameCount) {
       throw new Error("GameFrame could not read this video's frame rate or duration.");
     }
     const contact = analyzeEvStyleContactAudio(sourcePath, meta.duration, meta.fps);
-    if (!contact) throw new Error("Contact detection failed. Choose a different clip or check that the video has audio.");
-
-    const sourceContactFrame = Math.max(0, Math.min(meta.frameCount - 1, Math.round(contact.time * meta.fps)));
-    const sourceStartFrame = Math.max(0, sourceContactFrame - Math.round(2 * meta.fps));
+    const sourceContactFrame = contact ? Math.max(0, Math.min(meta.frameCount - 1, Math.round(contact.time * meta.fps))) : null;
+    const sourceStartFrame = contact ? Math.max(0, sourceContactFrame - Math.round(2 * meta.fps)) : 0;
     const maxFrames = 600;
     const sourceEndFrame = Math.min(
       meta.frameCount,
       sourceStartFrame + maxFrames,
-      sourceContactFrame + Math.round(meta.fps) + 1
+      contact ? sourceContactFrame + Math.round(meta.fps) + 1 : maxFrames
     );
     const shortId = crypto.randomUUID();
     shortPath = tempPath(shortId);
     runCmd("ffmpeg", ["-v", "error", "-y", "-i", sourcePath,
       "-vf", `trim=start_frame=${sourceStartFrame}:end_frame=${sourceEndFrame},setpts=PTS-STARTPTS`,
+      "-frames:v", String(sourceEndFrame - sourceStartFrame),
       "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
       "-pix_fmt", "yuv420p", "-movflags", "+faststart", shortPath]);
     const shortMeta = ffprobeMeta(shortPath);
-    const localContactFrame = Math.max(0, Math.min(Math.max(0, shortMeta.frameCount - 1), sourceContactFrame - sourceStartFrame));
+    const localContactFrame = contact ? Math.max(0, Math.min(Math.max(0, shortMeta.frameCount - 1), sourceContactFrame - sourceStartFrame)) : null;
     await fsp.unlink(sourcePath).catch(() => {});
     res.json({
       ok: true,
@@ -2573,8 +2647,8 @@ app.post("/multi-swing/prepare-tag", upload.single("file"), requireProcessingSpa
       frame_count: shortMeta.frameCount,
       duration: shortMeta.duration,
       preset_contact_frame: localContactFrame,
-      source_contact_seconds: contact.time,
-      confidence: contact.confidence,
+      source_contact_seconds: contact?.time ?? null,
+      confidence: contact?.confidence ?? null,
       video_created_at: meta.creationTime || normalizedVideoDate(req.body.video_created_at) || "",
     });
   } catch (err) {
@@ -2606,7 +2680,7 @@ app.post("/multi-swing/split", async (req, res, next) => {
     if (!/^[a-f0-9-]{20,}$/i.test(tempId)) return res.status(400).json({ error: "Invalid source video." });
     const source = tempPath(tempId);
     if (!fs.existsSync(source)) return res.status(404).json({ error: "The source video expired. Load it again." });
-    const meta = ffprobeMeta(source);
+    const meta = ffprobeMeta(source, { countFrames: false, requireExactFrameCount: true });
     const markers = (Array.isArray(req.body.markers) ? req.body.markers : []).map(Number)
       .filter((v) => Number.isFinite(v) && v >= 0 && v <= meta.duration).sort((a, b) => a - b).slice(0, 100);
     if (!markers.length) return res.status(400).json({ error: "Keep at least one contact marker." });
@@ -2625,6 +2699,7 @@ app.post("/multi-swing/split", async (req, res, next) => {
       const out = path.join(TMP_DIR, `gf_pending_${crypto.randomUUID()}.mp4`);
       runCmd("ffmpeg", ["-v", "error", "-y", "-i", source,
         "-vf", `trim=start_frame=${sourceStartFrame}:end_frame=${sourceEndFrame},setpts=PTS-STARTPTS`,
+        "-frames:v", String(sourceEndFrame - sourceStartFrame),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
         "-an", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out]);
       const outMeta = ffprobeMeta(out);
@@ -3666,13 +3741,26 @@ function startServer(port = Number(process.env.PORT || 8000), host) {
   return server;
 }
 
-if (require.main === module) {
-  startServer();
+return {
+  app, startServer, buildMatchupVideoServerSide,
+  closeDatabase: () => { evWorker.stop(); db.close(); },
+  stopWorker: evWorker.stop,
+};
 }
 
+let defaultApplication;
+function getDefaultApplication() {
+  if (!defaultApplication) defaultApplication = createApplication();
+  return defaultApplication;
+}
 module.exports = {
-  app,
-  startServer,
-  buildMatchupVideoServerSide,
-  closeDatabase: () => db.close(),
+  createApplication,
+  get app() { return getDefaultApplication().app; },
+  startServer: (...args) => getDefaultApplication().startServer(...args),
+  buildMatchupVideoServerSide: (...args) => getDefaultApplication().buildMatchupVideoServerSide(...args),
+  closeDatabase: () => { if (defaultApplication) defaultApplication.closeDatabase(); },
 };
+if (require.main === module) {
+  if (process.env.GAMEFRAME_HOSTED === '1') require('./hosted/server').startHostedServer();
+  else getDefaultApplication().startServer();
+}

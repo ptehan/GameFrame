@@ -84,6 +84,8 @@ test("multi-swing clips retain contact and return through the pending queue", as
     assert.equal(jpegStarts, 91);
     const helperSource = fs.readFileSync(path.join(__dirname, "../static/js/tag-frames.js"), "utf8");
     const helper = vm.runInNewContext(`${helperSource}\nloadExactTagFrames`, {
+      window: {},
+      setTimeout: () => 0,
       fetch: (url) => fetch(`${base}${url}`),
       Blob,
       Uint8Array,

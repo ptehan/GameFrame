@@ -24,8 +24,9 @@ from source_clip_runtime import prepare_source_clip
 
 ROOT = Path(__file__).resolve().parent
 GAMEFRAME_DB = Path(os.environ.get("DB_PATH") or (ROOT.parent / "app.db")).resolve()
-CLIP_DIR = ROOT / "clips"
-LIVE_DIR = ROOT / "comparison_output" / "live"
+EV_DATA = Path(os.environ["GAMEFRAME_EV_DATA"]).resolve() if os.environ.get("GAMEFRAME_EV_DATA") else None
+CLIP_DIR = EV_DATA / "clips" if EV_DATA else ROOT / "clips"
+LIVE_DIR = EV_DATA / "live" if EV_DATA else ROOT / "comparison_output" / "live"
 LOCAL_PYTHON = ROOT.parent / ".venv-ev" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 EV_PYTHON = os.environ.get("GAMEFRAME_EV_PYTHON") or str(LOCAL_PYTHON if LOCAL_PYTHON.exists() else Path(sys.executable))
 JOBS: dict[str, dict] = {}
@@ -329,8 +330,12 @@ def locate_video(file_name: str | None, explicit_path: str | None = None) -> Pat
         )
     for candidate in candidates:
         try:
-            if candidate.exists() and candidate.is_file():
-                return candidate.resolve()
+            resolved = candidate.resolve()
+            workspace = os.environ.get("GAMEFRAME_WORKSPACE")
+            if workspace and not resolved.is_relative_to(Path(workspace).resolve()):
+                continue
+            if resolved.exists() and resolved.is_file():
+                return resolved
         except OSError:
             continue
     return None
@@ -772,7 +777,10 @@ class ClipServerHandler(SimpleHTTPRequestHandler):
         job_id = uuid.uuid4().hex
         with JOBS_LOCK:
             JOBS[job_id] = {"status": "queued", "progress": 0, "message": "queued", "created_at": time.time()}
-        threading.Thread(target=run_clip_job, args=(job_id, payload), daemon=True).start()
+        if os.environ.get('GAMEFRAME_WORKSPACE'):
+            run_clip_job(job_id, payload)
+        else:
+            threading.Thread(target=run_clip_job, args=(job_id, payload), daemon=True).start()
         json_response(self, 202, {"job_id": job_id})
 
     def handle_predict(self) -> None:
@@ -983,7 +991,7 @@ class ClipServerHandler(SimpleHTTPRequestHandler):
         if blocker:
             json_response(self, 409, {'error': blocker, 'review_required': True})
             return
-        if payload.get('defer_video_render') is True:
+        if payload.get('defer_video_render') is True and not os.environ.get('GAMEFRAME_WORKSPACE'):
             from background_ev import save_measurement
             save_measurement(self,payload,sys.modules[__name__])
             return
@@ -1081,7 +1089,7 @@ class ClipServerHandler(SimpleHTTPRequestHandler):
                 copy_arguments = (cur.lastrowid,source,contact_time_s,hitter_id,team_id,description,metadata,payload.get('create_pitch') is True)
                 copy_job_id = None
                 warmed = prepare_swing_media(source, contact_time_s)
-                if payload.get('defer_copy_preparation') is True and (not warmed.done() or payload.get('create_pitch') is True):
+                if not os.environ.get('GAMEFRAME_WORKSPACE') and payload.get('defer_copy_preparation') is True and (not warmed.done() or payload.get('create_pitch') is True):
                     copy_job_id = queue_related_copies(*copy_arguments)
                     copies = dict(pending_swing_id=None,pending_pitch_id=None,swing_warning=None,pitch_warning=None)
                 else:

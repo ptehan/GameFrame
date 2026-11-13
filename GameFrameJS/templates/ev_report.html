@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.ev-report {max-width:1100px;margin:auto;padding:20px} .ev-report section {margin:24px 0}
+.ev-report table {width:100%;border-collapse:collapse} .ev-report th,.ev-report td {padding:10px;text-align:left;border-bottom:1px solid #777}
+.ev-report .scroll {overflow:auto} .ev-report pre {white-space:pre-wrap;overflow-wrap:anywhere}
+.ev-report .notice {padding:14px;border:1px solid #b39547;border-radius:8px}
+</style>
+<article class="ev-report">
+<a href="{{ back }}">Back to EV library</a>
+<h1>EV matching report</h1>
+<p>{{ hit.description or hit.source_file_name or 'Saved EV hit' }} · Hit {{ hit.id }} · {{ hit.created_at }}</p>
+<p>This report explains the prediction saved with this hit. Values are estimates from matching simulated flights to the saved evidence.</p>
+{% if not candidates.length %}<p class="notice">{{ unavailable }}</p>{% else %}
+{% if diagnostic %}<p class="notice">The closest candidate did not pass all matching requirements. Treat it as a diagnostic comparison, rather than a supported measurement.</p>{% endif %}
+<section><h2>Why this flight was chosen</h2>
+<p>The first row is the match selected by the saved matcher. The rows below preserve its ranking; smaller scores indicate a closer fit under that matcher's scoring rules. Scores are not confidence percentages.</p>
+{% if scoring %}<p>{{ scoring }}{% if hangScored %} The score also includes squared hang-time error divided by its timing tolerance; path error is normalized by its tolerance too.{% endif %}</p>{% endif %}
+{% for name, explanation in policies %}<p><strong>{{ name | replace('_', ' ') }}:</strong> {{ explanation }}</p>{% endfor %}
+{% if not policies.length %}<p>This older prediction did not save a plain-language selection policy. The recorded ranking and available fit measurements are shown below.</p>{% endif %}
+{% if reason %}<p><strong>Uncertainty:</strong> {{ reason }}</p>{% endif %}
+</section>
+<section><h2>Selected match and closest ranked alternatives</h2>
+<p>Up to 25 saved candidates are shown. A dash means that measurement was not saved. Path error measures how far the projected ball positions are from the marked video positions, in pixels.</p>
+<div class="scroll"><table><thead><tr><th>Rank / flight</th><th>EV (mph)</th><th>Launch (°)</th><th>Carry (ft)</th><th>Hang (s)</th><th>Score</th><th>Path error (px)</th><th>Distance error (ft)</th></tr></thead><tbody>
+{% for c in candidates %}<tr><td>{{ loop.index }}{% if loop.first %} · Selected{% endif %}<br>{{ c.hit_id or '—' }}</td><td>{{ c.exit_velocity_mph | default('—', true) }}</td><td>{{ c.launch_angle_deg | default('—') }}</td><td>{{ c.distance_ft | default('—') }}</td><td>{{ c.hang_time_s | default('—') }}</td><td>{{ c.score | default('—') }}</td><td>{{ c.projected_path_rmse_px | default(c.pixel_rmse) | default('—') }}</td><td>{{ c.distance_error_ft | default('—') }}</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endif %}
+<section><h2>Saved matching evidence</h2><p>Includes available tolerances, supported ranges, rejected marks, and point-by-point errors. Nearby matches can remain plausible when the evidence does not separate them clearly.</p><pre>{{ evidence }}</pre></section>
+</article>
+{% endblock %}

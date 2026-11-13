@@ -40,3 +40,21 @@ ev-predictor/analysis_frames/*
 !ev-predictor/assets/*.png
 /.tools/narration/
 /source-videos/
+
+# Local backup archives and one-off video/debug production tools.
+/git-backup/
+/scripts/capture-*
+/scripts/debug-*
+/scripts/render-*
+/scripts/build-technical-refined.cjs
+/scripts/build-gameframe-technical-video.cjs
+/scripts/build-gameframe-videos.cjs
+/scripts/build-new-approach-videos.cjs
+/scripts/build-timing-errors-video.cjs
+/scripts/build-why-benefits-first.cjs
+/scripts/finish-four-workflow-plan.cjs
+/scripts/format-safe-captions.py
+/scripts/pad-caption-area.cjs
+/scripts/plan-four-*
+/scripts/technical-database-visuals.py
+/test/render-cortland-walkthrough.test.cjs

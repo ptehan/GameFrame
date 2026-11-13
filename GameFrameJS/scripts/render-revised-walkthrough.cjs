@@ -1,4 +1,0 @@
-const {spawn}=require('node:child_process');
-const script='scripts/render-continuous-instructions.cjs',plan='demo-output/instruction-continuous/revised-walkthrough-edit-plan.json',kind='walkthrough-revised';
-const run=env=>new Promise((resolve,reject)=>{const p=spawn(process.execPath,[script,plan,kind],{windowsHide:true,stdio:'inherit',env:{...process.env,INSTRUCTION_NARRATION_ROOT:'demo-output/instruction-continuous/narration-microsoft',...env}});p.on('error',reject);p.on('close',code=>code?reject(Error('Renderer exited '+code)):resolve());});
-(async()=>{await Promise.all([run({INSTRUCTION_CHUNK_ONLY:'1',INSTRUCTION_REDO_SCENES:'0,2,4,6,8,10,12',INSTRUCTION_ENCODER_THREADS:'1'}),run({INSTRUCTION_CHUNK_ONLY:'1',INSTRUCTION_REDO_SCENES:'1,3,5,7,9,11,13',INSTRUCTION_ENCODER_THREADS:'1'})]);await run({INSTRUCTION_CHUNK_ONLY:'0',INSTRUCTION_REDO_SCENES:'-1',INSTRUCTION_ENCODER_THREADS:'2'});})().catch(e=>{console.error(e);process.exitCode=1});

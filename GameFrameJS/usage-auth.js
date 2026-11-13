@@ -287,7 +287,7 @@ async function cloudRequest(path, options = {}) {
   return data;
 }
 
-function installUsageAuth(app, db) {
+function installUsageAuth(app, db, options = {}) {
   validateProductionConfiguration();
   ensureUsageSchema(db);
 
@@ -345,6 +345,10 @@ function installUsageAuth(app, db) {
       return res.status(401).json({ error: "That code is invalid or expired." });
     }
 
+    if (options.allowLogin) {
+      const denied = options.allowLogin(normalized);
+      if (denied) return res.status(403).json({ error: denied });
+    }
     const transaction = db.transaction(() => {
       db.prepare("UPDATE auth_codes SET consumed_at=datetime('now') WHERE id=?").run(record.id);
       let account = db.prepare("SELECT * FROM auth_accounts WHERE normalized_email=?").get(normalized);
@@ -373,6 +377,7 @@ function installUsageAuth(app, db) {
 
     const result = transaction();
     const entitlement = currentEntitlement(db, result.account.id, deviceHash);
+    if (options.onVerified) return options.onVerified(req, res, result);
     res.json({ access_token: result.token, account: { id: result.account.id, email }, entitlement });
   });
 
@@ -518,6 +523,8 @@ function installUsageAuth(app, db) {
       account: { id: account.id, email: account.email },
     });
   });
+
+  if (options.apiOnly) return;
 
   app.get("/auth/login", (req, res) => {
     if (!DESKTOP_MODE) return res.redirect(302, "/");
@@ -689,6 +696,7 @@ async function completeDesktopMatchup(db, usageId, success, processingMs, errorC
 
 module.exports = {
   installUsageAuth,
+  ensureUsageSchema, authenticatedSession, normalizeEmail,
   authorizeDesktopMatchup,
   completeDesktopMatchup,
 };

@@ -644,6 +644,7 @@ function buildGrid(items) {
                 </div>` : `
                 <div class="actions">
                     <a href="${modalSafeUrl(c.play)}" ${c.type === 'ev' && c.video_ready !== false ? `data-ev-play="${Number(c.id)}"` : ''}><button type="button">Play</button></a>
+                    ${c.type === 'ev' ? `<a href="${modalSafeUrl(`/library/ev/report?id=${Number(c.id)}&sid=${encodeURIComponent(sid)}`)}"><button type="button">Matching report</button></a>` : ''}
                     ${c.type === 'ev' && c.finish_swing ? `<a href="${modalSafeUrl(c.finish_swing)}" data-finish-ev-swing><button type="button">Finish matchup swing</button></a>` : ''}
                     ${c.type === 'ev' && c.matchup_swing ? `<a href="${modalSafeUrl(c.matchup_swing)}" data-library-matchup><button type="button">Create Matchup</button></a>` : ''}
                     ${c.type === 'ev' && c.open_ev ? `<a href="${modalSafeUrl(c.open_ev + '&view=map')}" data-ev-map><button type="button">Compare on map</button></a>` : ''}

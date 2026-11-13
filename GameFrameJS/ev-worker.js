@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const readline = require('node:readline');
 const { spawn, spawnSync } = require('node:child_process');
 
-function createEvWorker({ root, databasePath, spawnProcess = spawn }) {
+function createEvWorker({ root, databasePath, dataDirectory, spawnProcess = spawn }) {
   const processorRoot = root.replace(/app\.asar(?=[\\/]|$)/, 'app.asar.unpacked');
   let child = null;
   const pending = new Map();
@@ -35,7 +35,7 @@ function createEvWorker({ root, databasePath, spawnProcess = spawn }) {
     const python = process.env.GAMEFRAME_EV_PYTHON || (fs.existsSync(localPython) ? localPython : process.env.PYTHON || 'python');
     const worker = spawnProcess(python, ['-u', path.join(processorRoot, 'ev-predictor', 'worker.py')], {
       cwd: path.join(processorRoot, 'ev-predictor'),
-      env: { ...process.env, DB_PATH: databasePath, PYTHONIOENCODING: 'utf-8',
+      env: { ...process.env, DB_PATH: databasePath, ...(dataDirectory ? { GAMEFRAME_WORKSPACE: dataDirectory, GAMEFRAME_EV_DATA: path.join(dataDirectory, 'ev') } : {}), PYTHONIOENCODING: 'utf-8',
         FFMPEG_PATH: process.env.FFMPEG_PATH || require('ffmpeg-static').replace(/app\.asar(?=[\\/]|$)/,'app.asar.unpacked'),
         FFPROBE_PATH: process.env.FFPROBE_PATH || require('ffprobe-static').path.replace(/app\.asar(?=[\\/]|$)/,'app.asar.unpacked') },
       windowsHide: true, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'],

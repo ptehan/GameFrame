@@ -315,8 +315,9 @@ document.getElementById('analyze-form').onsubmit=async e=>{
     analysis.hitter_id=hitter.value;
     analysis.swing_type=document.getElementById('swing-type').value;
     analysis.description='Swing';
-    status.textContent=`Contact detected (${j.confidence || 'OK'}). Opening swing start, decision, and contact tagging...`;
-    openTagger(j.temp_id, Number(j.preset_contact_frame || 0), Number(j.fps || 0), j.video_created_at || '');
+    const hasContact=j.preset_contact_frame!=null;
+    status.textContent=hasContact ? `Contact detected (${j.confidence || 'OK'}). Opening swing timing...` : 'No audible contact found. Choose the contact frame manually in the swing editor.';
+    openTagger(j.temp_id, hasContact ? Number(j.preset_contact_frame) : null, Number(j.fps || 0), j.video_created_at || '');
   }catch(err){
     status.textContent=err.message||'Analysis failed.';
   }
@@ -333,7 +334,7 @@ function openTagger(tempId, contactFrame, fpsValue, videoCreatedAt){
     swing_type:document.getElementById('swing-type').value||'',
     video_created_at:videoCreatedAt||'',
     fps:String(fpsValue||0),
-    preset_contact_frame:String(contactFrame),
+    preset_contact_frame:contactFrame==null?'':String(contactFrame),
     return_url:matchupReturnUrl,
     embedded:'1'
   });
