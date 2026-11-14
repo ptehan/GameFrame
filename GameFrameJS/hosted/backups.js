@@ -100,4 +100,4 @@ async function nightly(source, backupRoot, remote, runRclone = rclone) {
   }
   return target;
 }
-module.exports = { snapshot, verify, nightly, within };
+module.exports = { snapshot, verify, nightly, within, rclone };

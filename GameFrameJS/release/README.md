@@ -248,3 +248,16 @@ Missing evidence keeps registration invitation-only and Checkout disabled even i
 the flag is accidentally enabled. The gateway caps invited registration at 10
 accounts and public registration at 25. Existing customers can still sign in.
 Evidence files should identify the tested revision, environment and reviewer.
+# Backblaze B2 deployment settings
+
+The GameFrameBaseball bucket is private and encrypted in us-east-005. Use a dedicated, bucket-restricted application key, not the master key. Configure these only in Render's secret environment settings:
+
+```text
+RCLONE_CONFIG_GAMEFRAME_TYPE=b2
+RCLONE_CONFIG_GAMEFRAME_ACCOUNT=<restricted application key ID>
+RCLONE_CONFIG_GAMEFRAME_KEY=<restricted application key>
+GAMEFRAME_SYNTHETIC_REMOTE=gameframe:GameFrameBaseball/assets/hittrax.sqlite
+BACKUP_REMOTE=gameframe:GameFrameBaseball/gameframe-backups
+```
+
+Set GAMEFRAME_SYNTHETIC_SHA256 to the SHA-256 of the approved uploaded database. The entrypoint downloads the private object using rclone, checks size and checksum, and atomically installs it on the persistent disk. An already verified local database is reused. The HTTPS URL setting is an alternative; B2 deployment does not require a public object or expiring signed URL. Bucket creation alone does not establish a working backup: demonstrate a transfer, verification, and restore before passing the operations gate.

@@ -38,6 +38,14 @@ services:
         sync: false
       - key: GAMEFRAME_SYNTHETIC_URL
         sync: false
+      - key: GAMEFRAME_SYNTHETIC_REMOTE
+        sync: false
+      - key: RCLONE_CONFIG_GAMEFRAME_TYPE
+        value: b2
+      - key: RCLONE_CONFIG_GAMEFRAME_ACCOUNT
+        sync: false
+      - key: RCLONE_CONFIG_GAMEFRAME_KEY
+        sync: false
       - key: GAMEFRAME_SYNTHETIC_DB
         value: /var/data/assets/hittrax.sqlite
       - key: GAMEFRAME_DEMO_DB
