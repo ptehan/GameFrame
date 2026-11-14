@@ -5,12 +5,13 @@ const Database = require('better-sqlite3');
 const { spawn } = require('node:child_process');
 async function rclone(args) {
   return new Promise((resolve, reject) => {
-    const child = spawn('rclone', args, { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
-    let stdout = '';
+    const child = spawn('rclone', args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '';
     const timeout = setTimeout(() => child.kill(), 1800000); timeout.unref();
     child.stdout.on('data', data => { if (stdout.length < 2 * 1024 ** 2) stdout += data.toString(); });
+    child.stderr.on('data', data => { if (stderr.length < 8192) stderr += data.toString(); });
     child.once('error', error => { clearTimeout(timeout); reject(error); });
-    child.once('close', status => { clearTimeout(timeout); resolve({ status, stdout }); });
+    child.once('close', (status, signal) => { clearTimeout(timeout); resolve({ status, stdout, stderr, signal }); });
   });
 }
 

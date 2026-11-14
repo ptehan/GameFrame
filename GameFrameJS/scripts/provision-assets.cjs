@@ -4,6 +4,13 @@ const crypto = require('node:crypto');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 async function hash(file) { const digest = crypto.createHash('sha256'); for await (const chunk of fs.createReadStream(file)) digest.update(chunk); return digest.digest('hex'); }
+function transferFailure(result, env) {
+  let detail = String(result.stderr || '').replace(/https?:\/\/[^\s]+/g, '[remote URL]');
+  for (const [name, value] of Object.entries(env)) {
+    if (value && /(?:KEY|SECRET|TOKEN|PASSWORD)/i.test(name)) detail = detail.split(value).join('[redacted]');
+  }
+  return `Private flight database transfer failed (exit ${result.status}, signal ${result.signal || 'none'}): ${detail.slice(-800)}`;
+}
 async function provision(options = {}) {
   const env = options.env || process.env;
   const file = env.GAMEFRAME_SYNTHETIC_DB, expected = env.GAMEFRAME_SYNTHETIC_SHA256;
@@ -23,8 +30,10 @@ async function provision(options = {}) {
       const size = JSON.parse(metadata.stdout).Size;
       if (!Number.isSafeInteger(size) || size <= 0 || size > 2 * 1024 ** 3) throw new Error('Private flight database has an invalid size');
       fs.closeSync(fs.openSync(partial, 'wx', 0o600));
-      const copied = await run(['copyto', remote, partial, '--max-size', '2G', '--retries', '2', '--stats', '0', '--quiet']);
-      if (copied.status !== 0 || fs.statSync(partial).size !== size) throw new Error('Private flight database transfer failed');
+      const copied = await run(['copyto', remote, partial, '--max-size', '2G', '--retries', '2', '--buffer-size', '4M', '--multi-thread-streams', '0', '--stats', '0', '--quiet']);
+      if (copied.status !== 0) throw new Error(transferFailure(copied, env));
+      const received = fs.statSync(partial).size;
+      if (received !== size) throw new Error(`Private flight database transfer failed (expected ${size} bytes, received ${received})`);
     } else {
     const response = await fetch(url, { signal: AbortSignal.timeout(600000), redirect: 'error' });
     if (!response.ok || !response.body) throw new Error('Private flight database download failed');

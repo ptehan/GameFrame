@@ -41,4 +41,13 @@ test('private asset failures leave no database or partial downloads', async t =>
     assert.deepEqual(fs.readdirSync(root), []);
   }
   await assert.rejects(provision({ env: { ...env, GAMEFRAME_SYNTHETIC_REMOTE: 'gameframe:bucket/../asset' } }), /Invalid private/);
+  const secret = 'private-key-for-diagnostic-test';
+  await assert.rejects(provision({ env: { ...env, RCLONE_CONFIG_GAMEFRAME_KEY: secret }, runRclone: async args => {
+    if (args[0] === 'lsjson') return { status: 0, stdout: JSON.stringify({ Size: 3 }) };
+    return { status: 1, stderr: `Failed https://example.invalid/file?authorization=secret-token key=${secret}` };
+  } }), error => {
+    assert.match(error.message, /exit 1/);
+    assert.doesNotMatch(error.message, /secret-token|private-key-for-diagnostic-test|example.invalid/);
+    return true;
+  });
 });
