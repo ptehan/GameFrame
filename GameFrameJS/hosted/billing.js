@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('node:crypto');
 
 function installBilling(app, { db, stripe, origin, priceId, webhookSecret, requireSession, csrf, salesOpen }) {
   async function synchronize(subscriptionId) {
@@ -7,6 +8,7 @@ function installBilling(app, { db, stripe, origin, priceId, webhookSecret, requi
     const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
     const row = db.prepare('SELECT * FROM hosted_billing WHERE customer_id=?').get(customer);
     if (!row) return;
+    if (Number(sub.created || 0) < row.subscription_created) return;
     const item = sub.items.data.find(item => item.price.id === priceId);
     if (!item) throw new Error('Unexpected subscription price');
     const invoice = sub.latest_invoice;
@@ -16,10 +18,10 @@ function installBilling(app, { db, stripe, origin, priceId, webhookSecret, requi
       end: item.current_period_end || sub.current_period_end };
     // Only a paid invoice extends access. A past_due renewal cannot grant time.
     const paid = invoice && typeof invoice === 'object' && invoice.status === 'paid' && Number.isFinite(period.end);
-    db.prepare(`UPDATE hosted_billing SET subscription_id=?,status=?,
-      period_start=CASE WHEN ? THEN ? ELSE period_start END,
+    db.prepare(`UPDATE hosted_billing SET subscription_id=?,status=?,subscription_created=?,
+      period_start=CASE WHEN ? AND ?>=paid_until THEN ? ELSE period_start END,
       paid_until=CASE WHEN ? THEN MAX(paid_until,?) ELSE paid_until END,updated_at=? WHERE account_id=?`)
-      .run(sub.id, sub.status, Number(Boolean(paid)), period.start || 0, Number(Boolean(paid)), period.end || 0,
+      .run(sub.id, sub.status, sub.created || 0, Number(Boolean(paid)), period.end || 0, period.start || 0, Number(Boolean(paid)), period.end || 0,
         new Date().toISOString(), row.account_id);
   }
   // Must be installed before JSON parsing so signature verification sees exact bytes.
@@ -60,11 +62,25 @@ function installBilling(app, { db, stripe, origin, priceId, webhookSecret, requi
       if (price.unit_amount !== 900 || price.currency !== 'usd' || price.recurring?.interval !== 'month' || price.recurring?.interval_count !== 1) {
         throw new Error('Stripe price must be USD 9 per month');
       }
+      const previous = db.prepare('SELECT * FROM hosted_checkout WHERE account_id=?').get(account.account_id);
+      if (previous?.session_id) {
+        const session = await stripe.checkout.sessions.retrieve(previous.session_id);
+        if (session.status === 'open') return res.json({ url: session.url });
+      }
+      const requestKey = db.transaction(() => {
+        const current = db.prepare('SELECT * FROM hosted_checkout WHERE account_id=?').get(account.account_id);
+        if (!current) db.prepare('INSERT INTO hosted_checkout VALUES(?,?,NULL)').run(account.account_id, crypto.randomUUID());
+        else if (previous?.session_id && current.session_id === previous.session_id) {
+          db.prepare('UPDATE hosted_checkout SET request_key=?,session_id=NULL WHERE account_id=?').run(crypto.randomUUID(), account.account_id);
+        }
+        return db.prepare('SELECT request_key FROM hosted_checkout WHERE account_id=?').get(account.account_id).request_key;
+      }).immediate();
       const session = await stripe.checkout.sessions.create({ customer: billing.customer_id, mode: 'subscription',
         line_items: [{ price: priceId, quantity: 1 }], client_reference_id: account.account_id,
         success_url: `${origin}/account?checkout=returned`, cancel_url: `${origin}/account`,
         subscription_data: { metadata: { account_id: account.account_id } } },
-      { idempotencyKey: `checkout:${account.account_id}:${Math.floor(Date.now() / 1800000)}` });
+      { idempotencyKey: `checkout:${requestKey}` });
+      db.prepare('UPDATE hosted_checkout SET session_id=? WHERE account_id=? AND request_key=?').run(session.id, account.account_id, requestKey);
       res.json({ url: session.url });
     } catch (error) { next(error); }
   });
@@ -76,6 +92,9 @@ function installBilling(app, { db, stripe, origin, priceId, webhookSecret, requi
       res.json({ url: session.url });
     } catch (error) { next(error); }
   });
-  return { synchronize };
+  return { synchronize, async reconcile() {
+    if (!stripe) return;
+    for (const row of db.prepare('SELECT subscription_id FROM hosted_billing WHERE subscription_id IS NOT NULL').all()) await synchronize(row.subscription_id);
+  } };
 }
 module.exports = { installBilling };

@@ -1,0 +1,21 @@
+{
+  "timezone": "America/New_York",
+  "invited_beta": "2026-12-07",
+  "go_no_go": "2026-12-11",
+  "public_beta": "2026-12-14",
+  "price_usd_monthly": 9,
+  "monthly_operating_ceiling_usd": 100,
+  "milestones": [
+    { "start": "2026-11-12", "end": "2026-11-13", "title": "Inventory, backup, baseline", "owner": "Codex", "status": "local inventory and backup complete; workstation benchmark complete", "user_action": "Confirm domain, support email, and service-account access" },
+    { "start": "2026-11-16", "end": "2026-11-18", "title": "Clean database and approved demos", "owner": "Codex + Patrick", "status": "starter and permission-checked seed tooling implemented; footage approval pending", "user_action": "Approve app and marketing permissions; supply a third swing" },
+    { "start": "2026-11-19", "end": "2026-11-20", "title": "Hosted authentication and private libraries", "owner": "Codex", "status": "implemented and tested locally; production review pending", "user_action": "Test sign-in through the verified business email domain" },
+    { "start": "2026-11-23", "end": "2026-11-25", "title": "Billing, limits, processing lane", "owner": "Codex", "status": "local implementation and mocked Stripe tests complete; live Stripe and exhaustive storage/output tests pending", "user_action": "Complete Stripe business verification; configure the USD 9/month price" },
+    { "start": "2026-11-26", "end": "2026-11-29", "title": "Thanksgiving contingency", "owner": "Both", "status": "reserved", "user_action": "No required checkpoint" },
+    { "start": "2026-11-30", "end": "2026-12-02", "title": "Staging, recovery, website", "owner": "Codex + Patrick", "status": "deployment configuration, restore tooling and WordPress drafts prepared; external services pending", "user_action": "Connect domain, configure backup destination, review draft website" },
+    { "start": "2026-12-03", "end": "2026-12-04", "title": "Release rehearsal", "owner": "Both", "status": "pending staging", "user_action": "Approve live purchase/cancellation, footage and public copy" },
+    { "start": "2026-12-07", "end": "2026-12-11", "title": "Ten-person invited beta", "owner": "Both", "status": "pending release gates", "user_action": "Recruit testers and review daily feedback" },
+    { "start": "2026-12-11", "end": "2026-12-11", "title": "Go/no-go review", "owner": "Patrick", "status": "pending evidence", "user_action": "Review all ten gates and approve publication" },
+    { "start": "2026-12-14", "end": "2026-12-14", "title": "Capped public paid beta", "owner": "Both", "status": "closed until all gates pass", "user_action": "Publish approved announcements and open registration" },
+    { "start": "2026-12-15", "end": "2026-12-18", "title": "Stabilization", "owner": "Both", "status": "scheduled", "user_action": "Daily support and cost review" }
+  ]
+}

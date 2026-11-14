@@ -1,0 +1,32 @@
+{
+  "review_date": "2026-11-13",
+  "flight_database": {
+    "local_asset": "ev-predictor/data/hittrax_from_video.sqlite",
+    "manifest": "ev-predictor/data/hittrax_from_video.manifest.json",
+    "observed_generation": "uniform-grid-v1 synthetic trajectories",
+    "synthetic_hits": 24518,
+    "trajectory_points": 2738793,
+    "note": "The filename alone does not establish that this contains commercial HitTrax or OpenBiomechanics data. The inspected manifest describes generated simulations."
+  },
+  "flight_engine": {
+    "local_source": "ev-predictor/synthetic/baseball_flight.py",
+    "header_reports": "Python port of Baseball Flight Simulator hit_class_module.js trajectory logic",
+    "reference": "https://www.baseballflightsim.com/",
+    "permission_status": "not verified in this release review",
+    "required_review": "Confirm any existing reuse permission and attribution, and distinguish independently implemented published equations from ported third-party code before treating the engine as proprietary commercial code. This register does not determine its legal status."
+  },
+  "footage_research": [
+    {
+      "source": "OpenBiomechanics",
+      "url": "https://www.openbiomechanics.org/",
+      "data_license": "CC BY-NC-SA 4.0 with additional restrictions described by the owner",
+      "release_decision": "not selected for the paid app without separate permission",
+      "note": "The owner's site offers separate commercial licensing; public research access is not a commercial footage grant."
+    },
+    {
+      "source": "Public Google Drive collections",
+      "release_decision": "no commercially reusable collection verified",
+      "note": "A downloadable folder must have explicit footage reuse/distribution permission before it enters the default library."
+    }
+  ]
+}

@@ -28,13 +28,13 @@ test('library offers speed export only when pitch speed has been saved', () => {
   assert.doesNotMatch(grid.innerHTML,/Edit Pitch Speed|Set Pitch Speed|Export with Pitch Speed/);
 });
 
-test('manual preview has no AI, collage, or clipboard workflow', () => {
+test('manual preview uses an exact half-frame timeline without AI, collage, or clipboard workflow', () => {
   assert.doesNotMatch(template,/Copy prompt|Copy image|Analyze Pitch|OPENAI_API_KEY|pitch-vision\/analyze|clipboard|collage/i);
   assert.match(template,/\/api\/pitch-release\/preview/);
   assert.match(template,/Previous Frame/);
   assert.match(template,/Next Frame/);
   assert.match(template,/Release frame or halfway gap/);
-  assert.doesNotMatch(template,/type="range"/);
+  assert.match(template,/<input id="pv-timeline"[^>]*type="range"[^>]*step="0\.5"/);
   assert.doesNotMatch(template,/form\.requestSubmit\(\)/);
   for (const id of ['pv-status','pv-pick-release','pv-speed','pv-save']) {
     assert.ok(template.indexOf('id="'+id+'"') < template.indexOf('id="pv-video"'));

@@ -1,0 +1,141 @@
+{
+  "pages": [
+    {
+      "title": "GameFrame",
+      "slug": "home",
+      "body": "<h1>See the timing. Understand the result.</h1><p>GameFrame helps players and coaches study baseball video: mark a swing, compare it with a pitch, and review how a batted-ball flight matches the evidence.</p><p>Start with an example or upload your own footage. Save the result and return to it as your training progresses.</p><p><a href='{{APP_ORIGIN}}'>Request access to the GameFrame beta</a></p><h2>Four ways to study your video</h2><p>Review pitches, tag swings, create timing matchups, and estimate batted-ball flight. EV reports explain the selected simulated flight and the closest saved alternatives.</p>"
+    },
+    {
+      "title": "How it works",
+      "slug": "how-it-works",
+      "body": "<h1>From footage to something you can study</h1><ol><li>Upload a readable video of five minutes or less.</li><li>Mark the events the workflow asks for, including contact and swing timing.</li><li>Check the marks before running an analysis or rendering a matchup.</li><li>Save the result in your private library.</li></ol><p>A matchup aligns a saved pitch and swing at contact so you can study the timing. An EV estimate compares your marks and field geometry with simulated flights. The matching report explains what supported the estimate and where nearby candidates remain plausible.</p>"
+    },
+    {
+      "title": "Examples",
+      "slug": "examples",
+      "body": "<h1>Try an example first</h1><p>The beta includes approved demonstration clips showing pitch review, swing timing, matchups, and EV matching. Open Account in GameFrame to preview available demos and add private working copies to an empty library.</p><p>Editing your copy does not change the shared examples or anyone else's library.</p><p>Example footage will be published after its owner permissions and visible overlays have been reviewed.</p>"
+    },
+    {
+      "title": "Pricing",
+      "slug": "pricing",
+      "body": "<h1>Founding beta: $9 per month</h1><p>Includes 30 processing credits per billing month and 1 GB of stored workspace data. One completed EV analysis or matchup render uses one credit. Successful reruns count. System failures return their reserved credit. Playback, manual tagging, reports, and downloads do not use credits.</p><p>Credits do not roll over. Maximum upload: 250 MB and five minutes. One job per account may be queued or running at a time. New accounts receive a 14-day trial with three credits and 250 MB of workspace storage, without a card.</p><p>The subscription renews monthly until canceled. Manage payment details and cancellation through Account. Cancellation keeps access through the paid period. Paid registration remains closed until release checks pass.</p>"
+    },
+    {
+      "title": "Blog",
+      "slug": "blog",
+      "body": "<h1>GameFrame notes</h1><p>Practical guides to filming, timing, and interpreting results. Read the latest posts below.</p>"
+    },
+    {
+      "title": "Contact",
+      "slug": "contact",
+      "body": "<h1>Contact GameFrame</h1><p>Email <a href='mailto:{{SUPPORT_EMAIL}}'>{{SUPPORT_EMAIL}}</a> with the workflow you were using, your device/browser, and the approximate time the issue occurred. Never send passwords or payment-card details.</p><p>For account deletion, use Account in GameFrame or contact support from the email associated with your account. For billing, start with Manage billing in Account.</p>"
+    },
+    {
+      "title": "Privacy",
+      "slug": "privacy",
+      "review_required": true,
+      "body": "<h1>Privacy notice — draft for owner review</h1><p>GameFrame stores your email, sign-in records, subscription identifiers, uploaded footage, marks, saved results, and usage records to provide the service. Customer libraries are separated into private workspaces.</p><p>Render hosts application processing and storage. Resend delivers account and operational email. Stripe processes payments; card details are entered through Stripe-hosted pages. The public website is hosted by WordPress.com. Off-service backups are stored with {{BACKUP_PROVIDER}}.</p><p>Field-map address searches use OpenStreetMap Nominatim, and aerial map tiles use Esri ArcGIS. Map providers receive the searches and map locations requested by your browser.</p><p>Processing access ends when your trial or paid period ends. Saved data remains available for download for 30 days after access expires. A deletion notice is sent before automatic removal, and removal is delayed until at least 30 days after notice. Explicit account-deletion requests disable sign-in and schedule footage removal after 30 days. Backup copies may remain for the seven-day backup retention window after live deletion. Necessary billing records may remain with payment providers.</p><p>Contact {{SUPPORT_EMAIL}} for access, correction, or deletion requests. This draft must be checked against the actual provider configuration before publication.</p>"
+    },
+    {
+      "title": "Terms",
+      "slug": "terms",
+      "review_required": true,
+      "body": "<h1>GameFrame beta terms — draft for owner review</h1><p>GameFrame is a baseball video-study tool. Its batted-ball metrics are estimates derived from the footage, marks, calibration, and flight model. Review matching uncertainty before relying on a result.</p><p>Upload footage only when you have permission to process and store it. Keep your sign-in codes private. Do not attempt to access another customer's library, bypass limits, or interfere with the service.</p><p>The founding subscription costs $9 per month and renews until canceled. The included allowances and restrictions are stated on Pricing and Account. Cancel through the billing portal. Access continues through the paid period; no additional processing is available after access expires. Contact support for billing disputes or refund requests.</p><p>Beta features and availability may change. Contact {{SUPPORT_EMAIL}} for support. Owner review of business identity, applicable terms, refunds, and privacy obligations is required before this draft is published.</p>"
+    }
+  ],
+  "posts": [
+    {
+      "title": "Why matchups matter",
+      "slug": "why-matchups-matter",
+      "body": "<p>A swing can look good by itself and still begin too late against a particular pitch. Studying the swing and pitch together gives timing a useful reference.</p><h2>Start at contact</h2><p>GameFrame aligns a saved pitch and a tagged swing at contact. From there, study where the hitter's first move and commitment fall against the incoming pitch. The view gives you a concrete sequence to discuss with a coach.</p><h2>Change one thing</h2><p>Compare the same swing against a second pitch, or compare two swings against the same pitch. Keeping one side fixed makes the difference easier to see. Check the original footage whenever a mark looks uncertain.</p><h2>Take a question into practice</h2><p>Choose a specific question: Is the first move consistent? Does commitment leave enough time? Repeat the drill, record another clip, and compare it with the earlier example. A matchup is a way to study timing; it does not predict the outcome of a future at-bat.</p>"
+    },
+    {
+      "title": "How to film usable baseball footage",
+      "slug": "film-usable-footage",
+      "body": "<p>The most useful clip keeps the important action visible and makes the timing easy to review.</p><h2>Keep the camera steady</h2><p>Use a fixed position where practical. Avoid zooming or panning during the part of the flight you want to measure. Keep the original recording rather than sending it through several apps that may change its frame rate or compress small details.</p><h2>Include the right reference points</h2><p>For swing timing, keep the hitter and contact visible with a little footage before and after the action. For a pitch, keep the release and arrival visible. For EV analysis, visible field landmarks, early ball positions, and credible landing evidence make the estimate easier to assess.</p><h2>Check the original</h2><p>Watch the clip frame by frame. If you cannot identify the ball or contact reliably, do not invent a precise mark. Use the uncertainty and review tools in GameFrame. Split longer recordings into clips of five minutes or less and stay within the 250 MB upload limit.</p><p>Before uploading or sharing footage, confirm that you have the necessary permission from its owner and the people responsible for anyone shown.</p>"
+    },
+    {
+      "title": "How to read an EV matching report",
+      "slug": "read-ev-matching-report",
+      "body": "<p>An EV result is more useful when you can see the evidence behind it. Open Matching report from an EV hit in your GameFrame library.</p><h2>Start with the selected flight</h2><p>The first row is the flight selected by the saved matcher. The report shows its estimated exit velocity, launch angle, carry, hang time, and available fit measurements.</p><h2>Compare nearby candidates</h2><p>Similar scores mean the saved evidence may support more than one flight. A small score is a fit measure under the recorded matching rules; it is not a confidence percentage. Missing values mean the prediction did not save that measurement.</p><h2>Read the policy and uncertainty</h2><p>Different evidence can constrain different parts of a flight. Check which marks, field geometry, timing, and distance observations were used. If no candidate passed the requirements, treat the closest result as a diagnostic comparison. Review your marks and calibration before presenting it as a supported measurement.</p>"
+    }
+  ],
+  "channels": {
+    "preferred_handle": "GameFrameBaseball",
+    "fallback_handles": [
+      "GameFrameApp",
+      "TrainWithGameFrame"
+    ],
+    "availability": "not checked or reserved",
+    "description": "Study baseball timing with GameFrame. Pitch review, swing tagging, timing matchups, and batted-ball matching reports. Tutorials, examples, and practical ways to review your footage.",
+    "youtube_playlist": "Start here: GameFrame",
+    "youtube_videos": [
+      {
+        "title": "GameFrame: See your swing against the pitch",
+        "purpose": "60–90 second introduction",
+        "outline": [
+          "Show the timing question",
+          "Show pitch and swing aligned at contact",
+          "Show private library and EV matching report",
+          "Invite viewers to the beta website"
+        ]
+      },
+      {
+        "title": "Your first GameFrame matchup: upload, tag, compare",
+        "purpose": "Complete walkthrough",
+        "outline": [
+          "Choose approved footage",
+          "Upload a pitch",
+          "Tag swing start, decision, and contact",
+          "Build a matchup",
+          "Save and reopen the result"
+        ]
+      },
+      {
+        "title": "Why GameFrame chose this EV match",
+        "purpose": "Results example",
+        "outline": [
+          "Show saved marks and estimate",
+          "Open Matching report",
+          "Compare the selected flight and alternatives",
+          "Explain uncertainty and a useful next review"
+        ]
+      }
+    ],
+    "short_excerpts": [
+      {
+        "name": "Timing question",
+        "seconds": 25,
+        "hook": "When did your swing need to begin?",
+        "source": "Approved matchup walkthrough"
+      },
+      {
+        "name": "One swing, two pitches",
+        "seconds": 30,
+        "hook": "Keep the swing. Change the pitch.",
+        "source": "Approved matchup comparison"
+      },
+      {
+        "name": "Why this EV?",
+        "seconds": 35,
+        "hook": "An estimate should explain its evidence.",
+        "source": "Approved matching-report example"
+      },
+      {
+        "name": "Film it once, study it later",
+        "seconds": 25,
+        "hook": "Steady footage makes review easier.",
+        "source": "Approved filming tutorial"
+      }
+    ],
+    "announcements": {
+      "youtube": "GameFrame's hosted beta is open. Study pitches and swings, build timing matchups, and review the evidence behind EV estimates. Watch the getting-started playlist, then visit {{SITE_ORIGIN}}. Founding access is $9/month after the included trial; beta spaces are limited.",
+      "instagram": "See your swing against the pitch. GameFrame helps you tag timing, build matchups, and review batted-ball matching evidence. Hosted beta: {{SITE_ORIGIN}}. #BaseballTraining #Hitting #GameFrame",
+      "facebook": "We're opening a small GameFrame beta for players and coaches. Upload footage, study swing timing against a pitch, and reopen saved results in a private library. EV reports explain the selected match and nearby alternatives. Tutorials and access: {{SITE_ORIGIN}}",
+      "x": "GameFrame beta: study swing timing against a pitch, save matchups, and inspect the evidence behind EV estimates. Private libraries. $9/month founding subscription after the trial. Limited beta places: {{SITE_ORIGIN}}"
+    },
+    "excluded": [
+      "TikTok"
+    ]
+  }
+}

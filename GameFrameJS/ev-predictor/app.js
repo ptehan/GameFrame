@@ -2170,6 +2170,7 @@ function escapeHtml(value) {
 
 let restoringEvDraft = false;
 function persistDraft() {
+  if (window.GAMEFRAME_HOSTED) return;
   if (restoringEvDraft || !state.videoFile || !window.GameFrameEvDrafts) return;
   try {
     window.GameFrameEvDrafts.schedule({package: buildPackage(), step: activeWorkflowStep,
@@ -2178,6 +2179,7 @@ function persistDraft() {
 }
 
 async function offerEvDraftResume() {
+  if (window.GAMEFRAME_HOSTED) return;
   if (!window.GameFrameEvDrafts || hasActiveVideoSession()) return;
   let draft;
   try { draft = await window.GameFrameEvDrafts.read(); } catch (_) { return; }
@@ -3903,6 +3905,7 @@ function estimatePreparationKeys(pkg){
   return {evidence,request:JSON.stringify([evidence,distance.distance_ft,distance.uncertainty_ft,pkg.terminal_event])};
 }
 function scheduleEarlyEstimatePreparation(){
+  if (window.GAMEFRAME_HOSTED) return;
   clearTimeout(earlyEstimateTimer);
   earlyEstimateTimer=setTimeout(()=>{
     if(!earlyEstimatePreparation)return;
@@ -3962,6 +3965,7 @@ function cancelBackgroundPrediction() {
 }
 
 function startBackgroundPrediction(reason = "marking complete") {
+  if (window.GAMEFRAME_HOSTED) return Promise.resolve(state.latestPrediction);
   if (state.latestPrediction || backgroundPredictionPromise || state.observations.length < 2 || state.skippedVideoMarks?.includes("contact") || !actualFieldMapGeometryReady()) {
     return backgroundPredictionPromise || Promise.resolve(state.latestPrediction);
   }

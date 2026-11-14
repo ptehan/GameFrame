@@ -4,6 +4,7 @@ import json
 import math
 import os
 import sqlite3
+from workspace_quota import connect as workspace_connect
 import subprocess
 import tempfile
 from contextlib import closing
@@ -65,7 +66,7 @@ def _save_pending_clip(db_path, source, contact_time, hitter_id, team_id, descri
     fast_key = hashlib.sha256(json.dumps([str(source.resolve()),stat.st_size,stat.st_mtime_ns,
                                          round(contact_time,6),hitter_id,'contact-time-v1']).encode()).hexdigest()
     # Existing copies should not trigger any media probe or encoding at all.
-    with closing(sqlite3.connect(db_path)) as conn:
+    with closing(workspace_connect(db_path)) as conn:
         if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(links,)).fetchone():
             existing = conn.execute(f'''SELECT p.id FROM {links} link JOIN {table} p
                 ON p.id=link.{pending_id} WHERE link.source_key=?''',(fast_key,)).fetchone()
@@ -76,7 +77,7 @@ def _save_pending_clip(db_path, source, contact_time, hitter_id, team_id, descri
     key = fast_key
     legacy_key = hashlib.sha256(json.dumps([str(source.resolve()),stat.st_size,stat.st_mtime_ns,
                                            round(times[contact]*fps),hitter_id]).encode()).hexdigest()
-    with closing(sqlite3.connect(db_path)) as conn, conn:
+    with closing(workspace_connect(db_path)) as conn, conn:
         conn.executescript(f"""
             CREATE TABLE IF NOT EXISTS {table} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id TEXT NOT NULL,
@@ -96,7 +97,7 @@ def _save_pending_clip(db_path, source, contact_time, hitter_id, team_id, descri
             conn.execute(f"INSERT OR IGNORE INTO {links}(source_key,{pending_id}) VALUES(?,?)",(key,existing[0]))
             return existing[0]
     clip, fps, contact_frame = prepare_swing_media(source, contact_time).result()
-    with closing(sqlite3.connect(db_path)) as conn, conn:
+    with closing(workspace_connect(db_path)) as conn, conn:
         # Serialize the final duplicate check with insertion, including concurrent EV saves.
         conn.execute("BEGIN IMMEDIATE")
         existing = conn.execute(f"""SELECT p.id FROM {links} link

@@ -18,7 +18,7 @@ function fixture(width = 800, height = 450) {
     renderOverlay() {},
     window: {devicePixelRatio: 1}, ctx: {setTransform() {}},
   });
-  vm.runInContext(app.slice(app.indexOf('function syncCanvasSize()'), app.indexOf('function addDetectionBrushPoint(')) +
+  vm.runInContext(app.slice(app.indexOf('function syncCanvasSize()'), app.indexOf('function visibleObservationsFromCurrentTimeOnward(')) +
     '\nglobalThis.view = groundView;', context);
   return {context, rect, controls};
 }

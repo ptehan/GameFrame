@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 from pending_swing import save_pending_swing, save_pending_pitch, prepare_swing_media
 from encoder_runtime import render_environment
 from source_clip_runtime import prepare_source_clip
+from workspace_quota import connect as workspace_connect
 
 
 ROOT = Path(__file__).resolve().parent
@@ -51,7 +52,7 @@ def prediction_export_blocker(prediction):
 
 
 def gameframe_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(GAMEFRAME_DB)
+    conn = workspace_connect(GAMEFRAME_DB)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -301,6 +302,8 @@ def gameframe_options_payload(conn: sqlite3.Connection) -> dict:
 
 
 def json_response(handler: SimpleHTTPRequestHandler, status: int, payload: dict) -> None:
+    if status >= 400 and str(payload.get('error', '')).startswith('Workspace storage allowance'):
+        status = 413
     body = json.dumps(payload).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
@@ -346,6 +349,8 @@ def add_source_path_to_package(package: dict) -> dict:
     source = locate_video(metadata.get("file_name"), metadata.get("source_path"))
     if source is not None:
         metadata["source_path"] = str(source)
+    elif os.environ.get("GAMEFRAME_WORKSPACE"):
+        metadata.pop("source_path", None)
     return package
 
 
@@ -710,6 +715,9 @@ class ClipServerHandler(SimpleHTTPRequestHandler):
                 json_response(self,200 if status else 404,status or {'error':'Saved hit not found.'})
             except (ValueError,TypeError) as error:json_response(self,400,{'error':str(error)})
             return
+        if self.path == '/api/gameframe/preload-contact' and os.environ.get('GAMEFRAME_WORKSPACE'):
+            json_response(self, 202, {'ok': True})
+            return
         if self.path == '/api/gameframe/preload-contact':
             payload = handle_json_body(self)
             if payload is None:
@@ -779,6 +787,11 @@ class ClipServerHandler(SimpleHTTPRequestHandler):
             JOBS[job_id] = {"status": "queued", "progress": 0, "message": "queued", "created_at": time.time()}
         if os.environ.get('GAMEFRAME_WORKSPACE'):
             run_clip_job(job_id, payload)
+            with JOBS_LOCK:
+                completed_job = dict(JOBS.get(job_id) or {})
+            if completed_job.get('status') == 'error':
+                json_response(self, 500, {'error': completed_job.get('error') or 'Rendering failed'})
+                return
         else:
             threading.Thread(target=run_clip_job, args=(job_id, payload), daemon=True).start()
         json_response(self, 202, {"job_id": job_id})
@@ -801,7 +814,7 @@ class ClipServerHandler(SimpleHTTPRequestHandler):
             str(ROOT / "synthetic" / "direct_video_estimate.py"),
             str(package_path),
             "--db",
-            str(ROOT / "data" / "hittrax_from_video.sqlite"),
+            str(Path(os.environ.get("GAMEFRAME_SYNTHETIC_DB") or ROOT / "data" / "hittrax_from_video.sqlite")),
             "--out",
             str(output_path),
         ]

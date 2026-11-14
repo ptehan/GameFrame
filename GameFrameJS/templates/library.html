@@ -540,12 +540,17 @@ async function loadData(type) {
 // BUILD GRID
 // ------------------------------------------------------------
 function buildGrid(items) {
+    const escapeText = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const grid = document.getElementById("library_grid");
     let html = "";
     const activeType = normalizeFilterValue(fType.value);
     const activeSelection = selectedByType[activeType] || new Set();
 
     items.forEach(c => {
+        c = {...c};
+        for (const field of ['description','team_name','pitcher_name','hitter_name','pitcher_team','hitter_team','pitcherA_name','pitcherB_name','pitcherA_team','pitcherB_team','source_file_name']) {
+            if (typeof c[field] === 'string') c[field] = escapeText(c[field]);
+        }
 
         let pitcher_team = "";
         let hitter_team  = "";
@@ -675,7 +680,7 @@ function buildGrid(items) {
                     <form method="post" action="${c.delete}"
                           onsubmit="return attachReturnURL(this);">
                         <input type="hidden" name="id" value="${c.id}">
-                        <input type="hidden" name="sid" value="${sid}">
+                        <input type="hidden" name="sid" value="${escapeText(sid)}">
                         <input type="hidden" name="return" value="">
                         <button type="submit" style="background:#d33; color:white;">Delete</button>
                     </form>

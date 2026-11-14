@@ -2,18 +2,54 @@ services:
   - type: web
     name: gameframe
     env: docker
-    plan: starter
-    autoDeploy: true
+    plan: standard
+    autoDeploy: false
     healthCheckPath: /health
     disk:
       name: gameframe-data
       mountPath: /var/data
-      sizeGB: 1
+      sizeGB: 100
     envVars:
       - key: PORT
         value: 10000
       - key: DB_PATH
-        value: /var/data/app.db
+        value: /var/data/gameframe/accounts.db
+      - key: GAMEFRAME_HOSTED
+        value: "1"
+      - key: NODE_ENV
+        value: production
+      - key: GAMEFRAME_DATA_DIR
+        value: /var/data/gameframe
+      - key: GAMEFRAME_ENFORCE_PRODUCTION_CONFIG
+        value: "true"
+      - key: GAMEFRAME_SALES_OPEN
+        value: "false"
+      - key: GAMEFRAME_LEGAL_PUBLISHED
+        value: "false"
+      - key: APP_ORIGIN
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: GAMEFRAME_SYNTHETIC_SHA256
+        sync: false
+      - key: GAMEFRAME_SYNTHETIC_URL
+        sync: false
+      - key: GAMEFRAME_SYNTHETIC_DB
+        value: /var/data/assets/hittrax.sqlite
+      - key: GAMEFRAME_DEMO_DB
+        value: /var/data/assets/demo.db
+      - key: BACKUP_DIRECTORY
+        value: /var/data/gameframe-backups
+      - key: BACKUP_REMOTE
+        sync: false
+      - key: RCLONE_CONFIG
+        value: /etc/secrets/rclone.conf
+      - key: OPERATIONS_EMAIL
+        sync: false
       - key: AUTH_CODE_SECRET
         sync: false
       - key: RESEND_API_KEY
@@ -29,4 +65,4 @@ services:
       - key: TRIAL_DAYS
         value: "14"
       - key: MAX_UPLOAD_MB
-        value: "4096"
+        value: "250"

@@ -6,9 +6,13 @@ const crypto = require('node:crypto');
 const readline = require('node:readline');
 const { spawn, spawnSync } = require('node:child_process');
 
-function createEvWorker({ root, databasePath, dataDirectory, spawnProcess = spawn }) {
+const activeControllers = new Set();
+process.once('exit', () => { for (const stop of activeControllers) stop(); });
+
+function createEvWorker({ root, databasePath, dataDirectory, storageLimit, spawnProcess = spawn }) {
   const processorRoot = root.replace(/app\.asar(?=[\\/]|$)/, 'app.asar.unpacked');
   let child = null;
+  let currentQuota;
   const pending = new Map();
   async function cleanResponse(directory) {
     if (path.dirname(path.resolve(directory)) !== path.resolve(os.tmpdir()) || !path.basename(directory).startsWith('gameframe-ev-')) {
@@ -17,6 +21,7 @@ function createEvWorker({ root, databasePath, dataDirectory, spawnProcess = spaw
     await fsp.rm(directory, { recursive: true, force: true });
   }
   function stop() {
+    activeControllers.delete(stop);
     const processToStop = child;
     child = null;
     if (processToStop?.pid) {
@@ -30,17 +35,22 @@ function createEvWorker({ root, databasePath, dataDirectory, spawnProcess = spaw
     pending.clear();
   }
   function start() {
+    const quota = storageLimit?.();
+    if (child && quota !== currentQuota) stop();
+    currentQuota = quota;
     if (child) return child;
     const localPython = path.join(root, '.venv-ev', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
     const python = process.env.GAMEFRAME_EV_PYTHON || (fs.existsSync(localPython) ? localPython : process.env.PYTHON || 'python');
     const worker = spawnProcess(python, ['-u', path.join(processorRoot, 'ev-predictor', 'worker.py')], {
       cwd: path.join(processorRoot, 'ev-predictor'),
-      env: { ...process.env, DB_PATH: databasePath, ...(dataDirectory ? { GAMEFRAME_WORKSPACE: dataDirectory, GAMEFRAME_EV_DATA: path.join(dataDirectory, 'ev') } : {}), PYTHONIOENCODING: 'utf-8',
+      env: { ...process.env, ...(quota ? { GAMEFRAME_STORAGE_LIMIT: String(quota) } : {}), DB_PATH: databasePath, ...(dataDirectory ? { GAMEFRAME_WORKSPACE: dataDirectory, GAMEFRAME_EV_DATA: path.join(dataDirectory, 'ev') } : {}), PYTHONIOENCODING: 'utf-8',
+        ...(dataDirectory ? { TMPDIR: path.join(dataDirectory, 'temporary'), TEMP: path.join(dataDirectory, 'temporary'), TMP: path.join(dataDirectory, 'temporary') } : {}),
         FFMPEG_PATH: process.env.FFMPEG_PATH || require('ffmpeg-static').replace(/app\.asar(?=[\\/]|$)/,'app.asar.unpacked'),
         FFPROBE_PATH: process.env.FFPROBE_PATH || require('ffprobe-static').path.replace(/app\.asar(?=[\\/]|$)/,'app.asar.unpacked') },
       windowsHide: true, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'],
     });
     child = worker;
+    activeControllers.add(stop);
     const fail = error => {
       if (child !== worker) return;
       child = null;
@@ -96,9 +106,10 @@ function createEvWorker({ root, databasePath, dataDirectory, spawnProcess = spaw
     } catch (error) {
       if (directory) await cleanResponse(directory).catch(() => {});
       next(error);
+    } finally {
+      if (res.destroyed) res.emit("gameframe-work-complete");
     }
   }
-  process.once('exit', stop);
   return { handle, stop, warm: start };
 }
 

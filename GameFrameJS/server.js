@@ -32,7 +32,8 @@ const CONTACT_REVIEW_LOG = path.join(path.dirname(DB_PATH), "contact-review-hist
 const TMP_DIR = options.dataDirectory ? path.join(options.dataDirectory, "temporary") : os.tmpdir();
 fs.mkdirSync(TMP_DIR, { recursive: true });
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-const db = new Database(DB_PATH);
+const rawDatabase = new Database(DB_PATH);
+const db = options.storageLimit ? require('./hosted/quota').databaseWithQuota(rawDatabase, options.dataDirectory, options.storageLimit) : rawDatabase;
 const pitchSources = require('./pitch-source').createPitchSourceStore(db, path.join(path.dirname(DB_PATH), 'source-videos'));
 const upload = multer({
   dest: TMP_DIR,
@@ -43,7 +44,7 @@ if (options.hostedWorkspace) app.use((req, res, next) => {
   // The gateway owns identity, billing and administration. A workspace cannot
   // restore a database supplied by a customer or expose desktop admin APIs.
   if (/^\/(?:settings|debug|auth|api\/v1)(?:\/|$)/.test(req.path) ||
-      /^\/(?:external_video|external|import\/youtube|api\/pitch-vision|api\/pitch-release|pitch-release-test)/.test(req.path)) return res.sendStatus(404);
+      /^\/(?:external_video|external|import\/youtube|api\/pitch-vision\/analyze|api\/pitch-release\/yolo|pitch-release-test)/.test(req.path)) return res.sendStatus(404);
   next();
 });
 app.use(express.urlencoded({ extended: true, limit: "200mb" }));
@@ -61,7 +62,9 @@ const env = nunjucks.configure(path.join(ROOT, "templates"), {
   express: app,
   noCache: true,
 });
-env.addFilter("tojson", (v) => new nunjucks.runtime.SafeString(JSON.stringify(v)));
+env.addFilter("tojson", (v) => new nunjucks.runtime.SafeString(JSON.stringify(v ?? null)
+  .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+  .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')));
 env.addFilter("format", (fmt, value) => {
   const f = String(fmt || "");
   const m = /^%\.(\d+)f$/.exec(f);
@@ -271,7 +274,7 @@ function runCmd(cmd, args, options = {}) {
 
 function ffprobeMeta(filePath, settings) {
   const metadata = uncheckedFfprobeMeta(filePath, settings);
-  if (options.hostedWorkspace && metadata.duration > 300) throw Object.assign(new Error('Videos must be 5 minutes or shorter.'), { status: 413 });
+  if (typeof options !== 'undefined' && options.hostedWorkspace && metadata.duration > 300) throw Object.assign(new Error('Videos must be 5 minutes or shorter.'), { status: 413 });
   return metadata;
 }
 
@@ -1101,6 +1104,7 @@ function requireProcessingSpace(req, res, next) {
         const metadata = ffprobeMeta(file.path, { countFrames: false });
         if (!(metadata.duration > 0) || !(metadata.fps > 0)) throw new Error('Upload a readable video of 5 minutes or less.');
       }
+      if (options.storageLimit && require('./hosted/store').diskBytes(options.dataDirectory) > options.storageLimit()) throw new Error('Storage allowance reached. Delete footage to free space.');
     } catch (error) {
       for (const file of uploadedFiles(req)) { try { fs.unlinkSync(file.path); } catch (_) {} }
       return res.status(413).json({ error: error.message });
@@ -1206,7 +1210,7 @@ app.post('/api/source', upload.single('file'), requireProcessingSpace, (req, res
   if (!options.hostedWorkspace || !req.file) return res.sendStatus(404);
   res.json({ source_path: req.file.path, file_name: req.file.originalname });
 });
-const evWorker = createEvWorker({ root: ROOT, databasePath: DB_PATH, dataDirectory: options.dataDirectory });
+const evWorker = createEvWorker({ root: ROOT, databasePath: DB_PATH, dataDirectory: options.dataDirectory, storageLimit: options.storageLimit });
 app.use(['/api/predict', '/api/track', '/api/landmarks', '/api/clip', '/api/gameframe'], evWorker.handle);
 app.get(['/ev', '/ev/', '/ev/index.html', '/index.html'], (req, res) => res.redirect('/'));
 app.get('/predictor.html', (req, res) => res.redirect(`/ev/predictor.html${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`));
@@ -1598,7 +1602,7 @@ app.get('/library/ev/report', (req, res) => {
   }
   const scorePolicy = candidates[0]?.score_policy || '';
   const scoring = scorePolicy.startsWith('joint_path_and_distance')
-    ? 'Candidates must meet the video path and landing-distance tolerances. The score adds squared path error divided by its tolerance and squared distance error divided by its tolerance.'
+    ? 'Candidates must meet the video path and landing-distance tolerances. The score adds (path error / path tolerance)² and (distance error / distance tolerance)².'
     : scorePolicy.startsWith('timed_pixel_error')
       ? 'Candidates are ranked by error between projected and marked video positions. Landing distance did not contribute to this score.' : '';
   render(req, res, 'ev_report.html', { hit, candidates: candidates.slice(0, 25), scoring,
@@ -3721,6 +3725,7 @@ app.use((err, req, res, next) => {
   const rawMessage = err && err.message ? err.message : "internal error";
   console.error(rawMessage);
   if (res.headersSent) return next(err);
+  if (options.hostedWorkspace && err?.status === 413) return res.status(413).json({ error: err.message });
   if (err && err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({ error: "That video exceeds the configured upload limit.", code: "FILE_TOO_LARGE" });
   }
@@ -3745,6 +3750,7 @@ return {
   app, startServer, buildMatchupVideoServerSide,
   closeDatabase: () => { evWorker.stop(); db.close(); },
   stopWorker: evWorker.stop,
+  compact: () => db.exec("VACUUM"),
 };
 }
 
@@ -3756,7 +3762,7 @@ function getDefaultApplication() {
 module.exports = {
   createApplication,
   get app() { return getDefaultApplication().app; },
-  startServer: (...args) => getDefaultApplication().startServer(...args),
+  get startServer() { return getDefaultApplication().startServer; },
   buildMatchupVideoServerSide: (...args) => getDefaultApplication().buildMatchupVideoServerSide(...args),
   closeDatabase: () => { if (defaultApplication) defaultApplication.closeDatabase(); },
 };

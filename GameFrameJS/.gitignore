@@ -40,6 +40,9 @@ ev-predictor/analysis_frames/*
 !ev-predictor/assets/*.png
 /.tools/narration/
 /source-videos/
+/hosted-data/
+/release-artifacts/
+/gameframe-backups/
 
 # Local backup archives and one-off video/debug production tools.
 /git-backup/

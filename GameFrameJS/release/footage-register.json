@@ -1,0 +1,23 @@
+{
+  "status": "awaiting owner approval; no footage is authorized for distribution by this register",
+  "target_counts": { "pitch": 3, "swing": 3, "matchup": 2, "ev": 2 },
+  "clips": [],
+  "entry_format": {
+    "type": "pitch | swing | matchup | ev",
+    "id": 0,
+    "label": "Short instructional demo label",
+    "owner": "Name of footage rights holder",
+    "permission": "pending | approved",
+    "permission_evidence": "Private permission record identifier or license URL",
+    "app_distribution": false,
+    "marketing": false,
+    "attribution": "Required attribution, if any"
+  },
+  "local_candidates": { "pitch": [68, 69, 70], "swing": [131, 132], "matchup": [231, 232, 233, 234, 235, 236], "ev": [100, 101, 102, 103] },
+  "notes": [
+    "The working library currently contains two saved swings, so a third approved example still needs to be added.",
+    "A matchup requires separate approval of both source clips; rendered names and graphics must also be reviewed.",
+    "Remove personal overlays before granting approval. Metadata scrubbing cannot remove names embedded in video pixels.",
+    "Google Drive access is not permission to redistribute. No verified reusable Drive collection has been identified."
+  ]
+}

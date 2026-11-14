@@ -1,0 +1,32 @@
+{
+  "checked_date": "2026-11-13",
+  "working_recommendation": "gameframebaseball.com",
+  "support_address_after_registration": "support@gameframebaseball.com",
+  "sender_address_after_dns_verification": "GameFrame <login@gameframebaseball.com>",
+  "registered_or_purchased": true,
+  "checks": {
+    "gameframebaseball.com": "Verisign .com RDAP returned 404 (no registration record); registrar availability and price still need confirmation",
+    "getgameframe.com": "Registered",
+    "gameframeapp.com": "Registered"
+  },
+  "naming_review": {
+    "status": "working candidate, not trademark clearance",
+    "observations": [
+      "Another sports service uses GameFrame at gameframesport.com.",
+      "An unrelated GameFrame gameday photo-card app is listed on Apple's App Store."
+    ],
+    "references": [
+      "https://www.gameframesport.com/",
+      "https://apps.apple.com/us/app/gameframe-gameday-photo-cards/id6819913398"
+    ]
+  },
+  "fallback_for_private_testing": "Use the assigned Render staging URL until app.gameframebaseball.com is connected.",
+  "workspace_setup": {
+    "verified_date": "2026-11-14",
+    "domain": "gameframebaseball.com",
+    "administrator": "admin@gameframebaseball.com",
+    "gmail": "Google confirmed Gmail ready and DKIM activated on November 13",
+    "support_alias": "User reported Google setup complete; support alias delivery not independently tested",
+    "transactional_sender": "Separate Resend verification and API configuration still required"
+  }
+}
