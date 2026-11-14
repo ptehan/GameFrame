@@ -17,6 +17,8 @@ test('private asset provisioning verifies content before installing and reuses v
     calls++;
     if (args[0] === 'lsjson') return { status: 0, stdout: JSON.stringify({ Size: data.length }) };
     assert.equal(args[0], 'copyto');
+    assert.equal(args.includes('--max-size'), false);
+    assert.equal(args[args.indexOf('--max-transfer') + 1], '2G');
     assert.equal(fs.existsSync(file), false);
     fs.writeFileSync(args[2], data);
     return { status: 0 };

@@ -30,7 +30,9 @@ async function provision(options = {}) {
       const size = JSON.parse(metadata.stdout).Size;
       if (!Number.isSafeInteger(size) || size <= 0 || size > 2 * 1024 ** 3) throw new Error('Private flight database has an invalid size');
       fs.closeSync(fs.openSync(partial, 'wx', 0o600));
-      const copied = await run(['copyto', remote, partial, '--max-size', '2G', '--retries', '2', '--buffer-size', '4M', '--multi-thread-streams', '0', '--stats', '0', '--quiet']);
+      // --max-size is a file filter and older rclone versions reject filters
+      // when copyto names a single source object. Limit transferred bytes instead.
+      const copied = await run(['copyto', remote, partial, '--max-transfer', '2G', '--cutoff-mode', 'HARD', '--retries', '2', '--buffer-size', '4M', '--multi-thread-streams', '0', '--stats', '0', '--quiet']);
       if (copied.status !== 0) throw new Error(transferFailure(copied, env));
       const received = fs.statSync(partial).size;
       if (received !== size) throw new Error(`Private flight database transfer failed (expected ${size} bytes, received ${received})`);
